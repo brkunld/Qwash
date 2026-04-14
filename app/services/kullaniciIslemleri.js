@@ -228,6 +228,33 @@ export function useKullaniciIslemleri() {
     return () => unsub();
   }, [uid]);
 
+  // --- OTOMATİK BAĞLANTI KESME (1 Dk İşlemsizlik) ---
+  useEffect(() => {
+    // Bay bağlı mı ve şu an boşta mı (session çalışmıyor mu) kontrolü
+    const bayBagli = !!seciliBay?.id;
+    const bayMusaitMi =
+      seciliBay?.status === "available" && !seciliBay?.currentSessionId;
+
+    // Eğer bay bağlı değilse veya o an su/köpük işlemi devam ediyorsa zamanlayıcıyı başlatma
+    if (!bayBagli || !bayMusaitMi) return;
+
+    // Bay bağlı ve işlem yapılmıyorsa 60 saniyelik (60000 ms) zamanlayıcıyı kur
+    const inaktifZamanlayici = setTimeout(() => {
+      Alert.alert(
+        "Zaman Aşımı",
+        "1 dakika boyunca seçim yapmadığınız için peron bağlantısı kesildi.",
+      );
+      // URL parametresindeki bayId'yi temizleyerek bağlantıyı koparıyoruz
+      // (Bu işlem sayfanızdaki diğer useEffect'i tetikleyip ekranı sıfırlayacaktır)
+      router.setParams({ bayId: "" });
+    }, 60000);
+
+    // Kullanıcı bir oturum başlatırsa, bay bağlantısını manuel keserse
+    // veya sayfadan çıkarsa arkada çalışan zamanlayıcıyı temizle
+    return () => clearTimeout(inaktifZamanlayici);
+  }, [seciliBay?.id, seciliBay?.status, seciliBay?.currentSessionId, router]);
+  // ---------------------------------------------------
+
   useEffect(() => {
     if (!bayId) {
       setSeciliBay(null);
