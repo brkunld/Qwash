@@ -1,6 +1,7 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert } from "react-native";
+import NfcManager, { Ndef, NfcEvents } from "react-native-nfc-manager";
 
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import {
@@ -72,6 +73,81 @@ export function useKullaniciIslemleri() {
       return String(toplamTRY);
     }
   }, [toplamTRY]);
+
+  // --- NFC SESSİZ DİNLEME (ARKAPLAN) ---
+  useEffect(() => {
+    let isMounted = true;
+
+    const initNfc = async () => {
+      try {
+        // NFC'yi başlat
+        await NfcManager.start();
+
+        // NFC okunduğunda tetiklenecek olay
+        NfcManager.setEventListener(NfcEvents.DiscoverTag, (tag) => {
+          if (!isMounted) return;
+
+          try {
+            // NDEF verisini çöz
+            if (tag.ndefMessage && tag.ndefMessage.length > 0) {
+              const ndefRecord = tag.ndefMessage[0];
+              // Payload'ı metne çevir (NFC etiketindeki yazıyı alır)
+              const raw = Ndef.text.decodePayload(ndefRecord.payload);
+              let okunantBayId = raw.trim();
+
+              // QR kameradaki aynı ayrıştırma (parse) kuralları
+              if (okunantBayId.startsWith("{")) {
+                try {
+                  const obj = JSON.parse(okunantBayId);
+                  if (obj?.id) okunantBayId = String(obj.id).trim();
+                } catch {}
+              }
+
+              okunantBayId = okunantBayId.replace(/^\/?bays\//i, "").trim();
+              okunantBayId = okunantBayId.replace(/\s+/g, "");
+
+              const re = /^bay_\d{5}_\d{2}_\d{2}$/i;
+
+              if (!re.test(okunantBayId)) {
+                Alert.alert(
+                  "Geçersiz NFC",
+                  `Okunan: "${raw}"\nBeklenen örnek: bay_42060_01_01`,
+                );
+                return;
+              }
+
+              // Başarılıysa, sayfayı yeni bayId ile günceller
+              // (Mevcut sayfada parametreyi değiştirmek, var olan bayId useEffect'ini tetikler)
+              router.setParams({ bayId: okunantBayId });
+            }
+          } catch (err) {
+            console.log("NFC Parse Hatası:", err);
+          } finally {
+            // Yeni okumalara hazır olmak için kaydı iptal edip tekrar başlatıyoruz
+            NfcManager.unregisterTagEvent().catch(() => {});
+            setTimeout(() => {
+              NfcManager.registerTagEvent().catch(() => {});
+            }, 1000);
+          }
+        });
+
+        // Android'de ekrandayken sessizce etiketi beklemeyi başlat
+        await NfcManager.registerTagEvent();
+      } catch (ex) {
+        console.log("NFC başlatılamadı veya desteklenmiyor", ex);
+      }
+    };
+
+    initNfc();
+
+    // Bileşen kapatıldığında/sayfadan çıkıldığında dinlemeyi durdur
+    return () => {
+      isMounted = false;
+      NfcManager.setEventListener(NfcEvents.DiscoverTag, null);
+      NfcManager.unregisterTagEvent().catch(() => {});
+    };
+  }, [router]);
+  // ------------------------------------
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (user) => {
