@@ -8,7 +8,7 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { useKullaniciIslemleri } from "../services/kullaniciIslemleri";
+import { useKullaniciIslemleri } from "../../src/kullaniciIslemleri";
 
 const DARK = "#1a1a2e";
 const YELLOW = "#f5a623";

@@ -14,7 +14,7 @@ import {
   setDoc,
 } from "firebase/firestore";
 
-import { auth, db } from "../../firebase";
+import { auth, db } from "../firebase";
 
 export function useKullaniciIslemleri() {
   const { bayId } = useLocalSearchParams();
