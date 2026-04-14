@@ -188,7 +188,7 @@ export default function AdminBayDuzenleme() {
       <View style={styles.hintBox}>
         <Text style={styles.hintIcon}>ℹ</Text>
         <Text style={styles.hintText}>
-          Durum döngüsü: Boş → Bakım → Kapalı. Pasif bayde durum değiştirilemez.
+          Durum döngüsü: Boş → Bakım → Kapalı.
         </Text>
       </View>
 
@@ -282,7 +282,7 @@ export default function AdminBayDuzenleme() {
                         aktif && styles.btnDangerText,
                       ]}
                     >
-                      {aktif ? "Pasif" : "Aktif Et"}
+                      {aktif ? "Devre Dışı" : "Aktif Et"}
                     </Text>
                   </Pressable>
                 </View>

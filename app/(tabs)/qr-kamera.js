@@ -49,11 +49,8 @@ export default function QrKamera() {
     setKilit(true);
 
     const raw = String(data ?? "").trim();
-
-    // JSON veya "bays/..." gibi gelirse ayıkla
     let bayId = raw;
 
-    // JSON: {"id":"bay_42060_01_01"}
     if (raw.startsWith("{")) {
       try {
         const obj = JSON.parse(raw);
@@ -61,14 +58,10 @@ export default function QrKamera() {
       } catch {}
     }
 
-    // "bays/bay_42060_01_01" gelirse:
     bayId = bayId.replace(/^\/?bays\//i, "").trim();
 
-    // tüm boşlukları temizle
     bayId = bayId.replace(/\s+/g, "");
 
-    // ✅ yeni format kontrolü: bay_42060_01_01
-    // postaKodu: 5 hane, istasyonNo: 2 hane, bayNo: 2 hane
     const re = /^bay_\d{5}_\d{2}_\d{2}$/i;
 
     if (!re.test(bayId)) {
@@ -80,7 +73,6 @@ export default function QrKamera() {
       return;
     }
 
-    // ✅ Kullanıcı ekranına dön (senin kullanıcı ekranın tabs/index ise bu daha garanti)
     router.replace({ pathname: "/(tabs)/kullanici", params: { bayId } });
   };
 

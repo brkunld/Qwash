@@ -7,11 +7,17 @@
     "icon": "./assets/images/icon.png",
     "scheme": "utproject",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.brkunld.utproject",
+      "infoPlist": {
+        "NFCReaderUsageDescription": "Araç yıkama peronlarına bağlanmak için NFC özelliğine ihtiyacımız var.",
+        "NSCameraUsageDescription": "QR kod okumak için kameraya erişim gereklidir."
+      }
     },
     "android": {
+      "package": "com.brkunld.utproject",
+      "permissions": ["android.permission.NFC", "android.permission.CAMERA"],
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -38,7 +44,8 @@
             "backgroundColor": "#000000"
           }
         }
-      ]
+      ],
+      "react-native-nfc-manager"
     ],
     "experiments": {
       "typedRoutes": true,

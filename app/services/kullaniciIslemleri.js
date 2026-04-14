@@ -4,17 +4,13 @@ import { Alert } from "react-native";
 
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import {
-    collection,
-    doc,
-    getDoc,
-    limit,
-    onSnapshot,
-    orderBy,
-    query,
-    runTransaction,
-    serverTimestamp,
-    setDoc,
-    where,
+  collection,
+  doc,
+  getDoc,
+  onSnapshot,
+  runTransaction,
+  serverTimestamp,
+  setDoc,
 } from "firebase/firestore";
 
 import { auth, db } from "../../firebase";
@@ -44,9 +40,6 @@ export function useKullaniciIslemleri() {
   const [soyad, setSoyad] = useState("");
   const [telefon, setTelefon] = useState("");
 
-  const [islemler, setIslemler] = useState([]);
-  const [islemlerYukleniyor, setIslemlerYukleniyor] = useState(true);
-
   const [yuklemeAcik, setYuklemeAcik] = useState(false);
   const [yuklemeIslemde, setYuklemeIslemde] = useState(false);
   const [kartNo, setKartNo] = useState("");
@@ -60,13 +53,6 @@ export function useKullaniciIslemleri() {
   const [sessionBitiriliyor, setSessionBitiriliyor] = useState(false);
   const sessionBitiriliyorRef = useRef(false);
   const timeoutKapattiRef = useRef(false);
-
-  const islemEkleLocal = useCallback((text) => {
-    setIslemler((prev) => [
-      { id: `local_${Date.now()}`, text, createdAt: new Date() },
-      ...prev,
-    ]);
-  }, []);
 
   const adetNum = useMemo(() => {
     const n = parseInt(String(jetonAdet || "0"), 10);
@@ -160,70 +146,6 @@ export function useKullaniciIslemleri() {
         Alert.alert("Hata", "Kullanıcı bilgileri alınamadı.");
         setBakiyeYukleniyor(false);
         setProfilYukleniyor(false);
-      },
-    );
-
-    return () => unsub();
-  }, [uid]);
-
-  useEffect(() => {
-    if (!uid) return;
-
-    const qy = query(
-      collection(db, "transactions"),
-      where("userId", "==", uid),
-      orderBy("createdAt", "desc"),
-      limit(20),
-    );
-
-    setIslemlerYukleniyor(true);
-
-    const unsub = onSnapshot(
-      qy,
-      (snap) => {
-        const rows = snap.docs.map((d) => {
-          const data = d.data();
-          return {
-            id: d.id,
-            type: data?.type ?? "unknown",
-            status: data?.status ?? "unknown",
-            tokens: Number(data?.tokens ?? 0),
-            amountTRY: Number(data?.amountTRY ?? 0),
-            bayId: data?.bayId ?? null,
-            createdAt: data?.createdAt?.toDate?.() ?? null,
-          };
-        });
-
-        const formatted = rows.map((r) => {
-          const dt = r.createdAt ? r.createdAt.toLocaleString("tr-TR") : "";
-
-          if (r.type === "topup") {
-            return {
-              id: r.id,
-              text: `Bakiye Yükleme +${r.tokens} Jeton • ${r.amountTRY} ₺ ${dt ? `(${dt})` : ""}`,
-            };
-          }
-
-          if (r.type === "wash" || r.type === "foam") {
-            const ad = r.type === "wash" ? "Su" : "Köpük";
-            return {
-              id: r.id,
-              text: `${ad} -${r.tokens} Jeton ${r.bayId ? `(${r.bayId})` : ""} ${dt ? `(${dt})` : ""}`,
-            };
-          }
-
-          return {
-            id: r.id,
-            text: `${r.type} • ${r.status} ${dt ? `(${dt})` : ""}`,
-          };
-        });
-
-        setIslemler(formatted);
-        setIslemlerYukleniyor(false);
-      },
-      () => {
-        setIslemler([]);
-        setIslemlerYukleniyor(false);
       },
     );
 
@@ -359,8 +281,6 @@ export function useKullaniciIslemleri() {
             }
           }
         });
-
-        islemEkleLocal(`Session bitti (${reason})`);
       } catch {
         Alert.alert("Hata", "Session kapatılamadı.");
       } finally {
@@ -368,7 +288,7 @@ export function useKullaniciIslemleri() {
         setSessionBitiriliyor(false);
       }
     },
-    [uid, router, seciliBay, islemEkleLocal],
+    [uid, router, seciliBay],
   );
 
   const sessionId = aktifSession?.id;
@@ -510,8 +430,6 @@ export function useKullaniciIslemleri() {
           createdAt: serverTimestamp(),
         });
       });
-
-      islemEkleLocal(`${paket.title} başladı`);
     } catch (e) {
       const msg = String(e?.message || "");
       if (msg.includes("insufficient_tokens")) {
@@ -591,7 +509,6 @@ export function useKullaniciIslemleri() {
         });
       });
 
-      islemEkleLocal(`Bakiye Yüklendi +${tokens} Jeton`);
       setYuklemeAcik(false);
       setKartNo("");
       setSonKullanma("");
@@ -709,9 +626,6 @@ export function useKullaniciIslemleri() {
     setSoyad,
     telefon,
     setTelefon,
-
-    islemler,
-    islemlerYukleniyor,
 
     yuklemeAcik,
     setYuklemeAcik,

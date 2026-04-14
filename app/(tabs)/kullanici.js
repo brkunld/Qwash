@@ -43,8 +43,6 @@ export default function KullaniciEkrani() {
     setSoyad,
     telefon,
     setTelefon,
-    islemler,
-    islemlerYukleniyor,
     yuklemeAcik,
     setYuklemeAcik,
     yuklemeIslemde,
@@ -81,19 +79,18 @@ export default function KullaniciEkrani() {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <View style={styles.headerLeft}>
-          <Text style={styles.headerIcon}>⚡</Text>
-          <Text style={styles.headerTitle}>KULLANICI PANELİ</Text>
+        <View style={styles.headerBadge}>
+          <Text style={styles.headerBadgeText}> Ana Sayfa </Text>
         </View>
         <View style={styles.headerRight}>
           <Pressable
             onPress={() => setProfilAcik(true)}
-            style={styles.profilBtn}
+            style={styles.headerBtn}
           >
-            <Text style={styles.profilBtnText}>👤 Profil</Text>
+            <Text style={styles.headerBtnText}>👤 Profil</Text>
           </Pressable>
-          <Pressable onPress={cikisYap} style={styles.cikisBtn}>
-            <Text style={styles.cikisBtnText}>⇥ Çıkış</Text>
+          <Pressable onPress={cikisYap} style={styles.headerBtn}>
+            <Text style={styles.headerBtnText}>⇥ Çıkış</Text>
           </Pressable>
         </View>
       </View>
@@ -101,13 +98,13 @@ export default function KullaniciEkrani() {
       <ScrollView
         style={styles.scroll}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: 40 }}
+        contentContainerStyle={{ paddingBottom: 24 }}
       >
         {/* Bay Kartı */}
         <View style={styles.card}>
           <View style={styles.cardHeaderRow}>
             <View style={{ flex: 1 }}>
-              <Text style={styles.cardLabel}>🏪 Seçili Bay</Text>
+              <Text style={styles.cardLabel}> Seçili Bay ⤵</Text>
               <Text style={styles.bayId}>
                 {bayYukleniyor
                   ? "Yükleniyor..."
@@ -122,7 +119,7 @@ export default function KullaniciEkrani() {
                 </Text>
               ) : null}
             </View>
-            <View style={{ alignItems: "flex-end", gap: 8 }}>
+            <View style={{ alignItems: "flex-end", gap: 6 }}>
               {seciliBay?.isActive && (
                 <View style={styles.badgeGreen}>
                   <Text style={styles.badgeText}>AKTİF</Text>
@@ -169,7 +166,7 @@ export default function KullaniciEkrani() {
         <View style={styles.card}>
           <Text style={styles.cardLabel}>🪙 Jeton Bakiyesi</Text>
           {bakiyeYukleniyor ? (
-            <ActivityIndicator color={YELLOW} style={{ marginTop: 8 }} />
+            <ActivityIndicator color={YELLOW} style={{ marginTop: 6 }} />
           ) : (
             <Text style={styles.bakiyeNum}>
               {bakiye} <Text style={styles.bakiyeUnit}>Jeton</Text>
@@ -199,26 +196,10 @@ export default function KullaniciEkrani() {
             disabled={butonKilitli}
             style={[styles.startBtn, butonKilitli && styles.btnDisabled]}
           >
-            <Text style={styles.startBtnIcon}>🧼</Text>
+            <Text style={styles.startBtnIcon}>🫧</Text>
             <Text style={styles.startBtnText}>Köpük</Text>
           </Pressable>
         </View>
-
-        {/* İşlem Geçmişi */}
-        <Text style={styles.sectionTitle}>İşlem Geçmişi</Text>
-        {islemlerYukleniyor ? (
-          <ActivityIndicator color={YELLOW} />
-        ) : islemler.length === 0 ? (
-          <View style={styles.emptyBox}>
-            <Text style={styles.emptyText}>Henüz işlem yok.</Text>
-          </View>
-        ) : (
-          islemler.map((i) => (
-            <View key={i.id} style={styles.islemRow}>
-              <Text style={styles.islemText}>{i.text}</Text>
-            </View>
-          ))
-        )}
       </ScrollView>
 
       {/* ── Bakiye Yükle Modal ── */}
@@ -391,66 +372,57 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: GRAY_BG,
   },
-  scroll: { flex: 1, paddingHorizontal: 16, paddingTop: 12 },
+  scroll: { flex: 1, paddingHorizontal: 12, paddingTop: 10 },
 
   /* Header */
   header: {
     backgroundColor: DARK,
-    paddingTop: 52,
-    paddingBottom: 12,
+    paddingTop: 48,
+    paddingBottom: 10,
     paddingHorizontal: 12,
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
   },
-  headerLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    flexShrink: 1,
+  headerBadge: {
+    backgroundColor: "#f59e0b",
+    borderRadius: 6,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
   },
-  headerIcon: { fontSize: 16 },
-  headerTitle: {
-    color: YELLOW,
-    fontSize: 14,
-    fontWeight: "800",
-    letterSpacing: 0.8,
-    flexShrink: 1,
+  headerBadgeText: {
+    fontSize: 15,
+    fontWeight: "900",
+    color: "#111827",
+    letterSpacing: 0.5,
   },
-  headerRight: { flexDirection: "row", gap: 6, flexShrink: 0 },
-  profilBtn: {
+  headerRight: { flexDirection: "row", gap: 6 },
+  headerBtn: {
     backgroundColor: "rgba(255,255,255,0.12)",
     borderRadius: 8,
     paddingHorizontal: 10,
     paddingVertical: 6,
   },
-  profilBtnText: { color: WHITE, fontWeight: "600", fontSize: 12 },
-  cikisBtn: {
-    backgroundColor: "rgba(255,255,255,0.12)",
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-  },
-  cikisBtnText: { color: WHITE, fontWeight: "600", fontSize: 12 },
+  headerBtnText: { color: WHITE, fontWeight: "600", fontSize: 12 },
 
-  /* QR Button in bay card */
+  /* QR Button */
   qrBtn: {
     backgroundColor: DARK,
     borderRadius: 10,
     paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingVertical: 7,
   },
   qrBtnText: { color: WHITE, fontWeight: "700", fontSize: 12 },
 
   /* Cards */
   card: {
     backgroundColor: WHITE,
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 12,
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 10,
     shadowColor: "#000",
     shadowOpacity: 0.06,
-    shadowRadius: 8,
+    shadowRadius: 6,
     shadowOffset: { width: 0, height: 2 },
     elevation: 2,
   },
@@ -458,13 +430,13 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 8,
+    marginBottom: 6,
   },
   cardLabel: {
-    fontSize: 13,
+    fontSize: 12,
     color: GRAY_TEXT,
     fontWeight: "600",
-    marginBottom: 4,
+    marginBottom: 3,
   },
   badgeGreen: {
     backgroundColor: "#d1fae5",
@@ -474,84 +446,64 @@ const styles = StyleSheet.create({
   },
   badgeText: { color: "#065f46", fontSize: 11, fontWeight: "700" },
 
-  bayId: { fontSize: 18, fontWeight: "800", color: DARK_TEXT, marginTop: 2 },
-  bayMeta: { fontSize: 13, color: GRAY_TEXT, marginTop: 4 },
+  bayId: { fontSize: 16, fontWeight: "800", color: DARK_TEXT, marginTop: 2 },
+  bayMeta: { fontSize: 12, color: GRAY_TEXT, marginTop: 3 },
 
   sessionBox: {
-    marginTop: 12,
+    marginTop: 10,
     borderTopWidth: 1,
     borderTopColor: GRAY_BORDER,
-    paddingTop: 12,
+    paddingTop: 10,
   },
   sessionTur: { fontSize: 13, color: GRAY_TEXT },
-  sayac: { fontSize: 28, fontWeight: "900", color: DARK_TEXT, marginTop: 4 },
+  sayac: { fontSize: 26, fontWeight: "900", color: DARK_TEXT, marginTop: 3 },
   durdurBtn: {
-    marginTop: 10,
+    marginTop: 8,
     backgroundColor: DARK,
+    padding: 12,
+    borderRadius: 12,
+    alignItems: "center",
+  },
+  durdurBtnText: { color: WHITE, fontWeight: "700", fontSize: 14 },
+
+  bakiyeNum: {
+    fontSize: 34,
+    fontWeight: "900",
+    color: DARK_TEXT,
+    marginTop: 4,
+  },
+  bakiyeUnit: { fontSize: 20, fontWeight: "600", color: GRAY_TEXT },
+
+  /* Buttons */
+  yellowBtn: {
+    marginTop: 12,
+    backgroundColor: YELLOW,
     padding: 13,
     borderRadius: 12,
     alignItems: "center",
   },
-  durdurBtnText: { color: WHITE, fontWeight: "700", fontSize: 15 },
-
-  bakiyeNum: {
-    fontSize: 38,
-    fontWeight: "900",
-    color: DARK_TEXT,
-    marginTop: 6,
-  },
-  bakiyeUnit: { fontSize: 22, fontWeight: "600", color: GRAY_TEXT },
-
-  /* Buttons */
-  yellowBtn: {
-    marginTop: 14,
-    backgroundColor: YELLOW,
-    padding: 14,
-    borderRadius: 12,
-    alignItems: "center",
-  },
-  yellowBtnText: { color: DARK, fontWeight: "800", fontSize: 15 },
+  yellowBtnText: { color: DARK, fontWeight: "800", fontSize: 14 },
   btnDisabled: { backgroundColor: "#c4c4c4" },
 
   /* Start Buttons */
   sectionTitle: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: "700",
     color: DARK_TEXT,
-    marginBottom: 10,
-    marginTop: 4,
+    marginBottom: 8,
+    marginTop: 2,
   },
-  row: { flexDirection: "row", gap: 10, marginBottom: 16 },
+  row: { flexDirection: "row", gap: 10, marginBottom: 10 },
   startBtn: {
     flex: 1,
     backgroundColor: DARK,
     borderRadius: 14,
-    paddingVertical: 18,
+    paddingVertical: 16,
     alignItems: "center",
-    gap: 6,
+    gap: 5,
   },
-  startBtnIcon: { fontSize: 26 },
-  startBtnText: { color: WHITE, fontWeight: "700", fontSize: 16 },
-
-  /* İşlem */
-  emptyBox: {
-    backgroundColor: WHITE,
-    borderRadius: 12,
-    padding: 16,
-    alignItems: "center",
-  },
-  emptyText: { color: GRAY_TEXT, fontSize: 14 },
-  islemRow: {
-    backgroundColor: WHITE,
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 8,
-    shadowColor: "#000",
-    shadowOpacity: 0.04,
-    shadowRadius: 4,
-    elevation: 1,
-  },
-  islemText: { color: DARK_TEXT, fontSize: 14 },
+  startBtnIcon: { fontSize: 24 },
+  startBtnText: { color: WHITE, fontWeight: "700", fontSize: 15 },
 
   /* Modal */
   modalOverlay: {
@@ -569,16 +521,16 @@ const styles = StyleSheet.create({
   modalHeader: {
     borderBottomWidth: 1,
     borderBottomColor: GRAY_BORDER,
-    paddingBottom: 12,
-    marginBottom: 16,
+    paddingBottom: 10,
+    marginBottom: 14,
   },
-  modalTitle: { fontSize: 18, fontWeight: "800", color: DARK_TEXT },
+  modalTitle: { fontSize: 17, fontWeight: "800", color: DARK_TEXT },
 
   inputLabel: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: "700",
     color: GRAY_TEXT,
-    marginBottom: 6,
+    marginBottom: 5,
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
@@ -586,11 +538,11 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: GRAY_BORDER,
     borderRadius: 12,
-    padding: 13,
+    padding: 12,
     fontSize: 15,
     color: DARK_TEXT,
     backgroundColor: GRAY_BG,
-    marginBottom: 12,
+    marginBottom: 10,
   },
 
   fiyatBox: {
@@ -598,15 +550,15 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#fde68a",
     borderRadius: 12,
-    padding: 12,
-    marginBottom: 14,
+    padding: 10,
+    marginBottom: 12,
   },
   fiyatMeta: { color: GRAY_TEXT, fontSize: 13 },
   fiyatTotal: {
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: "800",
     color: DARK_TEXT,
-    marginTop: 4,
+    marginTop: 3,
   },
   fiyatErr: { color: "#b91c1c", fontWeight: "700" },
 
