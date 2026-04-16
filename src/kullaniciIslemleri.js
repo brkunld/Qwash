@@ -84,7 +84,7 @@ export function useKullaniciIslemleri() {
     }
   }, [toplamTRY]);
 
-  // --- NFC SESSİZ DİNLEME (ARKAPLAN) ---
+  // --- NFC SESSİZ DİNLEME VE REZERVASYON (ARKAPLAN) ---
   useEffect(() => {
     let isMounted = true;
 
@@ -92,7 +92,8 @@ export function useKullaniciIslemleri() {
       try {
         await NfcManager.start();
 
-        NfcManager.setEventListener(NfcEvents.DiscoverTag, (tag) => {
+        // Veritabanı işlemini (update) bekleyebilmek için callback'i async yapıyoruz
+        NfcManager.setEventListener(NfcEvents.DiscoverTag, async (tag) => {
           if (!isMounted) return;
 
           try {
@@ -121,14 +122,34 @@ export function useKullaniciIslemleri() {
                 return;
               }
 
+              // 1. NFC geçerli, yükleme durumunu başlat
+              setBayYukleniyor(true);
+
+              try {
+                // 2. RTDB'de modülü "waiting" olarak güncelle
+                const bayRef = ref(rtdb, `bays/${okunantBayId}`);
+                await update(bayRef, {
+                  status: "waiting",
+                  updatedAt: rtdbServerTimestamp(), // Eğer import isminiz rtdbServerTimestamp ise
+                });
+              } catch (updateErr) {
+                console.log("NFC Waiting Update Hatası", updateErr);
+                Alert.alert("Hata", "Peron rezerve edilemedi.");
+                setBayYukleniyor(false);
+                return; // Veritabanı hatası varsa perona bağlanmayı durdur
+              }
+
+              // 3. Güncelleme başarılıysa URL parametresini ayarla ve perona bağlan
               router.setParams({ bayId: okunantBayId });
             }
           } catch (err) {
             console.log("NFC Parse Hatası:", err);
+            setBayYukleniyor(false);
           } finally {
             NfcManager.unregisterTagEvent().catch(() => {});
             setTimeout(() => {
-              NfcManager.registerTagEvent().catch(() => {});
+              // Sadece bileşen hala ekrandaysa tekrar okumaya aç
+              if (isMounted) NfcManager.registerTagEvent().catch(() => {});
             }, 1000);
           }
         });
@@ -458,11 +479,18 @@ export function useKullaniciIslemleri() {
   // ========================================================
   // SESSION BAŞLATMA MANTIĞI HİBRİT OLARAK GÜNCELLENDİ
   // ========================================================
+  // ========================================================
+  // SESSION BAŞLATMA MANTIĞI HİBRİT OLARAK GÜNCELLENDİ
+  // ========================================================
   const sessionBaslat = async (packageId) => {
     if (!uid) return router.replace("/login");
     if (!seciliBay?.id) return Alert.alert("Bay yok", "Önce QR ile bay bağla.");
 
-    if (seciliBay?.status !== "available" || seciliBay?.currentSessionId) {
+    // DÜZELTME 1: Peron status'ü "available" VEYA "waiting" ise devam etmesine izin ver.
+    if (
+      (seciliBay?.status !== "available" && seciliBay?.status !== "waiting") ||
+      seciliBay?.currentSessionId
+    ) {
       return Alert.alert("Bay dolu", "Bu bay şu anda kullanımda.");
     }
 
@@ -477,10 +505,16 @@ export function useKullaniciIslemleri() {
 
       // RTDB Bay Referansı (Anlık hız için)
       const rtdbBayRef = ref(rtdb, `bays/${seciliBay.id}`);
+
       // Anlık kontrol yapalım ki birisi saniyeler önce almadıysa emin olalım
       const rtdbSnap = await getRtdb(rtdbBayRef);
-      if (rtdbSnap.exists() && rtdbSnap.val().status !== "available") {
-        throw new Error("bay_busy");
+
+      // DÜZELTME 2: Anlık kontrolde de "waiting" durumuna izin veriyoruz
+      if (rtdbSnap.exists()) {
+        const snapStatus = rtdbSnap.val().status;
+        if (snapStatus !== "available" && snapStatus !== "waiting") {
+          throw new Error("bay_busy");
+        }
       }
 
       const userRef = doc(db, "users", uid);
@@ -545,7 +579,7 @@ export function useKullaniciIslemleri() {
       // 2. Veritabanı ve cüzdan işlemleri başarılı olduysa ESP32'yi tetiklemek için RTDB'yi güncelliyoruz
       await setRtdb(rtdbBayRef, {
         ...seciliBay,
-        status: "busy",
+        status: "busy", // İşlem başarıyla başladığı için "waiting" modundan çıkıp "busy" (dolu) moduna alıyoruz
         currentSessionId: sessionRef.id,
         lastUserId: uid,
         updatedAt: rtdbServerTimestamp(),
