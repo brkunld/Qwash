@@ -479,9 +479,6 @@ export function useKullaniciIslemleri() {
   // ========================================================
   // SESSION BAŞLATMA MANTIĞI HİBRİT OLARAK GÜNCELLENDİ
   // ========================================================
-  // ========================================================
-  // SESSION BAŞLATMA MANTIĞI HİBRİT OLARAK GÜNCELLENDİ
-  // ========================================================
   const sessionBaslat = async (packageId) => {
     if (!uid) return router.replace("/login");
     if (!seciliBay?.id) return Alert.alert("Bay yok", "Önce QR ile bay bağla.");
@@ -728,6 +725,29 @@ export function useKullaniciIslemleri() {
       Alert.alert("Hata", "Çıkış yapılamadı.");
     }
   };
+
+  // ========================================================
+  // ESP32 FİZİKSEL DOKUNMATİK EKRAN (TOUCH) SİNYALİ DİNLEME
+  // ========================================================
+  useEffect(() => {
+    // Eğer donanımdan bir seçim (wash veya foam) geldiyse
+    if (seciliBay?.hardwareSelection) {
+      const secilenPaket = seciliBay.hardwareSelection;
+
+      // 1. Sonsuz döngüye girmemek için RTDB'den bu talebi anında temizle
+      const rtdbBayRef = ref(rtdb, `bays/${seciliBay.id}`);
+
+      update(rtdbBayRef, { hardwareSelection: null })
+        .then(() => {
+          // 2. Mobildeki ödeme ve başlatma sürecini otomatik tetikle
+          sessionBaslat(secilenPaket);
+        })
+        .catch((err) =>
+          console.error("Donanım seçimini temizleme hatası:", err),
+        );
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [seciliBay?.hardwareSelection, seciliBay?.id]);
 
   const bayDurum = seciliBay?.status ?? "available";
   const bayBagliMi = !!seciliBay?.id;
