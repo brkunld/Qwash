@@ -6,7 +6,6 @@
 
 TFT_eSPI tft = TFT_eSPI(); 
 
-// ÖNEMLİ: Stream (sürekli dinleme) için ayrı, manuel okuma için ayrı obje şart
 FirebaseData streamFbdo; 
 FirebaseData fbdo;
 FirebaseAuth auth;
@@ -18,9 +17,12 @@ String sessionId = "";
 
 unsigned long bitisZamaniMs = 0;
 int cekilenSureSaniye = 0; 
-
-// RTDB'de veri değiştiğinde Loop'a haber verecek bayrak
 bool durumDegisti = false; 
+
+// YENİ EKLENENLER: Ödeme bekleme kontrolü için
+bool odemeBekleniyor = false;
+unsigned long odemeBeklemeBaslangic = 0;
+const unsigned long ODEME_ZAMAN_ASIMI = 5000; // 5 Saniye (5000 ms)
 
 // ================= QR =================
 void drawQR_to_TFT(esp_qrcode_handle_t qrcode) {
@@ -67,22 +69,23 @@ void ekrandaSayaciGuncelle() {
   } 
   else {
     if (currentStatus == "busy") {
-      currentStatus = "bekliyor"; 
+      currentStatus = "available"; 
       tft.fillScreen(TFT_BLACK);
       tft.setTextColor(TFT_RED);
       tft.setTextSize(4);
       tft.setCursor(60, 120);
       tft.println("SURE BITTI");
       sonSaniye = -1;
+      delay(3000); 
+      durumDegisti = true; 
     }
   }
 }
 
-// ================= STREAM (ANLIK DİNLEME) CALLBACK =================
+// ================= STREAM CALLBACK =================
 void streamCallback(FirebaseStream data) {
   String path = data.dataPath();
   
-  // Eğer veritabanında toplu bir güncelleme olduysa (JSON olarak gelirse)
   if (data.dataType() == "json") {
     StaticJsonDocument<1024> doc;
     deserializeJson(doc, data.jsonString());
@@ -98,7 +101,6 @@ void streamCallback(FirebaseStream data) {
       sessionId = doc["currentSessionId"].as<String>();
     }
   } 
-  // Eğer sadece tek bir satır güncellendiyse (String olarak gelirse)
   else {
     if (path == "/status") {
       String yeniDurum = data.stringData();
@@ -113,7 +115,7 @@ void streamCallback(FirebaseStream data) {
 }
 
 void streamTimeoutCallback(bool timeout) {
-  if (timeout) Serial.println("Stream koptu, yeniden baglaniliyor...");
+  if (timeout) Serial.println("Stream koptu...");
 }
 
 // ================= SETUP =================
@@ -123,12 +125,16 @@ void setup() {
   tft.setRotation(1); 
   tft.fillScreen(TFT_BLACK);
 
+  // DOKUNMATİK EKRAN KALİBRASYONU (Gerekirse bu satırları aktif edin)
+  // uint16_t calData[5] = { 275, 3620, 264, 3532, 1 };
+  // tft.setTouch(calData);
+
   tft.setTextColor(TFT_WHITE); 
   tft.setTextSize(2);
   tft.setCursor(10, 10);
   tft.println("Baslatiliyor...");
 
-  WiFi.begin("1", "12121214");
+  WiFi.begin("1", "12121214"); 
   while (WiFi.status() != WL_CONNECTED) { delay(500); }
 
   tft.println("WiFi OK");
@@ -136,14 +142,11 @@ void setup() {
   config.api_key = "AIzaSyDXXgyY_NW6_D1Ecr0ZQljYUvQSTypgJaU";
   auth.user.email = "brkunld1@yandex.com";
   auth.user.password = "123456";
-  
-  // EKLENDİ: RTDB Bağlantı URL'si
   config.database_url = "https://ut-project-1c283-default-rtdb.europe-west1.firebasedatabase.app/";
 
   Firebase.begin(&config, &auth);
   Firebase.reconnectWiFi(true);
 
-  // RTDB Dinlemeyi Başlatıyoruz
   String streamPath = "/bays/" + bayId;
   if (!Firebase.RTDB.beginStream(&streamFbdo, streamPath)) {
     Serial.println("Stream basarisiz: " + streamFbdo.errorReason());
@@ -156,34 +159,123 @@ void setup() {
 }
 
 // ================= LOOP =================
+// ================= LOOP =================
 void loop() {
 
-  // Süre sayımı her döngüde kontrol edilir (Stream'den bağımsızdır)
   if (currentStatus == "busy") {
     ekrandaSayaciGuncelle();
   }
 
-  // Sadece RTDB'den yeni bir durum geldiğinde bu bloğa girilir
-  if (durumDegisti) {
-    durumDegisti = false; // İşleme başladık, bayrağı indir
+  // ===== 1. DOKUNMATİK EKRAN DİNLEME (Sadece Waiting Modunda) =====
+  if (currentStatus == "waiting") {
+    
+    // Eğer henüz bir butona basılmadıysa dokunmatiği dinle
+    if (!odemeBekleniyor) {
+      uint16_t x, y;
+      
+      if (tft.getTouch(&x, &y)) {
+        
+        // SU BUTONU 
+        if (x > 20 && x < 150 && y > 80 && y < 170) {
+          tft.fillRoundRect(20, 80, 130, 90, 10, TFT_DARKGREY);
+          
+          Firebase.RTDB.setString(&fbdo, "/bays/" + bayId + "/hardwareSelection", "wash");
 
-    // ===== AVAILABLE =====
+          tft.fillScreen(TFT_BLACK);
+          tft.setTextColor(TFT_WHITE);
+          tft.setTextSize(2);
+          tft.setCursor(20, 100);
+          tft.println("Telefondan odeme");
+          tft.setCursor(20, 130);
+          tft.println("bekleniyor...");
+          
+          odemeBekleniyor = true;
+          odemeBeklemeBaslangic = millis(); // Sayacı başlat
+        }
+        
+        // KÖPÜK BUTONU
+        else if (x > 170 && x < 300 && y > 80 && y < 170) {
+          tft.fillRoundRect(170, 80, 130, 90, 10, TFT_DARKGREY);
+          
+          Firebase.RTDB.setString(&fbdo, "/bays/" + bayId + "/hardwareSelection", "foam");
+
+          tft.fillScreen(TFT_BLACK);
+          tft.setTextColor(TFT_WHITE);
+          tft.setTextSize(2);
+          tft.setCursor(20, 100);
+          tft.println("Telefondan odeme");
+          tft.setCursor(20, 130);
+          tft.println("bekleniyor...");
+          
+          odemeBekleniyor = true;
+          odemeBeklemeBaslangic = millis(); // Sayacı başlat
+        }
+      }
+    } 
+    // Eğer butona basıldıysa ve ödeme bekleniyorsa zaman aşımını kontrol et
+    else {
+      if (millis() - odemeBeklemeBaslangic > ODEME_ZAMAN_ASIMI) {
+        // 5 saniye geçti ve hala waiting modundaysak (mobil uygulama onay vermediyse)
+        odemeBekleniyor = false; // Beklemeyi iptal et
+        
+        // RTDB'deki isteği temizle ki mobilde sonradan tetiklenmesin
+        Firebase.RTDB.setString(&fbdo, "/bays/" + bayId + "/hardwareSelection", "");
+        
+        // Ekrana hata yazdır
+        tft.fillScreen(TFT_BLACK);
+        tft.setTextColor(TFT_RED);
+        tft.setTextSize(2);
+        tft.setCursor(20, 110);
+        tft.println("Odeme Alinamadi!");
+        delay(2000); // 2 saniye hatayı göster
+        
+        durumDegisti = true; // Ekranı (butonları) tekrar çizmesi için sistemi tetikle
+      }
+    }
+  }
+
+  // ===== 2. RTDB'DEN DURUM DEĞİŞİMİ GELDİĞİNDE =====
+  if (durumDegisti) {
+    durumDegisti = false; 
+    odemeBekleniyor = false; // Durum değiştiyse bekleme modunu her halükarda sıfırla
+
     if (currentStatus == "available") {
       ekranaQRCiz(bayId);
     }
 
-    // ===== BUSY =====
+    else if (currentStatus == "waiting") {
+      tft.fillScreen(TFT_BLACK);
+
+      tft.setTextColor(TFT_WHITE);
+      tft.setTextSize(2);
+      tft.setCursor(30, 20);
+      tft.println("Lutfen Paket Seciniz");
+
+      // Sol Buton (SU)
+      tft.fillRoundRect(20, 80, 130, 90, 10, TFT_BLUE); 
+      tft.setTextColor(TFT_WHITE);
+      tft.setTextSize(3);
+      tft.setCursor(65, 115);
+      tft.println("SU");
+
+      // Sağ Buton (KÖPÜK)
+      tft.fillRoundRect(170, 80, 130, 90, 10, TFT_CYAN); 
+      tft.setTextColor(TFT_BLACK);
+      tft.setTextSize(3);
+      tft.setCursor(185, 115);
+      tft.println("KOPUK");
+    }
+
     else if (currentStatus == "busy") {
-      
       tft.fillScreen(TFT_BLACK);
       tft.setTextColor(TFT_CYAN);
-      tft.setCursor(10, 40);
-      tft.println("Veri cekiliyor...");
+      tft.setTextSize(2);
+      tft.setCursor(10, 20);
+      tft.println("Veriler Aliniyor...");
 
       int sure = 60;
       String packageId = "";
 
-      // ===== SESSION OKU (FIRESTORE) =====
       if (sessionId != "") {
         if (Firebase.Firestore.getDocument(&fbdo, "ut-project-1c283", "", "sessions/" + sessionId)) {
           StaticJsonDocument<2048> sessionDoc;
@@ -192,7 +284,6 @@ void loop() {
         }
       }
 
-      // ===== PACKAGE OKU (FIRESTORE) =====
       if (packageId != "") {
         if (Firebase.Firestore.getDocument(&fbdo, "ut-project-1c283", "", "packages/" + packageId)) {
           StaticJsonDocument<2048> packageDoc;
@@ -207,22 +298,20 @@ void loop() {
         }
       }
 
-      // ===== MOD GOSTER =====
       tft.fillScreen(TFT_BLACK);
-      tft.setTextSize(3);
+      tft.setTextSize(4);
 
       if (packageId == "foam") {
         tft.setTextColor(TFT_CYAN);
-        tft.setCursor(60, 40);
+        tft.setCursor(40, 40);
         tft.println("KOPUK MODU");
       } 
       else if (packageId == "wash") {
         tft.setTextColor(TFT_BLUE);
-        tft.setCursor(60, 40);
+        tft.setCursor(70, 40);
         tft.println("SU MODU");
       }
 
-      // ===== SURE BASLAT =====
       cekilenSureSaniye = sure;
       bitisZamaniMs = millis() + ((unsigned long)sure * 1000);
     }
