@@ -7,14 +7,23 @@ import { onAuthStateChanged, signOut } from "firebase/auth";
 import {
   collection,
   doc,
+  serverTimestamp as firestoreServerTimestamp,
   getDoc,
   onSnapshot,
-  runTransaction,
-  serverTimestamp,
+  runTransaction as runFirestoreTransaction,
   setDoc,
 } from "firebase/firestore";
 
-import { auth, db } from "../firebase";
+// DİKKAT: RTDB fonksiyonları eklendi
+import {
+  get as getRtdb,
+  onValue,
+  ref,
+  serverTimestamp as rtdbServerTimestamp,
+  set as setRtdb
+} from "firebase/database";
+
+import { auth, db, rtdb } from "../firebase"; // rtdb exportunuzu import etmeyi unutmayın
 
 export function useKullaniciIslemleri() {
   const { bayId } = useLocalSearchParams();
@@ -80,22 +89,17 @@ export function useKullaniciIslemleri() {
 
     const initNfc = async () => {
       try {
-        // NFC'yi başlat
         await NfcManager.start();
 
-        // NFC okunduğunda tetiklenecek olay
         NfcManager.setEventListener(NfcEvents.DiscoverTag, (tag) => {
           if (!isMounted) return;
 
           try {
-            // NDEF verisini çöz
             if (tag.ndefMessage && tag.ndefMessage.length > 0) {
               const ndefRecord = tag.ndefMessage[0];
-              // Payload'ı metne çevir (NFC etiketindeki yazıyı alır)
               const raw = Ndef.text.decodePayload(ndefRecord.payload);
               let okunantBayId = raw.trim();
 
-              // QR kameradaki aynı ayrıştırma (parse) kuralları
               if (okunantBayId.startsWith("{")) {
                 try {
                   const obj = JSON.parse(okunantBayId);
@@ -116,14 +120,11 @@ export function useKullaniciIslemleri() {
                 return;
               }
 
-              // Başarılıysa, sayfayı yeni bayId ile günceller
-              // (Mevcut sayfada parametreyi değiştirmek, var olan bayId useEffect'ini tetikler)
               router.setParams({ bayId: okunantBayId });
             }
           } catch (err) {
             console.log("NFC Parse Hatası:", err);
           } finally {
-            // Yeni okumalara hazır olmak için kaydı iptal edip tekrar başlatıyoruz
             NfcManager.unregisterTagEvent().catch(() => {});
             setTimeout(() => {
               NfcManager.registerTagEvent().catch(() => {});
@@ -131,7 +132,6 @@ export function useKullaniciIslemleri() {
           }
         });
 
-        // Android'de ekrandayken sessizce etiketi beklemeyi başlat
         await NfcManager.registerTagEvent();
       } catch (ex) {
         console.log("NFC başlatılamadı veya desteklenmiyor", ex);
@@ -140,7 +140,6 @@ export function useKullaniciIslemleri() {
 
     initNfc();
 
-    // Bileşen kapatıldığında/sayfadan çıkıldığında dinlemeyi durdur
     return () => {
       isMounted = false;
       NfcManager.setEventListener(NfcEvents.DiscoverTag, null);
@@ -230,31 +229,27 @@ export function useKullaniciIslemleri() {
 
   // --- OTOMATİK BAĞLANTI KESME (1 Dk İşlemsizlik) ---
   useEffect(() => {
-    // Bay bağlı mı ve şu an boşta mı (session çalışmıyor mu) kontrolü
     const bayBagli = !!seciliBay?.id;
     const bayMusaitMi =
       seciliBay?.status === "available" && !seciliBay?.currentSessionId;
 
-    // Eğer bay bağlı değilse veya o an su/köpük işlemi devam ediyorsa zamanlayıcıyı başlatma
     if (!bayBagli || !bayMusaitMi) return;
 
-    // Bay bağlı ve işlem yapılmıyorsa 60 saniyelik (60000 ms) zamanlayıcıyı kur
     const inaktifZamanlayici = setTimeout(() => {
       Alert.alert(
         "Zaman Aşımı",
         "1 dakika boyunca seçim yapmadığınız için peron bağlantısı kesildi.",
       );
-      // URL parametresindeki bayId'yi temizleyerek bağlantıyı koparıyoruz
-      // (Bu işlem sayfanızdaki diğer useEffect'i tetikleyip ekranı sıfırlayacaktır)
       router.setParams({ bayId: "" });
     }, 60000);
 
-    // Kullanıcı bir oturum başlatırsa, bay bağlantısını manuel keserse
-    // veya sayfadan çıkarsa arkada çalışan zamanlayıcıyı temizle
     return () => clearTimeout(inaktifZamanlayici);
   }, [seciliBay?.id, seciliBay?.status, seciliBay?.currentSessionId, router]);
   // ---------------------------------------------------
 
+  // ========================================================
+  // BAY (PERON) DİNLEME MANTIĞI RTDB'YE TAŞINDI
+  // ========================================================
   useEffect(() => {
     if (!bayId) {
       setSeciliBay(null);
@@ -270,19 +265,20 @@ export function useKullaniciIslemleri() {
       return;
     }
 
-    const bayRef = doc(db, "bays", id);
     setBayYukleniyor(true);
+    const bayRef = ref(rtdb, `bays/${id}`);
 
-    const unsub = onSnapshot(
+    // RTDB'den onValue ile anlık dinleme yapıyoruz
+    const unsubscribe = onValue(
       bayRef,
-      (snap) => {
-        if (!snap.exists()) {
+      (snapshot) => {
+        if (!snapshot.exists()) {
           setSeciliBay(null);
           setBayYukleniyor(false);
           return;
         }
 
-        const data = snap.data();
+        const data = snapshot.val();
 
         if (data?.isActive === false || data?.status === "maintenance") {
           setSeciliBay(null);
@@ -290,19 +286,21 @@ export function useKullaniciIslemleri() {
           return;
         }
 
-        setSeciliBay({ id: snap.id, ...data });
+        setSeciliBay({ id, ...data });
         setBayYukleniyor(false);
       },
-      () => {
+      (error) => {
+        console.error("RTDB Dinleme Hatası:", error);
         setSeciliBay(null);
         setBayYukleniyor(false);
         Alert.alert("Hata", "Bay bilgisi alınamadı.");
       },
     );
 
-    return () => unsub();
+    return () => unsubscribe();
   }, [bayId]);
 
+  // Session dinleme Firestore'da kalıyor (Geçmiş ve kalıcı kayıtlar olduğu için)
   useEffect(() => {
     const sessionId = seciliBay?.currentSessionId ?? null;
 
@@ -337,22 +335,25 @@ export function useKullaniciIslemleri() {
     return () => unsub();
   }, [seciliBay?.currentSessionId]);
 
+  // ========================================================
+  // SESSION BİTİRME MANTIĞI HİBRİT OLARAK GÜNCELLENDİ
+  // ========================================================
   const sessionBitir = useCallback(
     async (reason = "user_stop") => {
       if (!uid) return router.replace("/login");
       if (!seciliBay?.id || !seciliBay?.currentSessionId) return;
       if (sessionBitiriliyorRef.current) return;
 
-      const bayRef = doc(db, "bays", seciliBay.id);
       const sRef = doc(db, "sessions", seciliBay.currentSessionId);
+      const rtdbBayRef = ref(rtdb, `bays/${seciliBay.id}`);
 
       sessionBitiriliyorRef.current = true;
       setSessionBitiriliyor(true);
 
       try {
-        await runTransaction(db, async (t) => {
+        // 1. Önce Firestore'daki session belgesini "ended" yapıyoruz
+        await runFirestoreTransaction(db, async (t) => {
           const sSnap = await t.get(sRef);
-          const baySnap = await t.get(bayRef);
 
           if (sSnap.exists()) {
             const s = sSnap.data();
@@ -361,30 +362,24 @@ export function useKullaniciIslemleri() {
                 sRef,
                 {
                   status: "ended",
-                  endedAt: serverTimestamp(),
+                  endedAt: firestoreServerTimestamp(),
                   endedReason: reason,
                 },
                 { merge: true },
               );
             }
           }
-
-          if (baySnap.exists()) {
-            const b = baySnap.data();
-            if (b?.currentSessionId === seciliBay.currentSessionId) {
-              t.set(
-                bayRef,
-                {
-                  status: "available",
-                  currentSessionId: null,
-                  updatedAt: serverTimestamp(),
-                },
-                { merge: true },
-              );
-            }
-          }
         });
-      } catch {
+
+        // 2. İşlem bitince hızlıca ESP32'nin görmesi için RTDB'yi güncelliyoruz
+        await setRtdb(rtdbBayRef, {
+          ...seciliBay,
+          status: "available",
+          currentSessionId: "",
+          updatedAt: rtdbServerTimestamp(),
+        });
+      } catch (err) {
+        console.error("Session kapatma hatası:", err);
         Alert.alert("Hata", "Session kapatılamadı.");
       } finally {
         sessionBitiriliyorRef.current = false;
@@ -443,6 +438,9 @@ export function useKullaniciIslemleri() {
     };
   };
 
+  // ========================================================
+  // SESSION BAŞLATMA MANTIĞI HİBRİT OLARAK GÜNCELLENDİ
+  // ========================================================
   const sessionBaslat = async (packageId) => {
     if (!uid) return router.replace("/login");
     if (!seciliBay?.id) return Alert.alert("Bay yok", "Önce QR ile bay bağla.");
@@ -460,24 +458,25 @@ export function useKullaniciIslemleri() {
         return;
       }
 
+      // RTDB Bay Referansı (Anlık hız için)
+      const rtdbBayRef = ref(rtdb, `bays/${seciliBay.id}`);
+      // Anlık kontrol yapalım ki birisi saniyeler önce almadıysa emin olalım
+      const rtdbSnap = await getRtdb(rtdbBayRef);
+      if (rtdbSnap.exists() && rtdbSnap.val().status !== "available") {
+        throw new Error("bay_busy");
+      }
+
       const userRef = doc(db, "users", uid);
-      const bayRef = doc(db, "bays", seciliBay.id);
       const paketRef = doc(db, "packages", packageId);
       const sessionRef = doc(collection(db, "sessions"));
       const txRef = doc(collection(db, "transactions"));
 
-      await runTransaction(db, async (t) => {
-        const baySnap = await t.get(bayRef);
+      // 1. Önce Firestore'da para çekme ve loglama işlemlerini yapıyoruz
+      await runFirestoreTransaction(db, async (t) => {
         const pSnap = await t.get(paketRef);
         const userSnap = await t.get(userRef);
 
-        if (!baySnap.exists()) throw new Error("bay_not_found");
         if (!pSnap.exists()) throw new Error("package_not_found");
-
-        const bayData = baySnap.data();
-        if (bayData?.isActive === false) throw new Error("bay_inactive");
-        if (bayData?.status !== "available") throw new Error("bay_busy");
-        if (bayData?.currentSessionId) throw new Error("bay_has_session");
 
         const p = pSnap.data();
         const pTokens = Number(p?.tokensCost ?? 0);
@@ -490,7 +489,10 @@ export function useKullaniciIslemleri() {
 
         t.set(
           userRef,
-          { walletTokens: mevcut - pTokens, updatedAt: serverTimestamp() },
+          {
+            walletTokens: mevcut - pTokens,
+            updatedAt: firestoreServerTimestamp(),
+          },
           { merge: true },
         );
 
@@ -502,22 +504,11 @@ export function useKullaniciIslemleri() {
           tokensCost: pTokens,
           durationSec: pDuration,
           status: "running",
-          startedAt: serverTimestamp(),
+          startedAt: firestoreServerTimestamp(),
           endedAt: null,
           endedReason: null,
-          createdAt: serverTimestamp(),
+          createdAt: firestoreServerTimestamp(),
         });
-
-        t.set(
-          bayRef,
-          {
-            status: "busy",
-            currentSessionId: sessionRef.id,
-            lastUserId: uid,
-            updatedAt: serverTimestamp(),
-          },
-          { merge: true },
-        );
 
         t.set(txRef, {
           type: packageId,
@@ -530,8 +521,17 @@ export function useKullaniciIslemleri() {
           bayId: seciliBay.id,
           packageId,
           sessionId: sessionRef.id,
-          createdAt: serverTimestamp(),
+          createdAt: firestoreServerTimestamp(),
         });
+      });
+
+      // 2. Veritabanı ve cüzdan işlemleri başarılı olduysa ESP32'yi tetiklemek için RTDB'yi güncelliyoruz
+      await setRtdb(rtdbBayRef, {
+        ...seciliBay,
+        status: "busy",
+        currentSessionId: sessionRef.id,
+        lastUserId: uid,
+        updatedAt: rtdbServerTimestamp(),
       });
     } catch (e) {
       const msg = String(e?.message || "");
@@ -585,7 +585,7 @@ export function useKullaniciIslemleri() {
           ? amountTRYParam
           : tokens * unitPriceTRY;
 
-      await runTransaction(db, async (t) => {
+      await runFirestoreTransaction(db, async (t) => {
         const userSnap = await t.get(userRef);
         const mevcut = userSnap.exists()
           ? Number(userSnap.data()?.walletTokens ?? 0)
@@ -593,7 +593,10 @@ export function useKullaniciIslemleri() {
 
         t.set(
           userRef,
-          { walletTokens: mevcut + tokens, updatedAt: serverTimestamp() },
+          {
+            walletTokens: mevcut + tokens,
+            updatedAt: firestoreServerTimestamp(),
+          },
           { merge: true },
         );
 
@@ -608,7 +611,7 @@ export function useKullaniciIslemleri() {
           bayId: null,
           packageId: null,
           sessionId: null,
-          createdAt: serverTimestamp(),
+          createdAt: firestoreServerTimestamp(),
         });
       });
 
@@ -650,7 +653,7 @@ export function useKullaniciIslemleri() {
           ad: adTemiz,
           soyad: soyadTemiz,
           telefon: telTemiz,
-          updatedAt: serverTimestamp(),
+          updatedAt: firestoreServerTimestamp(),
         },
         { merge: true },
       );

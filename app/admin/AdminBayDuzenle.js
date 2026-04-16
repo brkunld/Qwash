@@ -1,12 +1,4 @@
-import {
-  collection,
-  doc,
-  getDocs,
-  orderBy,
-  query,
-  serverTimestamp,
-  updateDoc,
-} from "firebase/firestore";
+import { get, ref, serverTimestamp, update } from "firebase/database";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -17,7 +9,8 @@ import {
   Text,
   View,
 } from "react-native";
-import { db } from "../../firebase";
+// DİKKAT: firebase.js dosyasından rtdb'yi (Realtime Database) içe aktarıyoruz
+import { rtdb } from "../../firebase";
 
 const STATUS_CYCLE = ["available", "maintenance", "offline"];
 const STATUS_COLORS = {
@@ -72,13 +65,29 @@ export default function AdminBayDuzenleme() {
     [],
   );
 
+  // RTDB'den verileri çekme fonksiyonu
   const baylariGetir = useCallback(async () => {
     setYukleniyor(true);
     try {
-      const q = query(collection(db, "bays"), orderBy("__name__", "asc"));
-      const snap = await getDocs(q);
-      setBays(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-    } catch (_) {
+      const baysRef = ref(rtdb, "bays");
+      const snapshot = await get(baysRef);
+
+      if (snapshot.exists()) {
+        const data = snapshot.val();
+        // Gelen JSON objesini diziye çevirip ID'ye göre alfabetik sıralıyoruz
+        const bayListesi = Object.keys(data)
+          .map((key) => ({
+            id: key,
+            ...data[key],
+          }))
+          .sort((a, b) => a.id.localeCompare(b.id));
+
+        setBays(bayListesi);
+      } else {
+        setBays([]);
+      }
+    } catch (error) {
+      console.error(error);
       Alert.alert("Hata", "Bay listesi alınamadı.");
     } finally {
       setYukleniyor(false);
@@ -102,17 +111,21 @@ export default function AdminBayDuzenleme() {
       return s;
     });
 
+  // RTDB üzerinde güncelleme yapma fonksiyonu
   const bayGuncelle = useCallback(async (bayId, patch) => {
     islemdeEkle(bayId);
     try {
-      await updateDoc(doc(db, "bays", bayId), {
+      const bayRef = ref(rtdb, `bays/${bayId}`);
+      await update(bayRef, {
         ...patch,
         updatedAt: serverTimestamp(),
       });
+
       setBays((prev) =>
         prev.map((b) => (b.id === bayId ? { ...b, ...patch } : b)),
       );
-    } catch (_) {
+    } catch (error) {
+      console.error(error);
       Alert.alert("Hata", "Güncelleme başarısız.");
     } finally {
       islemdeCikar(bayId);
@@ -198,7 +211,7 @@ export default function AdminBayDuzenleme() {
           <Text style={styles.emptyIcon}>🏪</Text>
           <Text style={styles.emptyText}>Bay bulunamadı.</Text>
           <Text style={styles.emptySubtext}>
-            Firestoreda `bays` koleksiyonu oluşturun.
+            RTDBde `bays` düğümünü oluşturun.
           </Text>
         </View>
       ) : (
