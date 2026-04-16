@@ -20,7 +20,6 @@ import {
   onValue,
   ref,
   serverTimestamp as rtdbServerTimestamp,
-  set as setRtdb,
   update,
 } from "firebase/database";
 
@@ -64,6 +63,8 @@ export function useKullaniciIslemleri() {
   const [sessionBitiriliyor, setSessionBitiriliyor] = useState(false);
   const sessionBitiriliyorRef = useRef(false);
   const timeoutKapattiRef = useRef(false);
+  // HEMEN ALTINA BUNU EKLE:
+  const jetonDusmeLockRef = useRef(false);
 
   const adetNum = useMemo(() => {
     const n = parseInt(String(jetonAdet || "0"), 10);
@@ -487,8 +488,7 @@ export function useKullaniciIslemleri() {
         });
 
         // 2. İşlem bitince hızlıca ESP32'nin görmesi için RTDB'yi güncelliyoruz
-        await setRtdb(rtdbBayRef, {
-          ...seciliBay,
+        await update(rtdbBayRef, {
           status: "available",
           currentSessionId: "",
           updatedAt: rtdbServerTimestamp(),
@@ -640,6 +640,10 @@ export function useKullaniciIslemleri() {
       seciliBay?.requestedPackage &&
       seciliBay?.lastUserId === uid
     ) {
+      // KİLİT: Eğer işlem zaten devam ediyorsa durdur (Çift düşmeyi engeller)
+      if (jetonDusmeLockRef.current) return;
+      jetonDusmeLockRef.current = true; // Kapıyı kilitle
+
       const tokenDusur = async () => {
         try {
           const packageId = seciliBay.requestedPackage;
@@ -691,13 +695,13 @@ export function useKullaniciIslemleri() {
             });
           });
 
-          // 2. İşlem bittikten sonra RTDB'yi temizle (Aynı jetonun 2 kere düşmemesi için)
+          // RTDB'yi temizle
           const rtdbBayRef = ref(rtdb, `bays/${seciliBay.id}`);
           await update(rtdbBayRef, {
             requestedPackage: null,
             tokensCost: null,
             durationSec: null,
-            currentSessionId: sessionRef.id, // Sayacın uygulamada başlaması için gerekli
+            currentSessionId: sessionRef.id,
           });
 
           // Yükleme ekranını (kilidi) kaldır
@@ -709,10 +713,15 @@ export function useKullaniciIslemleri() {
             "Makine çalıştı ancak jeton düşerken/kayıt açılırken hata oluştu.",
           );
           setSessionYukleniyor(false);
+          jetonDusmeLockRef.current = false; // Hata olursa kilidi aç ki tekrar deneyebilsin
         }
       };
 
       tokenDusur();
+    } else if (!seciliBay?.requestedPackage) {
+      // Eğer işlem bitmiş ve RTDB başarıyla temizlenmişse,
+      // bir sonraki müşterinin işlemi için kilidi geri aç
+      jetonDusmeLockRef.current = false;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
