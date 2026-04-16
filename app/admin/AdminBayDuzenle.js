@@ -116,13 +116,23 @@ export default function AdminBayDuzenleme() {
     islemdeEkle(bayId);
     try {
       const bayRef = ref(rtdb, `bays/${bayId}`);
-      await update(bayRef, {
+
+      // Zombi Peron Önlemi: Eğer durum 'available' (Boş) yapılıyorsa
+      // veya peron 'offline' (Kapalı) konumuna alınıyorsa seans verilerini temizle.
+      const guncellemeVerisi = {
         ...patch,
         updatedAt: serverTimestamp(),
-      });
+      };
+
+      if (patch.status === "available" || patch.status === "offline") {
+        guncellemeVerisi.currentSessionId = "";
+        guncellemeVerisi.lastUserId = "";
+      }
+
+      await update(bayRef, guncellemeVerisi);
 
       setBays((prev) =>
-        prev.map((b) => (b.id === bayId ? { ...b, ...patch } : b)),
+        prev.map((b) => (b.id === bayId ? { ...b, ...guncellemeVerisi } : b)),
       );
     } catch (error) {
       console.error(error);
@@ -134,24 +144,25 @@ export default function AdminBayDuzenleme() {
 
   const statusDegistir = useCallback(
     (bay) => {
-      const status = bay.status ?? "available";
-      if (status === "busy") {
+      const mevcutDurum = bay.status ?? "available";
+      const sonrakiDurum = statusDondur(mevcutDurum);
+
+      if (mevcutDurum === "busy") {
         Alert.alert(
           "Aktif Oturum Var",
-          "Bu bay şu an kullanımda. Devam etmek istiyor musunuz?",
+          "Bu peron şu an kullanımda. Zorla durum değiştirmek seansı sonlandıracaktır (ESP32 duracaktır). Devam edilsin mi?",
           [
             { text: "İptal", style: "cancel" },
             {
-              text: "Devam Et",
+              text: "Evet, Durdur",
               style: "destructive",
-              onPress: () =>
-                bayGuncelle(bay.id, { status: statusDondur(status) }),
+              onPress: () => bayGuncelle(bay.id, { status: sonrakiDurum }),
             },
           ],
         );
         return;
       }
-      bayGuncelle(bay.id, { status: statusDondur(status) });
+      bayGuncelle(bay.id, { status: sonrakiDurum });
     },
     [bayGuncelle, statusDondur],
   );
@@ -159,12 +170,14 @@ export default function AdminBayDuzenleme() {
   const aktifToggle = useCallback(
     (bay) => {
       const aktif = bay.isActive ?? true;
-      bayGuncelle(
-        bay.id,
-        aktif
-          ? { isActive: false, status: "offline" }
-          : { isActive: true, status: "available" },
-      );
+
+      if (aktif) {
+        // Devre dışı bırakılırken status zorunlu olarak offline yapılır
+        // bayGuncelle içindeki kontrol sayesinde currentSessionId de temizlenir.
+        bayGuncelle(bay.id, { isActive: false, status: "offline" });
+      } else {
+        bayGuncelle(bay.id, { isActive: true, status: "available" });
+      }
     },
     [bayGuncelle],
   );
