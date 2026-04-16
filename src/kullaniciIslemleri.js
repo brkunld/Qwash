@@ -214,6 +214,83 @@ export function useKullaniciIslemleri() {
   }, []);
 
   useEffect(() => {
+    if (
+      seciliBay?.status === "busy" &&
+      seciliBay?.requestedPackage &&
+      seciliBay?.lastUserId === uid
+    ) {
+      const tokenDusur = async () => {
+        try {
+          const packageId = seciliBay.requestedPackage;
+          const pTokens = seciliBay.tokensCost || 0;
+          const pDuration = seciliBay.durationSec || 0;
+
+          const userRef = doc(db, "users", uid);
+          const sessionRef = doc(collection(db, "sessions"));
+          const txRef = doc(collection(db, "transactions"));
+
+          // Artık makine çalışıyor, jetonu Firestore'dan güvenle düşebiliriz
+          await runFirestoreTransaction(db, async (t) => {
+            const userSnap = await t.get(userRef);
+            const mevcut = userSnap.exists()
+              ? Number(userSnap.data()?.walletTokens ?? 0)
+              : 0;
+
+            t.set(
+              userRef,
+              {
+                walletTokens: Math.max(0, mevcut - pTokens),
+                updatedAt: firestoreServerTimestamp(),
+              },
+              { merge: true },
+            );
+
+            t.set(sessionRef, {
+              bayId: seciliBay.id,
+              userId: uid,
+              type: packageId,
+              packageId,
+              tokensCost: pTokens,
+              durationSec: pDuration,
+              status: "running",
+              startedAt: firestoreServerTimestamp(),
+              createdAt: firestoreServerTimestamp(),
+            });
+
+            t.set(txRef, {
+              type: packageId,
+              status: "success",
+              tokens: pTokens,
+              amountTRY: 0,
+              userId: uid,
+              bayId: seciliBay.id,
+              packageId,
+              sessionId: sessionRef.id,
+              createdAt: firestoreServerTimestamp(),
+            });
+          });
+
+          // İşlem bittikten sonra RTDB'yi temizle ki jeton tekrar tekrar düşmesin
+          const rtdbBayRef = ref(rtdb, `bays/${seciliBay.id}`);
+          await update(rtdbBayRef, {
+            requestedPackage: null,
+            tokensCost: null,
+            durationSec: null,
+            currentSessionId: sessionRef.id, // Sayacın ekranda başlaması için Session ID
+          });
+
+          setSessionYukleniyor(false); // Kilitleri aç
+        } catch (e) {
+          console.error("Jeton düşme hatası:", e);
+        }
+      };
+
+      tokenDusur();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [seciliBay?.status, seciliBay?.requestedPackage, uid]);
+
+  useEffect(() => {
     if (!uid) return;
 
     const userRef = doc(db, "users", uid);
@@ -483,7 +560,7 @@ export function useKullaniciIslemleri() {
     if (!uid) return router.replace("/login");
     if (!seciliBay?.id) return Alert.alert("Bay yok", "Önce QR ile bay bağla.");
 
-    // DÜZELTME 1: Peron status'ü "available" VEYA "waiting" ise devam etmesine izin ver.
+    // Peron status'ü "available" VEYA "waiting" ise devam etmesine izin ver.
     if (
       (seciliBay?.status !== "available" && seciliBay?.status !== "waiting") ||
       seciliBay?.currentSessionId
@@ -491,109 +568,160 @@ export function useKullaniciIslemleri() {
       return Alert.alert("Bay dolu", "Bu bay şu anda kullanımda.");
     }
 
+    // Çift tıklamayı ve art arda basmayı önlemek için kilit
+    if (sessionYukleniyor) return;
     setSessionYukleniyor(true);
 
     try {
       const paket = await paketGetir(packageId);
       if (!paket) {
-        Alert.alert("Paket yok", `packages/${packageId} bulunamadı.`);
+        Alert.alert("Paket yok", "Paket bulunamadı.");
+        setSessionYukleniyor(false);
         return;
       }
 
-      // RTDB Bay Referansı (Anlık hız için)
-      const rtdbBayRef = ref(rtdb, `bays/${seciliBay.id}`);
+      // 1. Sadece Bakiye Yeterli mi Kontrolü Yapıyoruz (JETON DÜŞMÜYORUZ)
+      const userRef = doc(db, "users", uid);
+      const userSnap = await getDoc(userRef);
+      const mevcut = userSnap.exists()
+        ? Number(userSnap.data()?.walletTokens ?? 0)
+        : 0;
 
-      // Anlık kontrol yapalım ki birisi saniyeler önce almadıysa emin olalım
-      const rtdbSnap = await getRtdb(rtdbBayRef);
-
-      // DÜZELTME 2: Anlık kontrolde de "waiting" durumuna izin veriyoruz
-      if (rtdbSnap.exists()) {
-        const snapStatus = rtdbSnap.val().status;
-        if (snapStatus !== "available" && snapStatus !== "waiting") {
-          throw new Error("bay_busy");
-        }
+      if (mevcut < paket.tokensCost) {
+        Alert.alert("Yetersiz Bakiye", "Jeton bakiyeniz yeterli değil.");
+        setSessionYukleniyor(false);
+        return;
       }
 
-      const userRef = doc(db, "users", uid);
-      const paketRef = doc(db, "packages", packageId);
-      const sessionRef = doc(collection(db, "sessions"));
-      const txRef = doc(collection(db, "transactions"));
+      // 2. Makineye RTDB üzerinden "HAZIRLAN VE BAŞLA" sinyali gönder
+      const rtdbBayRef = ref(rtdb, `bays/${seciliBay.id}`);
 
-      // 1. Önce Firestore'da para çekme ve loglama işlemlerini yapıyoruz
-      await runFirestoreTransaction(db, async (t) => {
-        const pSnap = await t.get(paketRef);
-        const userSnap = await t.get(userRef);
-
-        if (!pSnap.exists()) throw new Error("package_not_found");
-
-        const p = pSnap.data();
-        const pTokens = Number(p?.tokensCost ?? 0);
-        const pDuration = Number(p?.durationSec ?? 0);
-        const mevcut = userSnap.exists()
-          ? Number(userSnap.data()?.walletTokens ?? 0)
-          : 0;
-
-        if (mevcut < pTokens) throw new Error("insufficient_tokens");
-
-        t.set(
-          userRef,
-          {
-            walletTokens: mevcut - pTokens,
-            updatedAt: firestoreServerTimestamp(),
-          },
-          { merge: true },
-        );
-
-        t.set(sessionRef, {
-          bayId: seciliBay.id,
-          userId: uid,
-          type: packageId,
-          packageId,
-          tokensCost: pTokens,
-          durationSec: pDuration,
-          status: "running",
-          startedAt: firestoreServerTimestamp(),
-          endedAt: null,
-          endedReason: null,
-          createdAt: firestoreServerTimestamp(),
-        });
-
-        t.set(txRef, {
-          type: packageId,
-          status: "success",
-          tokens: pTokens,
-          amountTRY: 0,
-          unitPriceTRY: null,
-          userId: uid,
-          adminId: null,
-          bayId: seciliBay.id,
-          packageId,
-          sessionId: sessionRef.id,
-          createdAt: firestoreServerTimestamp(),
-        });
-      });
-
-      // 2. Veritabanı ve cüzdan işlemleri başarılı olduysa ESP32'yi tetiklemek için RTDB'yi güncelliyoruz
-      await setRtdb(rtdbBayRef, {
-        ...seciliBay,
-        status: "busy", // İşlem başarıyla başladığı için "waiting" modundan çıkıp "busy" (dolu) moduna alıyoruz
-        currentSessionId: sessionRef.id,
+      await update(rtdbBayRef, {
+        status: "starting", // Yeni durum: Makine başlama komutu aldı
+        requestedPackage: packageId, // ESP32 hangi paketi seçtiğini bilsin
+        durationSec: paket.durationSec, // ESP32 süreyi doğrudan alsın
+        tokensCost: paket.tokensCost, // Jeton düşerken lazım olacak
         lastUserId: uid,
         updatedAt: rtdbServerTimestamp(),
       });
+
+      // 3. Makinenin yanıt vermemesi veya kapalı olması ihtimaline karşı 10 saniye koruması
+      setTimeout(async () => {
+        const checkSnap = await getRtdb(rtdbBayRef);
+        if (checkSnap.exists() && checkSnap.val().status === "starting") {
+          // 10 saniye geçti ve makine başlamadıysa işlemi iptal et
+          Alert.alert(
+            "Bağlantı Hatası",
+            "Makine yanıt vermedi. Jetonunuz güvende.",
+          );
+          await update(rtdbBayRef, {
+            status: "waiting", // Geri müsait/bekleme moduna al
+            requestedPackage: null,
+            durationSec: null,
+            tokensCost: null,
+          });
+          setSessionYukleniyor(false);
+        }
+      }, 10000);
     } catch (e) {
-      const msg = String(e?.message || "");
-      if (msg.includes("insufficient_tokens")) {
-        Alert.alert("Yetersiz Bakiye", "Jeton bakiyeniz yeterli değil.");
-      } else if (msg.includes("bay_busy") || msg.includes("bay_has_session")) {
-        Alert.alert("Bay Dolu", "Bu bay şu anda kullanımda.");
-      } else {
-        Alert.alert("Hata", "Session başlatılamadı.");
-      }
-    } finally {
+      console.error("Başlatma hatası:", e);
+      Alert.alert("Hata", "Sinyal gönderilemedi.");
       setSessionYukleniyor(false);
     }
   };
+
+  // ========================================================
+  // MAKİNE ÇALIŞTIĞINDA JETONU DÜŞÜREN DİNLEYİCİ
+  // ========================================================
+  useEffect(() => {
+    // Eğer makine "busy" (çalışıyor) moduna geçtiyse ve bu işlemi biz (uid) başlattıysak:
+    if (
+      seciliBay?.status === "busy" &&
+      seciliBay?.requestedPackage &&
+      seciliBay?.lastUserId === uid
+    ) {
+      const tokenDusur = async () => {
+        try {
+          const packageId = seciliBay.requestedPackage;
+          const pTokens = Number(seciliBay.tokensCost || 0);
+          const pDuration = Number(seciliBay.durationSec || 0);
+
+          const userRef = doc(db, "users", uid);
+          const sessionRef = doc(collection(db, "sessions"));
+          const txRef = doc(collection(db, "transactions"));
+
+          // 1. Jetonu Firestore'dan düş ve oturum (session) kayıtlarını oluştur
+          await runFirestoreTransaction(db, async (t) => {
+            const userSnap = await t.get(userRef);
+            const mevcut = userSnap.exists()
+              ? Number(userSnap.data()?.walletTokens ?? 0)
+              : 0;
+
+            t.set(
+              userRef,
+              {
+                walletTokens: Math.max(0, mevcut - pTokens),
+                updatedAt: firestoreServerTimestamp(),
+              },
+              { merge: true },
+            );
+
+            t.set(sessionRef, {
+              bayId: seciliBay.id,
+              userId: uid,
+              type: packageId,
+              packageId,
+              tokensCost: pTokens,
+              durationSec: pDuration,
+              status: "running",
+              startedAt: firestoreServerTimestamp(),
+              createdAt: firestoreServerTimestamp(),
+            });
+
+            t.set(txRef, {
+              type: packageId,
+              status: "success",
+              tokens: pTokens,
+              amountTRY: 0,
+              userId: uid,
+              bayId: seciliBay.id,
+              packageId,
+              sessionId: sessionRef.id,
+              createdAt: firestoreServerTimestamp(),
+            });
+          });
+
+          // 2. İşlem bittikten sonra RTDB'yi temizle (Aynı jetonun 2 kere düşmemesi için)
+          const rtdbBayRef = ref(rtdb, `bays/${seciliBay.id}`);
+          await update(rtdbBayRef, {
+            requestedPackage: null,
+            tokensCost: null,
+            durationSec: null,
+            currentSessionId: sessionRef.id, // Sayacın uygulamada başlaması için gerekli
+          });
+
+          // Yükleme ekranını (kilidi) kaldır
+          setSessionYukleniyor(false);
+        } catch (e) {
+          console.error("Jeton düşme hatası:", e);
+          Alert.alert(
+            "Hata",
+            "Makine çalıştı ancak jeton düşerken/kayıt açılırken hata oluştu.",
+          );
+          setSessionYukleniyor(false);
+        }
+      };
+
+      tokenDusur();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    seciliBay?.status,
+    seciliBay?.requestedPackage,
+    seciliBay?.lastUserId,
+    seciliBay?.id,
+    uid,
+  ]);
 
   const bakiyeYukle = async (tokens, amountTRYParam) => {
     if (!uid) return router.replace("/login");

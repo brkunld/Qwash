@@ -19,12 +19,12 @@ unsigned long bitisZamaniMs = 0;
 int cekilenSureSaniye = 0; 
 bool durumDegisti = false; 
 
-// YENİ EKLENENLER: Ödeme bekleme kontrolü için
+// Ödeme bekleme kontrolü için
 bool odemeBekleniyor = false;
 unsigned long odemeBeklemeBaslangic = 0;
 const unsigned long ODEME_ZAMAN_ASIMI = 5000; // 5 Saniye (5000 ms)
 
-// ================= QR =================
+// ================= QR ÇİZİMİ =================
 void drawQR_to_TFT(esp_qrcode_handle_t qrcode) {
   int size = esp_qrcode_get_size(qrcode);
   int pixelSize = tft.height() / size; 
@@ -48,7 +48,7 @@ void ekranaQRCiz(String metin) {
   esp_qrcode_generate(&cfg, metin.c_str());
 }
 
-// ================= SAYAC =================
+// ================= SAYAC GÜNCELLEMESİ =================
 void ekrandaSayaciGuncelle() {
   static int sonSaniye = -1;
   
@@ -68,7 +68,13 @@ void ekrandaSayaciGuncelle() {
     }
   } 
   else {
+    // Süre bittiğinde çalışacak blok
     if (currentStatus == "busy") {
+      
+      // Güvenlik: ESP32'nin süresi bittiyse bulutu da boş (available) duruma çek
+      Firebase.RTDB.setString(&fbdo, "/bays/" + bayId + "/status", "available");
+      Firebase.RTDB.setString(&fbdo, "/bays/" + bayId + "/currentSessionId", "");
+
       currentStatus = "available"; 
       tft.fillScreen(TFT_BLACK);
       tft.setTextColor(TFT_RED);
@@ -125,10 +131,6 @@ void setup() {
   tft.setRotation(1); 
   tft.fillScreen(TFT_BLACK);
 
-  // DOKUNMATİK EKRAN KALİBRASYONU (Gerekirse bu satırları aktif edin)
-  // uint16_t calData[5] = { 275, 3620, 264, 3532, 1 };
-  // tft.setTouch(calData);
-
   tft.setTextColor(TFT_WHITE); 
   tft.setTextSize(2);
   tft.setCursor(10, 10);
@@ -159,9 +161,9 @@ void setup() {
 }
 
 // ================= LOOP =================
-// ================= LOOP =================
 void loop() {
 
+  // Süre sayacı her zaman öncelikli olarak kontrol edilir
   if (currentStatus == "busy") {
     ekrandaSayaciGuncelle();
   }
@@ -190,7 +192,7 @@ void loop() {
           tft.println("bekleniyor...");
           
           odemeBekleniyor = true;
-          odemeBeklemeBaslangic = millis(); // Sayacı başlat
+          odemeBeklemeBaslangic = millis(); 
         }
         
         // KÖPÜK BUTONU
@@ -208,28 +210,25 @@ void loop() {
           tft.println("bekleniyor...");
           
           odemeBekleniyor = true;
-          odemeBeklemeBaslangic = millis(); // Sayacı başlat
+          odemeBeklemeBaslangic = millis(); 
         }
       }
     } 
     // Eğer butona basıldıysa ve ödeme bekleniyorsa zaman aşımını kontrol et
     else {
       if (millis() - odemeBeklemeBaslangic > ODEME_ZAMAN_ASIMI) {
-        // 5 saniye geçti ve hala waiting modundaysak (mobil uygulama onay vermediyse)
-        odemeBekleniyor = false; // Beklemeyi iptal et
-        
-        // RTDB'deki isteği temizle ki mobilde sonradan tetiklenmesin
+        // 5 saniye geçti ve mobil onay vermediyse iptal et
+        odemeBekleniyor = false; 
         Firebase.RTDB.setString(&fbdo, "/bays/" + bayId + "/hardwareSelection", "");
         
-        // Ekrana hata yazdır
         tft.fillScreen(TFT_BLACK);
         tft.setTextColor(TFT_RED);
         tft.setTextSize(2);
         tft.setCursor(20, 110);
         tft.println("Odeme Alinamadi!");
-        delay(2000); // 2 saniye hatayı göster
+        delay(2000); 
         
-        durumDegisti = true; // Ekranı (butonları) tekrar çizmesi için sistemi tetikle
+        durumDegisti = true; 
       }
     }
   }
@@ -237,15 +236,16 @@ void loop() {
   // ===== 2. RTDB'DEN DURUM DEĞİŞİMİ GELDİĞİNDE =====
   if (durumDegisti) {
     durumDegisti = false; 
-    odemeBekleniyor = false; // Durum değiştiyse bekleme modunu her halükarda sıfırla
+    odemeBekleniyor = false; // Mod değiştiyse bekleme modunu sıfırla
 
+    // ==== AVAILABLE ====
     if (currentStatus == "available") {
       ekranaQRCiz(bayId);
     }
 
+    // ==== WAITING ====
     else if (currentStatus == "waiting") {
       tft.fillScreen(TFT_BLACK);
-
       tft.setTextColor(TFT_WHITE);
       tft.setTextSize(2);
       tft.setCursor(30, 20);
@@ -266,38 +266,26 @@ void loop() {
       tft.println("KOPUK");
     }
 
-    else if (currentStatus == "busy") {
+    // ==== STARTING (YENİ EKLENEN HAZIRLIK MODU) ====
+    else if (currentStatus == "starting") {
       tft.fillScreen(TFT_BLACK);
       tft.setTextColor(TFT_CYAN);
       tft.setTextSize(2);
       tft.setCursor(10, 20);
-      tft.println("Veriler Aliniyor...");
+      tft.println("Makine Hazirlaniyor...");
 
       int sure = 60;
       String packageId = "";
 
-      if (sessionId != "") {
-        if (Firebase.Firestore.getDocument(&fbdo, "ut-project-1c283", "", "sessions/" + sessionId)) {
-          StaticJsonDocument<2048> sessionDoc;
-          deserializeJson(sessionDoc, fbdo.payload());
-          packageId = sessionDoc["fields"]["packageId"]["stringValue"] | "";
-        }
+      // 1. Verileri çok hızlı şekilde doğrudan RTDB'den okuyoruz (Firestore yavaşlığı bitti!)
+      if (Firebase.RTDB.getString(&fbdo, "/bays/" + bayId + "/requestedPackage")) {
+        packageId = fbdo.stringData();
+      }
+      if (Firebase.RTDB.getInt(&fbdo, "/bays/" + bayId + "/durationSec")) {
+        sure = fbdo.intData();
       }
 
-      if (packageId != "") {
-        if (Firebase.Firestore.getDocument(&fbdo, "ut-project-1c283", "", "packages/" + packageId)) {
-          StaticJsonDocument<2048> packageDoc;
-          deserializeJson(packageDoc, fbdo.payload());
-
-          if (packageDoc["fields"]["durationSec"].containsKey("integerValue")) {
-            sure = packageDoc["fields"]["durationSec"]["integerValue"].as<int>();
-          } 
-          else if (packageDoc["fields"]["durationSec"].containsKey("doubleValue")) {
-            sure = packageDoc["fields"]["durationSec"]["doubleValue"].as<int>();
-          }
-        }
-      }
-
+      // 2. Modu ekranda göster
       tft.fillScreen(TFT_BLACK);
       tft.setTextSize(4);
 
@@ -312,8 +300,17 @@ void loop() {
         tft.println("SU MODU");
       }
 
+      // 3. Süreyi başlat (Mekanik Röleleri vs. burada aktif edebilirsiniz)
       cekilenSureSaniye = sure;
       bitisZamaniMs = millis() + ((unsigned long)sure * 1000);
+
+      // 4. EL SIKIŞMA (Handshake): Başarıyla hazırlandık, durumu "busy" yapıyoruz.
+      // Telefon uygulaması bu "busy" durumunu görünce kullanıcının jetonunu düşecek!
+      Firebase.RTDB.setString(&fbdo, "/bays/" + bayId + "/status", "busy");
+      currentStatus = "busy"; 
     }
+    
+    // Not: Artık "else if (currentStatus == "busy")" diye bir durum dinleme bloğuna
+    // gerek yok çünkü starting onu kendi içinde hazırlayıp dönüştürüyor. Sayaç direkt çalışacak.
   }
 }
