@@ -38,6 +38,12 @@ const STATUS_COLORS = {
     dot: "#94a3b8",
     border: "#cbd5e1",
   },
+  waiting: {
+    bg: "#e0f2fe",
+    text: "#0369a1",
+    dot: "#0ea5e9",
+    border: "#bae6fd",
+  },
 };
 
 export default function AdminBayDuzenleme() {
