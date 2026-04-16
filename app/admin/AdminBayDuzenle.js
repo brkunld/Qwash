@@ -51,6 +51,7 @@ export default function AdminBayDuzenleme() {
       busy: "Dolu",
       maintenance: "Bakım",
       offline: "Kapalı",
+      waiting: "Bekliyor",
     }),
     [],
   );
@@ -61,6 +62,7 @@ export default function AdminBayDuzenleme() {
       busy: "●",
       maintenance: "⚙",
       offline: "✕",
+      waiting: "⏳",
     }),
     [],
   );

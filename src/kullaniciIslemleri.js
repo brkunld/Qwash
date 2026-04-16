@@ -20,7 +20,8 @@ import {
   onValue,
   ref,
   serverTimestamp as rtdbServerTimestamp,
-  set as setRtdb
+  set as setRtdb,
+  update,
 } from "firebase/database";
 
 import { auth, db, rtdb } from "../firebase"; // rtdb exportunuzu import etmeyi unutmayın
@@ -230,16 +231,32 @@ export function useKullaniciIslemleri() {
   // --- OTOMATİK BAĞLANTI KESME (1 Dk İşlemsizlik) ---
   useEffect(() => {
     const bayBagli = !!seciliBay?.id;
+    // Artık 'waiting' durumundayken de zamanlayıcı çalışacak
     const bayMusaitMi =
-      seciliBay?.status === "available" && !seciliBay?.currentSessionId;
+      (seciliBay?.status === "available" || seciliBay?.status === "waiting") &&
+      !seciliBay?.currentSessionId;
 
     if (!bayBagli || !bayMusaitMi) return;
 
-    const inaktifZamanlayici = setTimeout(() => {
+    const inaktifZamanlayici = setTimeout(async () => {
       Alert.alert(
         "Zaman Aşımı",
         "1 dakika boyunca seçim yapmadığınız için peron bağlantısı kesildi.",
       );
+
+      // ZOMBİ ÖNLEMİ: Kullanıcı atılırken peronu RTDB'de boşa (available) al
+      if (seciliBay?.id) {
+        try {
+          const rtdbBayRef = ref(rtdb, `bays/${seciliBay.id}`);
+          await update(rtdbBayRef, {
+            status: "available",
+            updatedAt: rtdbServerTimestamp(), // veya Date.now() kullanıyorsan ona göre
+          });
+        } catch (e) {
+          console.error("Zaman aşımı reset hatası:", e);
+        }
+      }
+
       router.setParams({ bayId: "" });
     }, 60000);
 
@@ -680,7 +697,9 @@ export function useKullaniciIslemleri() {
 
   const bayDurum = seciliBay?.status ?? "available";
   const bayBagliMi = !!seciliBay?.id;
-  const bayMusaitMi = bayDurum === "available" && !seciliBay?.currentSessionId;
+  const bayMusaitMi =
+    (bayDurum === "available" || bayDurum === "waiting") &&
+    !seciliBay?.currentSessionId;
 
   const sessionVarMi = !!seciliBay?.currentSessionId;
   const sessionRunningMi = aktifSession?.status === "running";
