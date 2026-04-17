@@ -25,6 +25,7 @@ import {
 
 import { auth, db, rtdb } from "../firebase"; // rtdb exportunuzu import etmeyi unutmayın
 
+let globalJetonLock = false;
 export function useKullaniciIslemleri() {
   const { bayId } = useLocalSearchParams();
   const router = useRouter();
@@ -63,8 +64,6 @@ export function useKullaniciIslemleri() {
   const [sessionBitiriliyor, setSessionBitiriliyor] = useState(false);
   const sessionBitiriliyorRef = useRef(false);
   const timeoutKapattiRef = useRef(false);
-  // HEMEN ALTINA BUNU EKLE:
-  const jetonDusmeLockRef = useRef(false);
 
   const adetNum = useMemo(() => {
     const n = parseInt(String(jetonAdet || "0"), 10);
@@ -343,6 +342,22 @@ export function useKullaniciIslemleri() {
   useEffect(() => {
     const sessionId = seciliBay?.currentSessionId ?? null;
 
+    // YENİ: ZOMBİ SESSION TEMİZLİĞİ
+    // Eğer ESP32 biz uygulamayı kapatmışken süreyi bitirip RTDB'yi temizlediyse
+    // ama bizim uygulamada aktifSession hala 'running' kaldıysa Firestore'u temizle.
+    if (!sessionId && aktifSession?.status === "running") {
+      const sRef = doc(db, "sessions", aktifSession.id);
+      setDoc(
+        sRef,
+        {
+          status: "ended",
+          endedAt: firestoreServerTimestamp(),
+          endedReason: "machine_timeout_background",
+        },
+        { merge: true },
+      ).catch((err) => console.log("Zombi session kapatılamadı:", err));
+    }
+
     if (!sessionId) {
       setAktifSession(null);
       setSayacKalanSn(null);
@@ -372,6 +387,7 @@ export function useKullaniciIslemleri() {
     );
 
     return () => unsub();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [seciliBay?.currentSessionId]);
 
   // ========================================================
@@ -412,7 +428,7 @@ export function useKullaniciIslemleri() {
 
         // 2. İşlem bitince hızlıca ESP32'nin görmesi için RTDB'yi güncelliyoruz
         await update(rtdbBayRef, {
-          status: "available",
+          status: "waiting",
           currentSessionId: "",
           updatedAt: rtdbServerTimestamp(),
         });
@@ -545,7 +561,7 @@ export function useKullaniciIslemleri() {
           });
           setSessionYukleniyor(false);
         }
-      }, 10000);
+      }, 15000);
     } catch (e) {
       console.error("Başlatma hatası:", e);
       Alert.alert("Hata", "Sinyal gönderilemedi.");
@@ -554,18 +570,18 @@ export function useKullaniciIslemleri() {
   };
 
   // ========================================================
-  // MAKİNE ÇALIŞTIĞINDA JETONU DÜŞÜREN DİNLEYİCİ
+  // MAKİNE ÇALIŞTIĞINDA JETONU DÜŞÜREN DİNLEYİCİ (GLOBAL KİLİTLİ)
   // ========================================================
   useEffect(() => {
-    // Eğer makine "busy" (çalışıyor) moduna geçtiyse ve bu işlemi biz (uid) başlattıysak:
+    // Eğer makine "busy" moduna geçtiyse ve işlemi biz başlattıysak:
     if (
       seciliBay?.status === "busy" &&
       seciliBay?.requestedPackage &&
       seciliBay?.lastUserId === uid
     ) {
-      // KİLİT: Eğer işlem zaten devam ediyorsa durdur (Çift düşmeyi engeller)
-      if (jetonDusmeLockRef.current) return;
-      jetonDusmeLockRef.current = true; // Kapıyı kilitle
+      // GLOBAL KİLİT: React sayfayı iki kere render etse bile işlemi durdurur
+      if (globalJetonLock) return;
+      globalJetonLock = true; // Kapıyı kilitle
 
       const tokenDusur = async () => {
         try {
@@ -577,7 +593,7 @@ export function useKullaniciIslemleri() {
           const sessionRef = doc(collection(db, "sessions"));
           const txRef = doc(collection(db, "transactions"));
 
-          // 1. Jetonu Firestore'dan düş ve oturum (session) kayıtlarını oluştur
+          // 1. Jetonu Firestore'dan düş
           await runFirestoreTransaction(db, async (t) => {
             const userSnap = await t.get(userRef);
             const mevcut = userSnap.exists()
@@ -618,7 +634,7 @@ export function useKullaniciIslemleri() {
             });
           });
 
-          // RTDB'yi temizle
+          // 2. RTDB'yi temizle (Aynı jetonun tekrar düşmemesi için)
           const rtdbBayRef = ref(rtdb, `bays/${seciliBay.id}`);
           await update(rtdbBayRef, {
             requestedPackage: null,
@@ -627,8 +643,7 @@ export function useKullaniciIslemleri() {
             currentSessionId: sessionRef.id,
           });
 
-          // Yükleme ekranını (kilidi) kaldır
-          setSessionYukleniyor(false);
+          setSessionYukleniyor(false); // Ekrandaki dönen ikonu kaldır
         } catch (e) {
           console.error("Jeton düşme hatası:", e);
           Alert.alert(
@@ -636,15 +651,14 @@ export function useKullaniciIslemleri() {
             "Makine çalıştı ancak jeton düşerken/kayıt açılırken hata oluştu.",
           );
           setSessionYukleniyor(false);
-          jetonDusmeLockRef.current = false; // Hata olursa kilidi aç ki tekrar deneyebilsin
+          globalJetonLock = false; // Hata olursa kilidi aç ki tekrar deneyebilsin
         }
       };
 
       tokenDusur();
     } else if (!seciliBay?.requestedPackage) {
-      // Eğer işlem bitmiş ve RTDB başarıyla temizlenmişse,
-      // bir sonraki müşterinin işlemi için kilidi geri aç
-      jetonDusmeLockRef.current = false;
+      // Eğer işlem sorunsuz bitmiş ve RTDB temizlenmişse bir sonraki işlem için kilidi aç
+      globalJetonLock = false;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [

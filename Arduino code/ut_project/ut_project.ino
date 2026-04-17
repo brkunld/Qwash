@@ -11,27 +11,29 @@ FirebaseData fbdo;
 FirebaseAuth auth;
 FirebaseConfig config;
 
+// Peron Bilgileri
 String bayId = "bay_42060_01_01";
 String currentStatus = "baslangic";
 String sessionId = "";
+bool isBayActive = true; // Admin kontrolü için yeni değişken
 
+// Zamanlayıcılar
+unsigned long waitingBaslangicMs = 0;
 unsigned long bitisZamaniMs = 0;
 int cekilenSureSaniye = 0; 
 bool durumDegisti = false; 
 
-// Ödeme bekleme kontrolü için
+// Ödeme bekleme kontrolü (Handshake)
 bool odemeBekleniyor = false;
 unsigned long odemeBeklemeBaslangic = 0;
-const unsigned long ODEME_ZAMAN_ASIMI = 5000; // 5 Saniye (5000 ms)
+const unsigned long ODEME_ZAMAN_ASIMI = 15000; 
 
 // ================= QR ÇİZİMİ =================
 void drawQR_to_TFT(esp_qrcode_handle_t qrcode) {
   int size = esp_qrcode_get_size(qrcode);
   int pixelSize = tft.height() / size; 
-
   int offsetX = (tft.width() - (size * pixelSize)) / 2;
   int offsetY = (tft.height() - (size * pixelSize)) / 2;
-
   for (int y = 0; y < size; y++) {
     for (int x = 0; x < size; x++) { 
       if (esp_qrcode_get_module(qrcode, x, y)) {
@@ -48,17 +50,32 @@ void ekranaQRCiz(String metin) {
   esp_qrcode_generate(&cfg, metin.c_str());
 }
 
+// ================= KAPALI EKRANI =================
+void ekranaKapaliYaz() {
+  tft.fillScreen(TFT_BLACK);
+  tft.setTextColor(TFT_RED);
+  tft.setTextSize(3);
+  tft.setCursor(50, 80);
+  tft.println("BU PERON");
+  tft.setCursor(40, 120);
+  tft.println("KAPALIDIR");
+  tft.setTextSize(2);
+  tft.setCursor(20, 180);
+  tft.setTextColor(TFT_WHITE);
+  tft.println("Lutfen diger peronlari");
+  tft.setCursor(70, 210);
+  tft.println("deneyiniz.");
+}
+
 // ================= SAYAC GÜNCELLEMESİ =================
 void ekrandaSayaciGuncelle() {
+  if (!isBayActive) return; // Kapalıysa sayacı çizme
   static int sonSaniye = -1;
-  
   if (millis() < bitisZamaniMs) {
     unsigned long kalanMs = bitisZamaniMs - millis();
     unsigned long toplamSaniye = kalanMs / 1000;
-    
     int saniye = toplamSaniye % 60;
     int dakika = toplamSaniye / 60;
-    
     if (saniye != sonSaniye) {
       tft.setTextColor(TFT_YELLOW, TFT_BLACK); 
       tft.setTextSize(5);
@@ -68,14 +85,10 @@ void ekrandaSayaciGuncelle() {
     }
   } 
   else {
-    // Süre bittiğinde çalışacak blok
     if (currentStatus == "busy") {
-      
-      // Güvenlik: ESP32'nin süresi bittiyse bulutu da boş (available) duruma çek
-      Firebase.RTDB.setString(&fbdo, "/bays/" + bayId + "/status", "available");
-      Firebase.RTDB.setString(&fbdo, "/bays/" + bayId + "/currentSessionId", "");
-
-      currentStatus = "available"; 
+      Firebase.RTDB.setStringAsync(&fbdo, "/bays/" + bayId + "/status", "waiting");
+      Firebase.RTDB.setStringAsync(&fbdo, "/bays/" + bayId + "/currentSessionId", "");
+      currentStatus = "waiting"; 
       tft.fillScreen(TFT_BLACK);
       tft.setTextColor(TFT_RED);
       tft.setTextSize(4);
@@ -103,6 +116,14 @@ void streamCallback(FirebaseStream data) {
         durumDegisti = true;
       }
     }
+    // isActive kontrolü ekleniyor
+    if (doc.containsKey("isActive")) {
+      bool active = doc["isActive"].as<bool>();
+      if (isBayActive != active) {
+        isBayActive = active;
+        durumDegisti = true;
+      }
+    }
     if (doc.containsKey("currentSessionId")) {
       sessionId = doc["currentSessionId"].as<String>();
     }
@@ -112,6 +133,12 @@ void streamCallback(FirebaseStream data) {
       String yeniDurum = data.stringData();
       if (currentStatus != yeniDurum) {
         currentStatus = yeniDurum;
+        durumDegisti = true;
+      }
+    } else if (path == "/isActive") {
+      bool active = data.boolData();
+      if (isBayActive != active) {
+        isBayActive = active;
         durumDegisti = true;
       }
     } else if (path == "/currentSessionId") {
@@ -130,187 +157,121 @@ void setup() {
   tft.init();
   tft.setRotation(1); 
   tft.fillScreen(TFT_BLACK);
-
   tft.setTextColor(TFT_WHITE); 
   tft.setTextSize(2);
   tft.setCursor(10, 10);
   tft.println("Baslatiliyor...");
-
   WiFi.begin("1", "12121214"); 
   while (WiFi.status() != WL_CONNECTED) { delay(500); }
-
   tft.println("WiFi OK");
-
   config.api_key = "AIzaSyDXXgyY_NW6_D1Ecr0ZQljYUvQSTypgJaU";
   auth.user.email = "brkunld1@yandex.com";
   auth.user.password = "123456";
   config.database_url = "https://ut-project-1c283-default-rtdb.europe-west1.firebasedatabase.app/";
-
   Firebase.begin(&config, &auth);
   Firebase.reconnectWiFi(true);
-
   String streamPath = "/bays/" + bayId;
-  if (!Firebase.RTDB.beginStream(&streamFbdo, streamPath)) {
-    Serial.println("Stream basarisiz: " + streamFbdo.errorReason());
-  } else {
-    Firebase.RTDB.setStreamCallback(&streamFbdo, streamCallback, streamTimeoutCallback);
-  }
-
+  Firebase.RTDB.beginStream(&streamFbdo, streamPath);
+  Firebase.RTDB.setStreamCallback(&streamFbdo, streamCallback, streamTimeoutCallback);
   delay(1000);
   tft.fillScreen(TFT_BLACK);
 }
 
 // ================= LOOP =================
 void loop() {
+  // --- KRİTİK ADMİN KONTROLÜ ---
+  if (!isBayActive) {
+    if (durumDegisti) {
+      durumDegisti = false;
+      ekranaKapaliYaz();
+    }
+    return; // Cihaz kapalıysa döngünün geri kalanını çalıştırma (butonları vs kapat)
+  }
 
-  // Süre sayacı her zaman öncelikli olarak kontrol edilir
   if (currentStatus == "busy") {
     ekrandaSayaciGuncelle();
   }
 
-  // ===== 1. DOKUNMATİK EKRAN DİNLEME (Sadece Waiting Modunda) =====
   if (currentStatus == "waiting") {
-    
-    // Eğer henüz bir butona basılmadıysa dokunmatiği dinle
+    if (waitingBaslangicMs == 0) waitingBaslangicMs = millis();
+    if (millis() - waitingBaslangicMs > 60000 && !odemeBekleniyor) {
+      waitingBaslangicMs = 0;
+      Firebase.RTDB.setStringAsync(&fbdo, "/bays/" + bayId + "/status", "available");
+      currentStatus = "available";
+      tft.fillScreen(TFT_BLACK);
+      tft.setTextColor(TFT_RED); tft.setTextSize(2);
+      tft.setCursor(20, 110); tft.println("Zaman Asimi!");
+      delay(2000); 
+      durumDegisti = true; 
+    }
+
     if (!odemeBekleniyor) {
       uint16_t x, y;
-      
       if (tft.getTouch(&x, &y)) {
-        
-        // SU BUTONU 
         if (x > 20 && x < 150 && y > 80 && y < 170) {
           tft.fillRoundRect(20, 80, 130, 90, 10, TFT_DARKGREY);
-          
-          Firebase.RTDB.setString(&fbdo, "/bays/" + bayId + "/hardwareSelection", "wash");
-
+          Firebase.RTDB.setStringAsync(&fbdo, "/bays/" + bayId + "/hardwareSelection", "wash");
           tft.fillScreen(TFT_BLACK);
-          tft.setTextColor(TFT_WHITE);
-          tft.setTextSize(2);
-          tft.setCursor(20, 100);
-          tft.println("Telefondan odeme");
-          tft.setCursor(20, 130);
-          tft.println("bekleniyor...");
-          
-          odemeBekleniyor = true;
-          odemeBeklemeBaslangic = millis(); 
+          tft.setCursor(20, 100); tft.println("Telefondan odeme");
+          tft.setCursor(20, 130); tft.println("bekleniyor...");
+          odemeBekleniyor = true; odemeBeklemeBaslangic = millis(); 
         }
-        
-        // KÖPÜK BUTONU
         else if (x > 170 && x < 300 && y > 80 && y < 170) {
           tft.fillRoundRect(170, 80, 130, 90, 10, TFT_DARKGREY);
-          
-          Firebase.RTDB.setString(&fbdo, "/bays/" + bayId + "/hardwareSelection", "foam");
-
+          Firebase.RTDB.setStringAsync(&fbdo, "/bays/" + bayId + "/hardwareSelection", "foam");
           tft.fillScreen(TFT_BLACK);
-          tft.setTextColor(TFT_WHITE);
-          tft.setTextSize(2);
-          tft.setCursor(20, 100);
-          tft.println("Telefondan odeme");
-          tft.setCursor(20, 130);
-          tft.println("bekleniyor...");
-          
-          odemeBekleniyor = true;
-          odemeBeklemeBaslangic = millis(); 
+          tft.setCursor(20, 100); tft.println("Telefondan odeme");
+          tft.setCursor(20, 130); tft.println("bekleniyor...");
+          odemeBekleniyor = true; odemeBeklemeBaslangic = millis(); 
         }
       }
     } 
-    // Eğer butona basıldıysa ve ödeme bekleniyorsa zaman aşımını kontrol et
     else {
       if (millis() - odemeBeklemeBaslangic > ODEME_ZAMAN_ASIMI) {
-        // 5 saniye geçti ve mobil onay vermediyse iptal et
         odemeBekleniyor = false; 
-        Firebase.RTDB.setString(&fbdo, "/bays/" + bayId + "/hardwareSelection", "");
-        
+        Firebase.RTDB.setStringAsync(&fbdo, "/bays/" + bayId + "/hardwareSelection", "");
         tft.fillScreen(TFT_BLACK);
-        tft.setTextColor(TFT_RED);
-        tft.setTextSize(2);
-        tft.setCursor(20, 110);
+        tft.setTextColor(TFT_RED); tft.setCursor(20, 110);
         tft.println("Odeme Alinamadi!");
         delay(2000); 
-        
         durumDegisti = true; 
       }
     }
+  } 
+  else {
+    waitingBaslangicMs = 0; 
   }
 
-  // ===== 2. RTDB'DEN DURUM DEĞİŞİMİ GELDİĞİNDE =====
   if (durumDegisti) {
     durumDegisti = false; 
-    odemeBekleniyor = false; // Mod değiştiyse bekleme modunu sıfırla
+    odemeBekleniyor = false; 
 
-    // ==== AVAILABLE ====
     if (currentStatus == "available") {
       ekranaQRCiz(bayId);
     }
-
-    // ==== WAITING ====
     else if (currentStatus == "waiting") {
       tft.fillScreen(TFT_BLACK);
-      tft.setTextColor(TFT_WHITE);
-      tft.setTextSize(2);
-      tft.setCursor(30, 20);
-      tft.println("Lutfen Paket Seciniz");
-
-      // Sol Buton (SU)
+      tft.setTextColor(TFT_WHITE); tft.setTextSize(2);
+      tft.setCursor(30, 20); tft.println("Lutfen Paket Seciniz");
       tft.fillRoundRect(20, 80, 130, 90, 10, TFT_BLUE); 
-      tft.setTextColor(TFT_WHITE);
-      tft.setTextSize(3);
-      tft.setCursor(65, 115);
-      tft.println("SU");
-
-      // Sağ Buton (KÖPÜK)
+      tft.setTextColor(TFT_WHITE); tft.setTextSize(3);
+      tft.setCursor(65, 115); tft.println("SU");
       tft.fillRoundRect(170, 80, 130, 90, 10, TFT_CYAN); 
-      tft.setTextColor(TFT_BLACK);
-      tft.setTextSize(3);
-      tft.setCursor(185, 115);
-      tft.println("KOPUK");
+      tft.setTextColor(TFT_BLACK); tft.setCursor(185, 115); tft.println("KOPUK");
     }
-
-    // ==== STARTING (YENİ EKLENEN HAZIRLIK MODU) ====
     else if (currentStatus == "starting") {
       tft.fillScreen(TFT_BLACK);
-      tft.setTextColor(TFT_CYAN);
-      tft.setTextSize(2);
-      tft.setCursor(10, 20);
-      tft.println("Makine Hazirlaniyor...");
-
-      int sure = 60;
-      String packageId = "";
-
-      // 1. Verileri çok hızlı şekilde doğrudan RTDB'den okuyoruz (Firestore yavaşlığı bitti!)
-      if (Firebase.RTDB.getString(&fbdo, "/bays/" + bayId + "/requestedPackage")) {
-        packageId = fbdo.stringData();
-      }
-      if (Firebase.RTDB.getInt(&fbdo, "/bays/" + bayId + "/durationSec")) {
-        sure = fbdo.intData();
-      }
-
-      // 2. Modu ekranda göster
-      tft.fillScreen(TFT_BLACK);
-      tft.setTextSize(4);
-
-      if (packageId == "foam") {
-        tft.setTextColor(TFT_CYAN);
-        tft.setCursor(40, 40);
-        tft.println("KOPUK MODU");
-      } 
-      else if (packageId == "wash") {
-        tft.setTextColor(TFT_BLUE);
-        tft.setCursor(70, 40);
-        tft.println("SU MODU");
-      }
-
-      // 3. Süreyi başlat (Mekanik Röleleri vs. burada aktif edebilirsiniz)
-      cekilenSureSaniye = sure;
+      tft.setTextColor(TFT_CYAN); tft.setTextSize(2);
+      tft.setCursor(10, 20); tft.println("Makine Hazirlaniyor...");
+      int sure = 60; String packageId = "";
+      if (Firebase.RTDB.getString(&fbdo, "/bays/" + bayId + "/requestedPackage")) { packageId = fbdo.stringData(); }
+      if (Firebase.RTDB.getInt(&fbdo, "/bays/" + bayId + "/durationSec")) { sure = fbdo.intData(); }
+      tft.fillScreen(TFT_BLACK); tft.setTextSize(4);
+      if (packageId == "foam") { tft.setTextColor(TFT_CYAN); tft.setCursor(40, 40); tft.println("KOPUK MODU"); } 
+      else if (packageId == "wash") { tft.setTextColor(TFT_BLUE); tft.setCursor(70, 40); tft.println("SU MODU"); }
       bitisZamaniMs = millis() + ((unsigned long)sure * 1000);
-
-      // 4. EL SIKIŞMA (Handshake): Başarıyla hazırlandık, durumu "busy" yapıyoruz.
-      // Telefon uygulaması bu "busy" durumunu görünce kullanıcının jetonunu düşecek!
       Firebase.RTDB.setString(&fbdo, "/bays/" + bayId + "/status", "busy");
       currentStatus = "busy"; 
     }
-    
-    // Not: Artık "else if (currentStatus == "busy")" diye bir durum dinleme bloğuna
-    // gerek yok çünkü starting onu kendi içinde hazırlayıp dönüştürüyor. Sayaç direkt çalışacak.
   }
 }
