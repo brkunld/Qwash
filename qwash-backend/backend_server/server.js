@@ -1,9 +1,16 @@
+const path = require('path');
 const express = require("express");
 const cors = require("cors");
 const admin = require("firebase-admin");
 
-// Render'a yüklerken serviceAccountKey.json dosyanın aynı klasörde olduğundan emin ol
-const serviceAccount = require("./serviceAccountKey.json");
+// 🔥 Render'ın Secret File'ı koyduğu üst dizine çıkıp dosyayı bulmasını sağlıyoruz
+const serviceAccountPath = path.join(__dirname, '..', '..', 'serviceAccountKey.json');
+const serviceAccount = require(serviceAccountPath);
+
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount),
+  databaseURL: "https://ut-project-1c283-default-rtdb.europe-west1.firebasedatabase.app/" 
+});
 
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
