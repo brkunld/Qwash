@@ -11,30 +11,9 @@ export default function RootLayout() {
         Ana giriş sayfalarını (index, login, register vb.) tekrar yazmanıza gerek yoktur.
       */}
 
-      {/* Sadece görünümünü özelleştirmek istediğiniz sayfaları belirtin */}
-      <Stack.Screen
-        name="admin/index"
-        options={{
-          headerShown: true, // Admin panelinde header görünmesini istiyorsanız true yapın
-          title: "Admin Paneli",
-        }}
-      />
-
-      <Stack.Screen
-        name="admin/AdminKullaniciAra"
-        options={{
-          headerShown: true,
-          title: "Kullanıcı Ara",
-        }}
-      />
-
-      <Stack.Screen
-        name="admin/AdminBayDuzenle"
-        options={{
-          headerShown: true,
-          title: "Bayi Düzenle",
-        }}
-      />
+      {/* Admin klasörünü sildiğimiz için buradaki admin Stack.Screen tanımlarını da kaldırdık. 
+        Eğer gelecekte başka sayfaların header'ını özelleştirmek isterseniz buraya ekleyebilirsiniz.
+      */}
     </Stack>
   );
 }

@@ -59,14 +59,9 @@ export default function Login() {
         }
       }
 
-      // 3. Yetki (Claims) Kontrolü - forceRefresh: false yaparak hızlandırıyoruz
-      const tokenResult = await user.getIdTokenResult(false);
-      if (tokenResult?.claims?.admin === true) {
-        router.replace("/admin");
-        return;
-      }
+      // NOT: Admin yönlendirmesi masaüstü uygulamasına taşındığı için buradan kaldırıldı.
 
-      // 4. Profil Kontrolü (Hızlandırmak için Firestore verisini çekiyoruz)
+      // 3. Profil Kontrolü (Hızlandırmak için Firestore verisini çekiyoruz)
       const userSnap = await getDoc(doc(db, "users", user.uid));
 
       if (userSnap.exists()) {
