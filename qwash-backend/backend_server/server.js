@@ -1,17 +1,28 @@
 const path = require('path');
+const fs = require('fs'); // 🔥 Dosya kontrolü için fs modülünü ekledik
 const express = require("express");
 const cors = require("cors");
 const admin = require("firebase-admin");
 
-// 🔥 Render'ın Secret File'ı koyduğu üst dizine çıkıp dosyayı bulmasını sağlıyoruz
-const serviceAccountPath = path.join(__dirname, '..', '..', 'serviceAccountKey.json');
+// 🔥 1. Yol: Render'ın standart Secret File dizini
+const renderSecretPath = '/etc/secrets/serviceAccountKey.json';
+// 🔥 2. Yol: Bilgisayarınızdaki (lokal) dosya yolu
+const localSecretPath = path.join(__dirname, '..', '..', 'serviceAccountKey.json');
+
+let serviceAccountPath;
+
+// Dosyanın Render'da olup olmadığını kontrol et, yoksa lokal yolu kullan
+if (fs.existsSync(renderSecretPath)) {
+  serviceAccountPath = renderSecretPath;
+  console.log("✅ Render Secret File bulundu ve kullanılıyor.");
+} else {
+  serviceAccountPath = localSecretPath;
+  console.log("✅ Lokal Secret File kullanılıyor.");
+}
+
 const serviceAccount = require(serviceAccountPath);
 
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount),
-  databaseURL: "https://ut-project-1c283-default-rtdb.europe-west1.firebasedatabase.app/" 
-});
-
+// 🔥 DİKKAT: firebase-admin sadece BİR KERE initialize edilmelidir.
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
   databaseURL: "https://ut-project-1c283-default-rtdb.europe-west1.firebasedatabase.app/" 
@@ -260,7 +271,7 @@ app.post("/api/topup", async (req, res) => {
       });
     });
 
-    safeLog(`✅ MÜŞTERİ ÖDEMESİ BAŞARILI: ${uid} -> ${tokens} jeton eklendi.`);
+    safeLog(`✅ MÜŞTERİ ÖÖDEMESİ BAŞARILI: ${uid} -> ${tokens} jeton eklendi.`);
     return res.status(200).json({ success: true, message: "Bakiye başarıyla yüklendi." });
 
   } catch (error) {
