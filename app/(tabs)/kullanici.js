@@ -145,8 +145,7 @@ export default function KullaniciEkrani() {
               </Text>
               {seciliBay ? (
                 <Text style={styles.bayMeta}>
-                  Durum: {String(seciliBay.status)} • Aktif:{" "}
-                  {String(seciliBay.isActive)}
+                  Durum: {String(seciliBay.status)}
                 </Text>
               ) : null}
             </View>

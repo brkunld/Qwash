@@ -158,25 +158,6 @@ export default function QrKamera() {
         barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
         onBarcodeScanned={okundu}
       />
-
-      {/* Alt Bilgi ve Kapat Butonu */}
-      <View style={styles.bottomContainer}>
-        <Text style={{ color: "white", textAlign: "center" }}>
-          QR kodu kameraya göster
-        </Text>
-
-        <Pressable
-          onPress={() => router.back()}
-          disabled={yukleniyor} // İşlem yaparken butonu kilitle
-          style={[styles.closeButton, yukleniyor && styles.closeButtonDisabled]}
-        >
-          <Text
-            style={{ fontWeight: "700", color: yukleniyor ? "#666" : "black" }}
-          >
-            Kapat
-          </Text>
-        </Pressable>
-      </View>
     </View>
   );
 }

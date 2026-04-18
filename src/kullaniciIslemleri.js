@@ -81,6 +81,8 @@ export function useKullaniciIslemleri() {
   }, [toplamTRY]);
 
   // --- NFC SESSİZ DİNLEME VE REZERVASYON (ARKAPLAN) ---
+  const nfcKilitRef = useRef(false); // Aynı tag'ı peş peşe 10 kere okumasını engellemek için
+
   useEffect(() => {
     let isMounted = true;
 
@@ -88,9 +90,16 @@ export function useKullaniciIslemleri() {
       try {
         await NfcManager.start();
 
-        // Veritabanı işlemini (update) bekleyebilmek için callback'i async yapıyoruz
         NfcManager.setEventListener(NfcEvents.DiscoverTag, async (tag) => {
-          if (!isMounted) return;
+          // Eğer component ekranda değilse veya NFC zaten şu an işlem yapıyorsa yeni okumayı reddet
+          if (!isMounted || nfcKilitRef.current) return;
+
+          nfcKilitRef.current = true; // Okumayı kilitle
+
+          // 3 saniye sonra kilidi aç (Kullanıcı cihazı çekip tekrar okutabilsin diye)
+          setTimeout(() => {
+            nfcKilitRef.current = false;
+          }, 3000);
 
           try {
             if (tag.ndefMessage && tag.ndefMessage.length > 0) {
@@ -126,30 +135,27 @@ export function useKullaniciIslemleri() {
                 const bayRef = ref(rtdb, `bays/${okunantBayId}`);
                 await update(bayRef, {
                   status: "waiting",
-                  updatedAt: rtdbServerTimestamp(), // Eğer import isminiz rtdbServerTimestamp ise
+                  updatedAt: rtdbServerTimestamp(),
                 });
               } catch (updateErr) {
                 console.log("NFC Waiting Update Hatası", updateErr);
                 Alert.alert("Hata", "Peron rezerve edilemedi.");
                 setBayYukleniyor(false);
-                return; // Veritabanı hatası varsa perona bağlanmayı durdur
+                return;
               }
 
-              // 3. Güncelleme başarılıysa URL parametresini ayarla ve perona bağlan
+              // 3. Güncelleme başarılıysa URL parametresini ayarla
               router.setParams({ bayId: okunantBayId });
             }
           } catch (err) {
             console.log("NFC Parse Hatası:", err);
             setBayYukleniyor(false);
-          } finally {
-            NfcManager.unregisterTagEvent().catch(() => {});
-            setTimeout(() => {
-              // Sadece bileşen hala ekrandaysa tekrar okumaya aç
-              if (isMounted) NfcManager.registerTagEvent().catch(() => {});
-            }, 1000);
           }
+          // DİKKAT: finally bloğu ve içindeki unregister/register döngüsü tamamen silindi.
+          // Cihaz arka planda pasif olarak dinlemeye devam edecek.
         });
 
+        // Dinlemeyi başlat
         await NfcManager.registerTagEvent();
       } catch (ex) {
         console.log("NFC başlatılamadı veya desteklenmiyor", ex);
@@ -163,7 +169,8 @@ export function useKullaniciIslemleri() {
       NfcManager.setEventListener(NfcEvents.DiscoverTag, null);
       NfcManager.unregisterTagEvent().catch(() => {});
     };
-  }, [router]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // DİKKAT: Dependency array içindeki [router] silindi, [] yapıldı.
   // ------------------------------------
 
   useEffect(() => {

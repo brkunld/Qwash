@@ -1,0 +1,21 @@
+{
+  "name": "qwash-backend",
+  "version": "1.0.0",
+  "description": "Qwash Masaüstü Admin Paneli ve Sunucusu",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "desktop": "electron ."
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "cors": "^2.8.6",
+    "express": "^5.2.1",
+    "firebase-admin": "^13.8.0"
+  },
+  "devDependencies": {
+    "electron": "^41.2.1"
+  }
+}
