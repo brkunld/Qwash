@@ -16,9 +16,10 @@ String bayId = "bay_42060_01_01";
 String currentStatus = "baslangic";
 bool isBayActive = true;
 
-// Zamanlayıcılar
+// Zamanlayıcılar ve Kilitler
 unsigned long bitisZamaniMs = 0;
 bool durumDegisti = true;
+bool dokunmatikKilit = false; 
 
 // ================= QR ÇİZİMİ =================
 void drawQR_to_TFT(esp_qrcode_handle_t qrcode) {
@@ -135,6 +136,7 @@ void loop() {
       ekranaQRCiz(bayId);
     } 
     else if (currentStatus == "waiting") {
+      dokunmatikKilit = false; // Yeni paket seçimi için kilidi aç
       tft.fillScreen(TFT_BLACK);
       tft.setTextColor(TFT_WHITE); tft.setTextSize(2);
       tft.setCursor(30, 20); tft.println("Lutfen Paket Seciniz");
@@ -144,7 +146,7 @@ void loop() {
       tft.setCursor(185, 115); tft.setTextColor(TFT_BLACK, TFT_CYAN); tft.println("KOPUK");
     } 
     else if (currentStatus == "busy") {
-      // 🔥 SUNUCU BUSY YAPINCA VERİLERİ ÇEK
+      // SUNUCU BUSY YAPINCA VERİLERİ ÇEK
       int sure = 60;
       String packageId = "";
       if (Firebase.RTDB.getString(&fbdo, "/bays/" + bayId + "/requestedPackage")) packageId = fbdo.stringData();
@@ -165,19 +167,46 @@ void loop() {
     ekrandaSayaciGuncelle();
   }
 
-  // Dokunmatik Kontrolü (Waiting Modunda)
-  if (currentStatus == "waiting") {
+  // Dokunmatik Kontrolü (YENİLENMİŞ SENKRON YAPI)
+  if (currentStatus == "waiting" && !dokunmatikKilit) {
     uint16_t x, y;
     if (tft.getTouch(&x, &y)) {
       if (y > 80 && y < 170) {
-        if (x > 20 && x < 150) { 
-          Firebase.RTDB.setStringAsync(&fbdo, "/bays/" + bayId + "/hardwareSelection", "wash");
-          tft.fillScreen(TFT_BLACK); tft.setCursor(20, 110); tft.setTextSize(2);
-          tft.println("Odeme bekleniyor...");
-        } else if (x > 170 && x < 300) { 
-          Firebase.RTDB.setStringAsync(&fbdo, "/bays/" + bayId + "/hardwareSelection", "foam");
-          tft.fillScreen(TFT_BLACK); tft.setCursor(20, 110); tft.setTextSize(2);
-          tft.println("Odeme bekleniyor...");
+        
+        String secilenPaket = "";
+        if (x > 20 && x < 150) secilenPaket = "wash";
+        else if (x > 170 && x < 300) secilenPaket = "foam";
+
+        if (secilenPaket != "") {
+          dokunmatikKilit = true; // Sisteme ikinci basmayı kapat
+          
+          tft.fillScreen(TFT_BLACK); 
+          tft.setCursor(20, 110); 
+          tft.setTextSize(2);
+          tft.setTextColor(TFT_YELLOW); 
+          tft.println("Istek iletiliyor...");
+
+          // 🔥 Async yerine garantili Set komutu
+          if (Firebase.RTDB.setString(&fbdo, "/bays/" + bayId + "/hardwareSelection", secilenPaket)) {
+            // Başarılı olursa ödeme ekranına geç
+            tft.fillScreen(TFT_BLACK); 
+            tft.setCursor(20, 110); 
+            tft.setTextColor(TFT_WHITE); 
+            tft.println("Odeme bekleniyor...");
+          } else {
+            // İnternet kopması vs. nedeniyle veritabanına yazılamazsa
+            tft.fillScreen(TFT_BLACK); 
+            tft.setCursor(30, 110); 
+            tft.setTextColor(TFT_RED); 
+            tft.println("Baglanti Hatasi!");
+            
+            Serial.println("Firebase Yazma Hatasi: " + fbdo.errorReason());
+            delay(2000);
+            
+            // Kullanıcının tekrar deneyebilmesi için kilidi aç ve ekranı yenile
+            dokunmatikKilit = false; 
+            durumDegisti = true; 
+          }
         }
       }
     }

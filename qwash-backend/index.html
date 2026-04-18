@@ -3,193 +3,678 @@
 <head>
   <meta charset="utf-8">
   <title>Qwash Admin Paneli</title>
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet">
   <style>
+    :root {
+      --bg: #080C10;
+      --bg2: #0D1219;
+      --bg3: #111820;
+      --bg4: #162030;
+      --border: rgba(255,255,255,0.07);
+      --border-bright: rgba(255,255,255,0.14);
+      --text: #F0F4F8;
+      --text2: #8A9BB0;
+      --text3: #4A5C70;
+      --accent: #00C8FF;
+      --accent2: #0080FF;
+      --accent-dim: rgba(0,200,255,0.1);
+      --accent-glow: rgba(0,200,255,0.25);
+      --green: #00E5A0;
+      --green-dim: rgba(0,229,160,0.1);
+      --amber: #FFB020;
+      --amber-dim: rgba(255,176,32,0.1);
+      --red: #FF4D6A;
+      --red-dim: rgba(255,77,106,0.1);
+      --mono: 'DM Mono', monospace;
+      --sans: 'Syne', sans-serif;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
-      background-color: #0f172a;
-      color: white;
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--sans);
       height: 100vh;
       display: flex;
-      flex-direction: column;
-      box-sizing: border-box;
+      overflow: hidden;
     }
 
-    /* --- LOGIN EKRANI --- */
-    #login-screen {
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-      align-items: center;
-      height: 100%;
-      background-color: #0f172a;
-    }
-    .login-box { background: #1e293b; padding: 40px; border-radius: 16px; width: 320px; text-align: center; }
-    .login-box h2 { color: #38bdf8; margin-top: 0; margin-bottom: 30px; }
-    .input-group { margin-bottom: 15px; text-align: left; }
-    .input-group label { display: block; font-size: 12px; color: #94a3b8; margin-bottom: 5px; }
-    .input-group input { width: 100%; padding: 12px; background: #0f172a; border: 1px solid #334155; color: white; border-radius: 8px; box-sizing: border-box; }
-    .input-group input:focus { outline: none; border-color: #38bdf8; }
-    #login-btn { width: 100%; padding: 14px; background: #0284c7; color: white; border: none; border-radius: 8px; font-size: 16px; cursor: pointer; transition: 0.2s; }
-    #login-btn:hover { background: #0369a1; }
-    #error-msg { color: #ef4444; font-size: 13px; margin-top: 15px; display: none; }
-
-    /* --- ANA EKRAN (MENÜ + İÇERİK) --- */
-    #main-app {
-      display: none; /* Giriş yapana kadar gizli */
-      flex-direction: row;
-      height: 100%;
+    /* ── SCANLINE OVERLAY ── */
+    body::before {
+      content: '';
+      position: fixed; inset: 0; z-index: 9999;
+      background: repeating-linear-gradient(
+        0deg,
+        transparent, transparent 2px,
+        rgba(0,0,0,0.03) 2px, rgba(0,0,0,0.03) 4px
+      );
+      pointer-events: none;
     }
 
-    /* YAN MENÜ (SIDEBAR) */
+    /* ── SIDEBAR ── */
     #sidebar {
-      width: 250px;
-      background: #1e293b;
-      border-right: 1px solid #334155;
+      width: 240px;
+      flex-shrink: 0;
+      background: var(--bg2);
+      border-right: 1px solid var(--border);
       display: flex;
       flex-direction: column;
-      padding: 20px 0;
+      padding: 0;
+      position: relative;
     }
-    .brand { text-align: center; color: #38bdf8; font-size: 22px; font-weight: bold; margin-bottom: 30px; }
-    .menu-item {
-      padding: 15px 25px;
-      color: #cbd5e1;
+    #sidebar::after {
+      content: '';
+      position: absolute;
+      top: 0; right: 0; bottom: 0;
+      width: 1px;
+      background: linear-gradient(180deg, transparent, var(--accent-glow) 40%, transparent);
+      pointer-events: none;
+    }
+
+    .brand {
+      padding: 24px 22px 20px;
+      border-bottom: 1px solid var(--border);
+    }
+    .brand-mark {
+      display: flex; align-items: center; gap: 10px;
+    }
+    .brand-icon {
+      width: 36px; height: 36px;
+      background: linear-gradient(135deg, var(--accent2), var(--accent));
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      position: relative;
+    }
+    .brand-icon::after {
+      content: '';
+      position: absolute; inset: 0;
+      border-radius: 10px;
+      box-shadow: 0 0 16px var(--accent-glow);
+    }
+    .brand-icon svg { width: 18px; height: 18px; }
+    .brand-wordmark { line-height: 1; }
+    .brand-name { font-size: 18px; font-weight: 800; letter-spacing: 1.5px; color: var(--text); }
+    .brand-sub { font-size: 10px; letter-spacing: 2px; color: var(--text3); margin-top: 2px; text-transform: uppercase; font-family: var(--mono); }
+
+    .nav { padding: 16px 12px; flex: 1; }
+    .nav-section-label {
+      font-size: 9px; letter-spacing: 2.5px; color: var(--text3);
+      padding: 0 10px; margin-bottom: 8px; margin-top: 4px;
+      text-transform: uppercase; font-family: var(--mono);
+    }
+    .nav-item {
+      display: flex; align-items: center; gap: 11px;
+      padding: 10px 12px;
+      border-radius: 8px;
       cursor: pointer;
-      font-weight: 600;
-      transition: 0.2s;
-      border-left: 4px solid transparent;
+      color: var(--text2);
+      font-size: 13px; font-weight: 500;
+      letter-spacing: 0.3px;
+      margin-bottom: 2px;
+      transition: all 0.2s;
+      position: relative;
     }
-    .menu-item:hover { background: #0f172a; color: white; }
-    .menu-item.active { background: #0f172a; color: #38bdf8; border-left-color: #38bdf8; }
-    .spacer { flex: 1; }
-    .logout-btn { color: #ef4444; }
-    .logout-btn:hover { background: #7f1d1d; color: white; }
-
-    /* İÇERİK ALANI */
-    #content-area {
-      flex: 1;
-      padding: 20px;
-      overflow-y: auto;
-      background: #0f172a;
+    .nav-item:hover { background: var(--bg3); color: var(--text); }
+    .nav-item.active {
+      background: var(--accent-dim);
+      color: var(--accent);
     }
-    .tab-content { display: none; height: 100%; flex-direction: column; }
-    .tab-content.active { display: flex; }
+    .nav-item.active::before {
+      content: '';
+      position: absolute;
+      left: 0; top: 25%; bottom: 25%;
+      width: 2px;
+      background: var(--accent);
+      border-radius: 2px;
+      box-shadow: 0 0 8px var(--accent);
+    }
+    .nav-ico { width: 16px; height: 16px; flex-shrink: 0; opacity: 0.7; }
+    .nav-item.active .nav-ico { opacity: 1; }
+    .nav-badge {
+      margin-left: auto;
+      background: var(--accent-dim);
+      color: var(--accent);
+      border: 1px solid rgba(0,200,255,0.2);
+      font-size: 10px;
+      font-family: var(--mono);
+      padding: 1px 6px;
+      border-radius: 99px;
+    }
 
-    /* MONİTÖR EKRANI ÖZEL */
-    .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; background: #1e293b; padding: 15px 20px; border-radius: 12px; }
-    .header h2 { margin: 0; color: #4cd137; font-size: 20px; }
-    #live-status { background: #e67e22; color: #fff; padding: 8px 15px; border-radius: 6px; font-size: 14px; font-weight: bold; }
-    #log-container { flex: 1; background: #020617; padding: 15px; border-radius: 12px; overflow-y: auto; font-family: monospace; font-size: 14px; border: 1px solid #1e293b; }
-    .log-entry { margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px dotted #1e293b; line-height: 1.4; }
-    .log-time { color: #64748b; margin-right: 10px; font-weight: bold; }
-
-    /* KULLANICI ARA EKRANI ÖZEL */
-    .search-box { background: #1e293b; padding: 20px; border-radius: 12px; margin-bottom: 20px; display: flex; gap: 10px; }
-    .search-box input { flex: 1; padding: 12px; background: #0f172a; border: 1px solid #334155; color: white; border-radius: 8px; }
-    .search-box button { padding: 12px 25px; background: #0284c7; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; }
+    /* ── YENİLENEN SIDEBAR FOOTER & ÇIKIŞ BUTONU ── */
+    .sidebar-footer {
+      padding: 16px 12px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .user-row {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px;
+      border-radius: 8px;
+      background: rgba(255,255,255,0.03);
+      border: 1px solid var(--border);
+    }
+    .user-ava {
+      width: 32px; height: 32px; border-radius: 50%;
+      background: linear-gradient(135deg, #1a3a5c, #0a2040);
+      border: 1px solid var(--border-bright);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 11px; font-weight: 700; color: var(--accent); flex-shrink: 0;
+    }
+    .user-info { flex: 1; overflow: hidden; }
+    .user-info .u-name { font-size: 12px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .user-info .u-role { font-size: 10px; color: var(--text3); font-family: var(--mono); margin-top: 2px; }
     
-    .user-card { background: #1e293b; padding: 20px; border-radius: 12px; display: none; }
-    .user-card h3 { margin-top: 0; color: #38bdf8; }
-    .user-info p { margin: 5px 0; color: #cbd5e1; }
-    .user-info strong { color: white; }
-    .bakiye-kontrol { margin-top: 20px; padding-top: 20px; border-top: 1px solid #334155; display: flex; gap: 10px; align-items: center; }
-    .bakiye-kontrol input { width: 100px; padding: 10px; background: #0f172a; border: 1px solid #334155; color: white; border-radius: 8px; }
-    .btn-green { background: #16a34a; color: white; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer; font-weight: bold; }
+    .logout-btn-full {
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+      width: 100%;
+      padding: 10px;
+      background: var(--red-dim);
+      color: var(--red);
+      border: 1px solid rgba(255,77,106,0.2);
+      border-radius: 8px;
+      font-family: var(--sans); font-weight: 600; font-size: 13px; letter-spacing: 0.5px;
+      cursor: pointer; transition: all 0.2s;
+    }
+    .logout-btn-full:hover {
+      background: rgba(255,77,106,0.2);
+      border-color: rgba(255,77,106,0.4);
+      color: #ff7088;
+    }
+    .logout-btn-full svg { width: 14px; height: 14px; stroke-width: 2px; }
+
+    /* ── MAIN ── */
+    #main {
+      flex: 1; display: flex; flex-direction: column; overflow: hidden;
+    }
+
+    /* ── TOPBAR ── */
+    .topbar {
+      height: 56px; flex-shrink: 0;
+      background: var(--bg2);
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center;
+      padding: 0 24px;
+      gap: 16px;
+    }
+    .topbar-title {
+      font-size: 14px; font-weight: 700; letter-spacing: 0.5px; color: var(--text);
+    }
+    .topbar-sep { width: 1px; height: 20px; background: var(--border); }
+    .topbar-crumb { font-size: 12px; color: var(--text3); font-family: var(--mono); }
+    .topbar-right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+    .live-pill {
+      display: flex; align-items: center; gap: 6px;
+      padding: 4px 12px;
+      border-radius: 99px;
+      background: var(--green-dim);
+      border: 1px solid rgba(0,229,160,0.2);
+      font-size: 11px; font-family: var(--mono); color: var(--green);
+    }
+    .live-dot {
+      width: 6px; height: 6px; border-radius: 50%; background: var(--green);
+      animation: livepulse 1.8s ease-in-out infinite;
+      box-shadow: 0 0 6px var(--green);
+    }
+    @keyframes livepulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.5;transform:scale(0.8)} }
+    .topbar-time {
+      font-family: var(--mono); font-size: 12px; color: var(--text3);
+    }
+    .topbar-btn {
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      color: var(--text2);
+      width: 30px; height: 30px;
+      border-radius: 7px;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer; transition: all 0.2s;
+    }
+    .topbar-btn:hover { border-color: var(--border-bright); color: var(--text); }
+
+    /* ── CONTENT ── */
+    #content { flex: 1; overflow-y: auto; padding: 24px; }
+    .tab { display: none; }
+    .tab.active { display: block; animation: fadein 0.25s ease; }
+    @keyframes fadein { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
+
+    /* ── SECTION HEADER ── */
+    .sec-header {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 12px;
+    }
+    .sec-title {
+      font-size: 12px; font-weight: 600; letter-spacing: 1.5px;
+      text-transform: uppercase; color: var(--text2);
+      font-family: var(--mono);
+    }
+
+    /* ── LOG BOX ── */
+    .log-box {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      height: calc(100vh - 170px);
+      display: flex;
+      flex-direction: column;
+    }
+    .log-header {
+      padding: 12px 18px;
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; gap: 8px;
+    }
+    .log-header-text { font-size: 12px; font-family: var(--mono); color: var(--text3); }
+    .log-entries { 
+      font-family: var(--mono); 
+      overflow-y: auto;
+      flex: 1;
+    }
+    .log-row {
+      display: flex; align-items: flex-start; gap: 14px;
+      padding: 9px 18px;
+      border-bottom: 1px solid var(--border);
+      font-size: 12px;
+      transition: background 0.15s;
+    }
+    .log-row:last-child { border-bottom: none; }
+    .log-row:hover { background: var(--bg3); }
+    .log-ts { color: var(--text3); flex-shrink: 0; min-width: 68px; }
+    .log-tag {
+      padding: 1px 7px; border-radius: 4px; font-size: 10px;
+      flex-shrink: 0; letter-spacing: 0.5px;
+    }
+    .lt-ok { background: var(--green-dim); color: var(--green); border: 1px solid rgba(0,229,160,0.2); }
+    .lt-info { background: var(--accent-dim); color: var(--accent); border: 1px solid rgba(0,200,255,0.2); }
+    .lt-warn { background: var(--amber-dim); color: var(--amber); border: 1px solid rgba(255,176,32,0.2); }
+    .lt-err { background: var(--red-dim); color: var(--red); border: 1px solid rgba(255,77,106,0.2); }
+    .log-msg { color: var(--text2); }
+    .log-hl { color: var(--text); }
+
+    /* ── SEARCH ── */
+    .search-wrap {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 16px;
+    }
+    .search-wrap .sec-title { margin-bottom: 14px; }
+    .search-row {
+      display: flex; gap: 10px;
+    }
+    .inp {
+      flex: 1; padding: 10px 14px;
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text); font-size: 13px;
+      font-family: var(--sans);
+      transition: border-color 0.2s;
+    }
+    .inp::placeholder { color: var(--text3); }
+    .inp:focus { outline: none; border-color: rgba(0,200,255,0.4); background: var(--bg4); }
+    .btn {
+      padding: 10px 20px; border: none; border-radius: 8px;
+      font-family: var(--sans); font-weight: 600; font-size: 13px;
+      cursor: pointer; transition: all 0.2s;
+    }
+    .btn-accent {
+      background: linear-gradient(135deg, var(--accent2), var(--accent));
+      color: #000;
+      box-shadow: 0 0 20px rgba(0,200,255,0.2);
+    }
+    .btn-accent:hover { box-shadow: 0 0 30px rgba(0,200,255,0.4); transform: translateY(-1px); }
+    .btn-sm-accent {
+      padding: 7px 14px; font-size: 12px;
+      background: var(--green-dim);
+      color: var(--green);
+      border: 1px solid rgba(0,229,160,0.2);
+      border-radius: 7px; cursor: pointer;
+      font-family: var(--sans); font-weight: 600;
+      transition: all 0.2s;
+    }
+    .btn-sm-accent:hover { background: rgba(0,229,160,0.2); }
+
+    /* ── USER CARD ── */
+    .user-card {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+    .uc-banner {
+      padding: 20px;
+      background: linear-gradient(135deg, var(--bg3) 0%, #0a1e35 100%);
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; gap: 14px;
+      position: relative;
+    }
+    .uc-banner::after {
+      content: '';
+      position: absolute; bottom: 0; left: 0; right: 0; height: 1px;
+      background: linear-gradient(90deg, transparent, var(--accent-glow), transparent);
+    }
+    .uc-ava {
+      width: 48px; height: 48px; border-radius: 50%;
+      background: linear-gradient(135deg, var(--accent2), var(--accent));
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 800; font-size: 16px; color: #000;
+      flex-shrink: 0;
+      box-shadow: 0 0 20px var(--accent-glow);
+    }
+    .uc-name { font-size: 16px; font-weight: 700; color: var(--text); }
+    .uc-email { font-size: 12px; color: var(--text3); font-family: var(--mono); margin-top: 2px; }
+    .uc-tokens {
+      margin-left: auto;
+      text-align: right;
+    }
+    .uc-tok-num { font-size: 28px; font-weight: 800; color: var(--green); line-height: 1; }
+    .uc-tok-label { font-size: 10px; color: var(--text3); font-family: var(--mono); letter-spacing: 1px; }
+    .uc-body { padding: 18px 20px; }
+    .uc-fields {
+      display: flex; gap: 40px; margin-bottom: 18px;
+    }
+    .uc-field .uf-label { font-size: 10px; color: var(--text3); font-family: var(--mono); letter-spacing: 1px; margin-bottom: 4px; text-transform: uppercase; }
+    .uc-field .uf-val { font-size: 13px; color: var(--text); }
+    .topup-row {
+      display: flex; align-items: center; gap: 10px;
+      padding-top: 16px;
+      border-top: 1px solid var(--border);
+    }
+    .topup-label { font-size: 12px; color: var(--text3); font-family: var(--mono); }
+    .topup-row .inp { flex: none; width: 110px; }
+
+    /* ── BAY GRID ── */
+    .bay-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 12px;
+    }
+    .bay-card {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+      transition: border-color 0.2s, transform 0.2s;
+      position: relative;
+      overflow: hidden;
+    }
+    .bay-card:hover { border-color: var(--border-bright); transform: translateY(-2px); }
+    .bay-card.passive { opacity: 0.45; }
+    .bay-card-accent {
+      position: absolute; top: 0; left: 0; right: 0; height: 2px;
+    }
+    .bay-card.s-avail .bay-card-accent { background: linear-gradient(90deg, transparent, var(--green), transparent); }
+    .bay-card.s-busy .bay-card-accent { background: linear-gradient(90deg, transparent, var(--amber), transparent); }
+    .bay-card.s-maint .bay-card-accent { background: linear-gradient(90deg, transparent, var(--accent), transparent); }
+    .bay-card.s-off .bay-card-accent { background: none; }
+
+    .bay-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+    .bay-name { font-size: 15px; font-weight: 700; color: var(--text); letter-spacing: 0.3px; }
+    .bay-badge {
+      padding: 3px 10px; border-radius: 99px; font-size: 11px;
+      font-family: var(--mono); letter-spacing: 0.5px;
+    }
+    .bb-avail { background: var(--green-dim); color: var(--green); border: 1px solid rgba(0,229,160,0.2); }
+    .bb-busy { background: var(--amber-dim); color: var(--amber); border: 1px solid rgba(255,176,32,0.2); }
+    .bb-maint { background: var(--accent-dim); color: var(--accent); border: 1px solid rgba(0,200,255,0.2); }
+    .bb-off { background: var(--bg3); color: var(--text3); border: 1px solid var(--border); }
+
+    .bay-meta { font-size: 11px; color: var(--text3); font-family: var(--mono); margin-bottom: 14px; }
+    .bay-meta span { color: var(--text2); font-weight: bold; }
+
+    .bay-progress { height: 3px; background: var(--bg3); border-radius: 3px; margin-bottom: 14px; overflow: hidden; }
+    .bay-progress-bar { height: 100%; border-radius: 3px; transition: width 0.5s ease; }
+    .bp-green { background: linear-gradient(90deg, var(--green), rgba(0,229,160,0.5)); }
+    .bp-amber { background: linear-gradient(90deg, var(--amber), rgba(255,176,32,0.5)); }
+    .bp-blue { background: linear-gradient(90deg, var(--accent2), var(--accent)); }
+    .bp-none { width: 0; }
+
+    .bay-btns { display: flex; gap: 8px; }
+    .bay-btn {
+      flex: 1; padding: 7px 0;
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      color: var(--text2);
+      font-size: 11px; font-weight: 600;
+      cursor: pointer;
+      font-family: var(--sans);
+      transition: all 0.2s;
+      letter-spacing: 0.3px;
+    }
+    .bay-btn:hover { border-color: var(--border-bright); color: var(--text); }
+    .bay-btn.red { background: var(--red-dim); color: var(--red); border-color: rgba(255,77,106,0.2); }
+    .bay-btn.green { background: var(--green-dim); color: var(--green); border-color: rgba(0,229,160,0.2); }
+    .bay-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+    /* ── SCROLLBAR ── */
+    ::-webkit-scrollbar { width: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--bg4); border-radius: 99px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--border-bright); }
+
+    /* ── LOGIN ── */
+    #login-screen {
+      position: fixed; inset: 0; z-index: 100;
+      background: var(--bg);
+      display: flex; align-items: center; justify-content: center;
+    }
+    .login-box {
+      width: 360px;
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 36px;
+      position: relative;
+      overflow: hidden;
+    }
+    .login-box::before {
+      content: '';
+      position: absolute; top: 0; left: 50%; transform: translateX(-50%);
+      width: 200px; height: 1px;
+      background: linear-gradient(90deg, transparent, var(--accent), transparent);
+    }
+    .login-brand { text-align: center; margin-bottom: 28px; }
+    .login-brand .brand-icon { width: 48px; height: 48px; border-radius: 14px; margin: 0 auto 12px; }
+    .login-brand .brand-icon svg { width: 24px; height: 24px; }
+    .login-brand h2 { font-size: 22px; font-weight: 800; letter-spacing: 1px; color: var(--text); }
+    .login-brand p { font-size: 12px; color: var(--text3); font-family: var(--mono); margin-top: 4px; }
+    .field-group { margin-bottom: 14px; }
+    .field-group label { display: block; font-size: 10px; letter-spacing: 1.5px; color: var(--text3); font-family: var(--mono); text-transform: uppercase; margin-bottom: 7px; }
+    .login-box .inp { width: 100%; }
+    .login-btn {
+      width: 100%; margin-top: 6px; padding: 13px;
+      background: linear-gradient(135deg, var(--accent2), var(--accent));
+      border: none; border-radius: 9px;
+      font-family: var(--sans); font-size: 14px; font-weight: 700;
+      color: #000; cursor: pointer;
+      transition: all 0.2s;
+      box-shadow: 0 0 30px rgba(0,200,255,0.2);
+      letter-spacing: 0.5px;
+    }
+    .login-btn:hover { box-shadow: 0 0 40px rgba(0,200,255,0.4); transform: translateY(-1px); }
+    .error-msg { color: var(--red); font-size: 12px; font-family: var(--mono); margin-top: 12px; display: none; text-align: center; }
+
+    /* ── REFRESH BTN ── */
+    .refresh-btn {
+      display: flex; align-items: center; gap: 6px;
+      padding: 6px 12px;
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      color: var(--text2); font-size: 12px; font-family: var(--mono);
+      cursor: pointer; transition: all 0.2s;
+    }
+    .refresh-btn:hover { border-color: var(--border-bright); color: var(--text); }
   </style>
 </head>
 <body>
 
   <div id="login-screen">
     <div class="login-box">
-      <h2>Yetkili Girişi</h2>
-      <div class="input-group">
+      <div class="login-brand">
+        <div class="brand-icon">
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12 2C8.13 2 5 5.13 5 9c0 2.38 1.19 4.47 3 5.74V17c0 .55.45 1 1 1h6c.55 0 1-.45 1-1v-2.26c1.81-1.27 3-3.36 3-5.74 0-3.87-3.13-7-7-7z" fill="white" opacity="0.9"/>
+            <path d="M9 21h6M10 19h4" stroke="white" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <h2>QWASH</h2>
+        <p>YETKİLİ GİRİŞİ</p>
+      </div>
+      <div class="field-group">
         <label>E-Posta</label>
-        <input type="email" id="email" placeholder="admin@qwash.com">
+        <input class="inp" type="email" id="email" placeholder="admin@qwash.com">
       </div>
-      <div class="input-group">
+      <div class="field-group">
         <label>Şifre</label>
-        <input type="password" id="password" placeholder="••••••••">
+        <input class="inp" type="password" id="password" placeholder="••••••••">
       </div>
-      <button id="login-btn">Giriş Yap</button>
-      <div id="error-msg"></div>
+      <button class="login-btn" id="login-btn" onclick="doLogin()">Giriş Yap</button>
+      <div class="error-msg" id="error-msg"></div>
     </div>
   </div>
 
-  <div id="main-app">
+  <div id="sidebar">
+    <div class="brand">
+      <div class="brand-mark">
+        <div class="brand-icon">
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="12" cy="12" r="8" stroke="white" stroke-width="1.8"/>
+            <path d="M9 12l2 2 4-4" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <div class="brand-wordmark">
+          <div class="brand-name">QWASH</div>
+          <div class="brand-sub">Admin Paneli</div>
+        </div>
+      </div>
+    </div>
+    <div class="nav">
+      <div class="nav-section-label">Sistem</div>
+      <div class="nav-item active" onclick="switchTab('monitor', this)">
+        <svg class="nav-ico" viewBox="0 0 16 16" fill="none"><rect x="1" y="2" width="14" height="9" rx="2" stroke="currentColor" stroke-width="1.3"/><path d="M5 14h6M8 11v3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+        Sistem Monitörü
+        <span class="nav-badge">CANLI</span>
+      </div>
+      <div class="nav-item" onclick="switchTab('users', this)">
+        <svg class="nav-ico" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="5" r="3" stroke="currentColor" stroke-width="1.3"/><path d="M2 14c0-3 2.69-5 6-5s6 2 6 5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+        Kullanıcı İşlemleri
+      </div>
+      <div class="nav-item" onclick="switchTab('bays', this)">
+        <svg class="nav-ico" viewBox="0 0 16 16" fill="none"><rect x="1" y="3" width="14" height="10" rx="2" stroke="currentColor" stroke-width="1.3"/><path d="M5 3V2M11 3V2M1 7h14" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+        Peron Yönetimi
+      </div>
+    </div>
     
-    <div id="sidebar">
-      <div class="brand">QWASH ADMIN</div>
-      <div class="menu-item active" onclick="switchTab('tab-monitor', this)">🖥️ Sistem Monitörü</div>
-      <div class="menu-item" onclick="switchTab('tab-kullanici', this)">👥 Kullanıcı İşlemleri</div>
-      <div class="menu-item" onclick="switchTab('tab-peron', this)">⚙️ Peron (Bay) Yönetimi</div>
-      <div class="spacer"></div>
-      <div class="menu-item logout-btn" id="logout-btn">🚪 Çıkış Yap</div>
-    </div>
-
-    <div id="content-area">
-      
-      <div id="tab-monitor" class="tab-content active">
-        <div class="header">
-          <h2>Sistem Monitörü</h2>
-          <div id="live-status">Bekliyor...</div>
-        </div>
-        <div id="log-container"></div>
-      </div>
-
-      <div id="tab-kullanici" class="tab-content">
-        <div class="header">
-          <h2>Kullanıcı Arama ve Bakiye</h2>
-        </div>
-        
-        <div class="search-box">
-          <input type="text" id="search-input" placeholder="Kullanıcı E-Posta adresini girin...">
-          <button id="search-btn">Kullanıcı Bul</button>
-        </div>
-
-        <div id="user-result-card" class="user-card">
-          <h3>Kullanıcı Bilgileri</h3>
-          <div class="user-info">
-            <p><strong>Ad Soyad:</strong> <span id="res-name">-</span></p>
-            <p><strong>Telefon:</strong> <span id="res-phone">-</span></p>
-            <p><strong>E-Posta:</strong> <span id="res-email">-</span></p>
-            <p><strong>Mevcut Jeton:</strong> <span id="res-tokens" style="font-size: 18px; color: #4cd137;">0</span></p>
-          </div>
-
-          <div class="bakiye-kontrol">
-            <label>Eklenecek Jeton:</label>
-            <input type="number" id="add-token-amount" placeholder="Örn: 10">
-            <button id="add-token-btn" class="btn-green">Jeton Yükle</button>
-          </div>
+    <div class="sidebar-footer">
+      <div class="user-row">
+        <div class="user-ava">-</div>
+        <div class="user-info">
+          <div class="u-name">-</div>
+          <div class="u-role">admin • aktif</div>
         </div>
       </div>
-
-      <div id="tab-peron" class="tab-content">
-        <div class="header">
-          <h2>Peron (Bay) Yönetimi</h2>
-        </div>
-        <p style="color:#94a3b8;">Bu bölüm bir sonraki adımda inşa edilecek...</p>
-      </div>
-
+      <button class="logout-btn-full" onclick="doLogout()">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M6 14H3a1 1 0 01-1-1V3a1 1 0 011-1h3M11 11l3-3-3-3M14 8H6"/>
+        </svg>
+        Çıkış Yap
+      </button>
     </div>
   </div>
 
-  <script>
+  <div id="main">
+    <div class="topbar">
+      <div class="topbar-title" id="topbar-title">Sistem Monitörü</div>
+      <div class="topbar-sep"></div>
+      <div class="topbar-crumb" id="topbar-crumb">qwash / monitor</div>
+      <div class="topbar-right">
+        <div class="live-pill"><div class="live-dot"></div><span id="live-status-text">Bekliyor...</span></div>
+        <div class="topbar-time" id="clock">--:--:--</div>
+        <div class="topbar-btn" title="Görünümü Yenile" onclick="reloadCurrent()">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M13.7 2.3A8 8 0 102.3 13.7" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M14 6V2h-4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+      </div>
+    </div>
+
+    <div id="content">
+
+      <div id="tab-monitor" class="tab active">
+        <div class="sec-header">
+          <div class="sec-title">Etkinlik Akışı</div>
+          <div class="live-pill"><div class="live-dot"></div>Canlı</div>
+        </div>
+        <div class="log-box">
+          <div class="log-header">
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><circle cx="6" cy="6" r="4" stroke="#4A5C70" stroke-width="1.2"/></svg>
+            <span class="log-header-text">Sistem olayları · gerçek zamanlı güncelleniyor</span>
+          </div>
+          <div class="log-entries" id="log-entries"></div>
+        </div>
+      </div>
+
+      <div id="tab-users" class="tab">
+        <div class="search-wrap">
+          <div class="sec-title">Kullanıcı Ara</div>
+          <div class="search-row">
+            <input class="inp" type="text" id="searchInput" placeholder="E-Posta, telefon veya UID girin...">
+            <button class="btn btn-accent" onclick="doSearch()" id="search-btn">Kullanıcı Bul</button>
+          </div>
+        </div>
+        <div id="userCard" style="display:none">
+          <div class="user-card">
+            <div class="uc-banner">
+              <div class="uc-ava" id="uc-ava-icon">?</div>
+              <div>
+                <div class="uc-name" id="res-name">-</div>
+                <div class="uc-email" id="res-email">-</div>
+              </div>
+              <div class="uc-tokens">
+                <div class="uc-tok-num" id="res-tokens">0</div>
+                <div class="uc-tok-label">JETON</div>
+              </div>
+            </div>
+            <div class="uc-body">
+              <div class="uc-fields">
+                <div class="uc-field">
+                  <div class="uf-label">Telefon</div>
+                  <div class="uf-val" id="res-phone">-</div>
+                </div>
+                <div class="uc-field">
+                  <div class="uf-label">Kullanıcı ID</div>
+                  <div class="uf-val" id="res-uid" style="font-family:var(--mono);font-size:12px;color:var(--text3);">-</div>
+                </div>
+              </div>
+              <div class="topup-row">
+                <span class="topup-label">Eklenecek jeton:</span>
+                <input class="inp" type="number" id="tokenAmt" placeholder="0" style="width:100px">
+                <button class="btn-sm-accent" id="add-token-btn">Jeton Yükle</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="tab-bays" class="tab">
+        <div class="sec-header">
+          <div class="sec-title" id="bay-count-label">Peronlar Yükleniyor...</div>
+          <div class="live-pill" style="background:var(--accent-dim);color:var(--accent);border-color:rgba(0,200,255,0.2);">
+            <div class="live-dot" style="background:var(--accent);box-shadow:0 0 6px var(--accent);"></div>Canlı Senkronizasyon
+          </div>
+        </div>
+        <div id="bay-list" class="bay-grid">
+          <p style="color:var(--text3);font-family:var(--mono);font-size:12px;grid-column:1/-1;">Lütfen bekleyin...</p>
+        </div>
+      </div>
+
+    </div></div><script type="module">
     const { ipcRenderer } = require('electron');
-    
-    // Basit Sekme Değiştirme Fonksiyonu
-    function switchTab(tabId, element) {
-      document.querySelectorAll('.tab-content').forEach(tab => tab.classList.remove('active'));
-      document.querySelectorAll('.menu-item').forEach(item => item.classList.remove('active'));
-      
-      document.getElementById(tabId).classList.add('active');
-      element.classList.add('active');
-    }
-  </script>
-
-  <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-app.js";
     import { getAuth, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-auth.js";
-    import { getFirestore, collection, query, where, getDocs, doc, updateDoc, increment } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-firestore.js";
+    import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-database.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyDXXgyY_NW6_D1Ecr0ZQljYUvQSTypgJaU",
@@ -197,143 +682,324 @@
       projectId: "ut-project-1c283",
       storageBucket: "ut-project-1c283.appspot.com",
       messagingSenderId: "269291398032",
-      appId: "1:269291398032:web:b37697ae1350efe9938915"
+      appId: "1:269291398032:web:b37697ae1350efe9938915",
+      databaseURL: "https://ut-project-1c283-default-rtdb.europe-west1.firebasedatabase.app/"
     };
 
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
-    const db = getFirestore(app);
+    const database = getDatabase(app);
+    const API_BASE = "http://localhost:3000/api/admin";
 
-    const loginScreen = document.getElementById('login-screen');
-    const mainApp = document.getElementById('main-app');
-    let selectedUserId = null; // Arama yapılan kullanıcının ID'sini tutacağız
+    // ── SEKMELER ──
+    const tabMeta = {
+      monitor: { title: 'Sistem Monitörü', crumb: 'qwash / monitor' },
+      users:   { title: 'Kullanıcı İşlemleri', crumb: 'qwash / users' },
+      bays:    { title: 'Peron Yönetimi', crumb: 'qwash / bays' }
+    };
 
-    // 1. GİRİŞ İŞLEMİ (Admin SDK Token kontrolü ile)
-    document.getElementById('login-btn').addEventListener('click', async () => {
+    window.switchTab = function(name, el) {
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+      document.getElementById('tab-' + name).classList.add('active');
+      el.classList.add('active');
+      document.getElementById('topbar-title').textContent = tabMeta[name].title;
+      document.getElementById('topbar-crumb').textContent = tabMeta[name].crumb;
+      
+      if (name === 'bays') window.initBaysListener();
+    };
+
+    window.reloadCurrent = function() {
+      const active = document.querySelector('.tab.active');
+      active.style.opacity = '0.5';
+      setTimeout(() => { active.style.opacity = '1'; }, 400);
+    };
+
+    // ── GİRİŞ (Firebase Auth + Admin Claim) ──
+    window.doLogin = async function() {
       const email = document.getElementById('email').value.trim();
-      const password = document.getElementById('password').value.trim();
-      const errorMsg = document.getElementById('error-msg');
-      const loginBtn = document.getElementById('login-btn');
+      const pass  = document.getElementById('password').value.trim();
+      const err   = document.getElementById('error-msg');
+      const btn   = document.getElementById('login-btn');
 
-      if(!email || !password) return;
-      loginBtn.textContent = "Kontrol Ediliyor...";
+      if (!email || !pass) {
+        err.textContent = 'E-posta ve şifre zorunludur.';
+        err.style.display = 'block'; return;
+      }
+
+      err.style.display = 'none';
+      btn.textContent = 'Kontrol ediliyor...';
+      btn.disabled = true;
 
       try {
-        const userCredential = await signInWithEmailAndPassword(auth, email, password);
-        const idTokenResult = await userCredential.user.getIdTokenResult();
+        const credential   = await signInWithEmailAndPassword(auth, email, pass);
+        const tokenResult  = await credential.user.getIdTokenResult();
 
-        if (idTokenResult.claims.admin === true || idTokenResult.claims.role === 'admin') {
-          loginScreen.style.display = "none";
-          mainApp.style.display = "flex";
+        if (tokenResult.claims.admin === true || tokenResult.claims.role === 'admin') {
+          document.getElementById('login-screen').style.display = 'none';
+          
+          const displayName = credential.user.displayName || credential.user.email;
+          const initials = displayName.split(' ').map(w => w[0]).join('').toUpperCase().slice(0,2);
+          document.querySelector('.user-ava').textContent   = initials;
+          document.querySelector('.u-name').textContent     = displayName;
+          
+          window.initBaysListener();
         } else {
           await signOut(auth);
-          errorMsg.textContent = "Bu hesaba Admin SDK yetkisi tanımlanmamış!";
-          errorMsg.style.display = "block";
-          loginBtn.textContent = "Giriş Yap";
+          err.textContent = 'Bu hesaba admin yetkisi tanımlanmamış!';
+          err.style.display = 'block';
         }
-      } catch (error) {
-        errorMsg.textContent = "Hata: " + error.message;
-        errorMsg.style.display = "block";
-        loginBtn.textContent = "Giriş Yap";
+      } catch (e) {
+        const msgs = {
+          'auth/user-not-found':  'Kullanıcı bulunamadı.',
+          'auth/wrong-password':  'Şifre hatalı.',
+          'auth/invalid-email':   'Geçersiz e-posta adresi.',
+          'auth/too-many-requests': 'Çok fazla deneme. Lütfen bekleyin.',
+          'auth/invalid-credential': 'E-posta veya şifre hatalı.',
+        };
+        err.textContent = msgs[e.code] || ('Hata: ' + e.message);
+        err.style.display = 'block';
+      } finally {
+        btn.textContent = 'Giriş Yap';
+        btn.disabled = false;
       }
+    };
+
+    ['email','password'].forEach(id => {
+      document.getElementById(id).addEventListener('keydown', e => {
+        if (e.key === 'Enter') window.doLogin();
+      });
     });
 
-    // ÇIKIŞ İŞLEMİ
-    document.getElementById('logout-btn').addEventListener('click', async () => {
+    // ── ÇIKIŞ ──
+    window.doLogout = async function() {
       await signOut(auth);
-      mainApp.style.display = "none";
-      loginScreen.style.display = "flex";
+      document.getElementById('login-screen').style.display = 'flex';
+      document.getElementById('email').value = '';
+      document.getElementById('password').value = '';
+      document.getElementById('error-msg').style.display = 'none';
+    };
+
+    // ── KULLANICI ARAMA ──
+    let selectedUserId = null;
+
+    window.doSearch = async function() {
+      const term = document.getElementById('searchInput').value.trim();
+      if (!term) return;
+      const btn  = document.getElementById('search-btn');
+      const card = document.getElementById('userCard');
+      btn.textContent = 'Aranıyor...'; btn.disabled = true;
+
+      try {
+        const res  = await fetch(`${API_BASE}/search-user`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ arama: term })
+        });
+        const data = await res.json();
+        
+        if (!res.ok) { 
+            alert(data.error || 'Kullanıcı bulunamadı!'); 
+            card.style.display = 'none'; 
+            selectedUserId = null; 
+            return; 
+        }
+
+        const u = data.user;
+        selectedUserId = u.id;
+        const fullName = ((u.ad || '') + ' ' + (u.soyad || '')).trim() || u.email;
+        const initials = fullName.split(' ').map(w => w[0]).join('').toUpperCase().slice(0,2);
+
+        document.getElementById('uc-ava-icon').textContent = initials;
+        document.getElementById('res-name').textContent    = fullName;
+        document.getElementById('res-email').textContent   = u.email || '-';
+        document.getElementById('res-tokens').textContent  = u.walletTokens ?? 0;
+        document.getElementById('res-phone').textContent   = u.telefon || 'Belirtilmemiş';
+        document.getElementById('res-uid').textContent     = u.id || '-';
+
+        card.style.display = 'block';
+      } catch(e) {
+        alert('Sunucuya ulaşılamadı!');
+      } finally {
+        btn.textContent = 'Kullanıcı Bul'; btn.disabled = false;
+      }
+    };
+
+    document.getElementById('searchInput').addEventListener('keydown', e => {
+      if (e.key === 'Enter') window.doSearch();
     });
 
-    // 2. KULLANICI ARAMA İŞLEMİ
-    document.getElementById('search-btn').addEventListener('click', async () => {
-      const emailToSearch = document.getElementById('search-input').value.trim();
-      if(!emailToSearch) return alert("Lütfen aramak için bir E-Posta girin.");
-
-      const btn = document.getElementById('search-btn');
-      btn.textContent = "Aranıyor...";
+    // ── JETON YÜKLEME ──
+    document.getElementById('add-token-btn').addEventListener('click', async () => {
+      if (!selectedUserId) return;
+      const amount = parseInt(document.getElementById('tokenAmt').value);
+      if (isNaN(amount) || amount <= 0) return alert('Geçerli bir jeton miktarı girin.');
+      
+      const btn = document.getElementById('add-token-btn');
+      btn.textContent = 'Yükleniyor...'; btn.disabled = true;
       
       try {
-        const usersRef = collection(db, "users");
-        // E-Posta adresine göre sorgu yapıyoruz
-        const q = query(usersRef, where("email", "==", emailToSearch));
-        const querySnapshot = await getDocs(q);
-
-        if (querySnapshot.empty) {
-          alert("Bu e-posta adresine sahip bir kullanıcı bulunamadı!");
-          document.getElementById('user-result-card').style.display = "none";
-          selectedUserId = null;
-        } else {
-          // Kullanıcı bulundu
-          querySnapshot.forEach((documentSnapshot) => {
-            const data = documentSnapshot.data();
-            selectedUserId = documentSnapshot.id; // Güncelleme için ID'yi kaydet
-            
-            document.getElementById('res-name').textContent = (data.ad || "") + " " + (data.soyad || "");
-            document.getElementById('res-phone').textContent = data.telefon || "Belirtilmemiş";
-            document.getElementById('res-email').textContent = data.email || emailToSearch;
-            document.getElementById('res-tokens').textContent = data.walletTokens || 0;
-            
-            document.getElementById('user-result-card').style.display = "block";
-          });
-        }
-      } catch (error) {
-        console.error(error);
-        alert("Arama sırasında hata oluştu!");
-      } finally {
-        btn.textContent = "Kullanıcı Bul";
-      }
-    });
-
-    // 3. BAKİYE (JETON) YÜKLEME İŞLEMİ
-    document.getElementById('add-token-btn').addEventListener('click', async () => {
-      if(!selectedUserId) return;
-      const amountInput = document.getElementById('add-token-amount').value;
-      const amount = parseInt(amountInput);
-
-      if(isNaN(amount) || amount <= 0) return alert("Geçerli bir jeton miktarı girin.");
-
-      const btn = document.getElementById('add-token-btn');
-      btn.textContent = "Yükleniyor...";
-
-      try {
-        const userRef = doc(db, "users", selectedUserId);
-        // Firestore 'increment' özelliği ile mevcut bakiyenin üstüne güvenle ekleme yaparız
-        await updateDoc(userRef, {
-          walletTokens: increment(amount)
+        const res  = await fetch(`${API_BASE}/topup`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId: selectedUserId, tokens: amount })
         });
-
-        // Arayüzdeki sayıyı da güncelle
-        const currentTokens = parseInt(document.getElementById('res-tokens').textContent);
-        document.getElementById('res-tokens').textContent = currentTokens + amount;
+        const data = await res.json();
         
-        document.getElementById('add-token-amount').value = ""; // Inputu temizle
-        alert("Bakiye başarıyla yüklendi!");
-
-      } catch (error) {
-        console.error(error);
-        alert("Bakiye yüklenemedi!");
-      } finally {
-        btn.textContent = "Jeton Yükle";
+        if (!res.ok) { alert('Hata: ' + data.error); return; }
+        
+        const el = document.getElementById('res-tokens');
+        el.textContent = parseInt(el.textContent) + amount;
+        document.getElementById('tokenAmt').value = '';
+        alert(`${data.tokensAdded} jeton eklendi. (₺${data.amountTRY})`);
+      } catch(e) { 
+          alert('Sunucuya ulaşılamadı!'); 
+      } finally { 
+          btn.textContent = 'Jeton Yükle'; btn.disabled = false; 
       }
     });
 
-    // LOG VE MONİTÖR DİNLEYİCİLERİ
-    const logContainer = document.getElementById('log-container');
-    const liveStatus = document.getElementById('live-status');
+    // ── CANLI PERON YÖNETİMİ ──
+    const STATUS_LABELS = {
+      available:   { text: 'BOŞ',      cls: 'bb-avail', cardCls: 's-avail', barCls: 'bp-none',  barW: '0%'  },
+      busy:        { text: 'DOLU',     cls: 'bb-busy',  cardCls: 's-busy',  barCls: 'bp-amber', barW: '65%' },
+      maintenance: { text: 'BAKIM',    cls: 'bb-maint', cardCls: 's-maint', barCls: 'bp-blue',  barW: '45%' },
+      offline:     { text: 'KAPALI',   cls: 'bb-off',   cardCls: 's-off',   barCls: 'bp-none',  barW: '0%'  },
+      waiting:     { text: 'BEKLİYOR', cls: 'bb-maint', cardCls: 's-maint', barCls: 'bp-blue',  barW: '20%' },
+    };
+    const STATUS_CYCLE = ['available', 'maintenance', 'offline'];
+    
+    let isBaysListening = false;
 
+    window.initBaysListener = function() {
+      if(isBaysListening) return;
+      isBaysListening = true;
+
+      const grid = document.getElementById('bay-list');
+      const baysRef = ref(database, 'bays');
+
+      onValue(baysRef, (snapshot) => {
+        const data = snapshot.val();
+        
+        if (!data) { 
+          grid.innerHTML = "<p style='color:var(--red);font-size:12px;font-family:var(--mono);grid-column:1/-1;'>Sistemde peron bulunamadı.</p>"; 
+          document.getElementById('bay-count-label').textContent = "Peronlar";
+          return; 
+        }
+
+        grid.innerHTML = '';
+        const baysArray = Object.keys(data).map(key => ({ id: key, ...data[key] })).sort((a,b) => a.id.localeCompare(b.id));
+        
+        const aktifSayi = baysArray.filter(b => b.isActive !== false).length;
+        document.getElementById('bay-count-label').textContent = `${baysArray.length} Peron · ${aktifSayi} Aktif`;
+        
+        baysArray.forEach(bay => {
+          const status   = bay.status || 'available';
+          const isActive = bay.isActive ?? true;
+          const s = STATUS_LABELS[status] || STATUS_LABELS.offline;
+          const card = document.createElement('div');
+          
+          card.className = `bay-card ${s.cardCls} ${!isActive ? 'passive' : ''}`;
+          card.innerHTML = `
+            <div class="bay-card-accent"></div>
+            <div class="bay-head">
+              <span class="bay-name">${bay.id}</span>
+              <span class="bay-badge ${s.cls}">${s.text}</span>
+            </div>
+            <div class="bay-meta">Seans: <span>${bay.currentSessionId ? 'Aktif' : 'Yok'}</span></div>
+            <div class="bay-progress"><div class="bay-progress-bar ${s.barCls}" style="width:${s.barW}"></div></div>
+            <div class="bay-btns">
+              <button class="bay-btn" onclick="changeBayStatus('${bay.id}','${status}',${isActive})" ${!isActive?'disabled':''}>Durumu Değiştir</button>
+              <button class="bay-btn ${isActive?'red':'green'}" onclick="toggleBayActive('${bay.id}',${isActive})">${isActive?'Devre Dışı':'Aktif Et'}</button>
+            </div>`;
+          grid.appendChild(card);
+        });
+      }, (error) => {
+        grid.innerHTML = `<p style='color:var(--red);font-size:12px;font-family:var(--mono);grid-column:1/-1;'>Bağlantı Hatası: ${error.message}</p>`;
+      });
+    };
+
+    window.changeBayStatus = async function(bayId, currentStatus, isActive) {
+      if (!isActive) return alert('Pasif peronun durumu değiştirilemez.');
+      if (currentStatus === 'busy' && !confirm('Peron kullanımda! Durumunu değiştirmek sistemi durdurabilir. Devam edilsin mi?')) return;
+      const idx  = STATUS_CYCLE.indexOf(currentStatus);
+      const next = STATUS_CYCLE[idx === -1 ? 0 : (idx + 1) % STATUS_CYCLE.length];
+      
+      try {
+        const res = await fetch(`${API_BASE}/update-bay`, { 
+            method:'POST', 
+            headers:{'Content-Type':'application/json'}, 
+            body: JSON.stringify({ bayId, patch: { status: next } }) 
+        });
+        if (!res.ok) alert('Durum güncellenemedi.');
+      } catch(e) { alert('Sunucu hatası.'); }
+    };
+
+    window.toggleBayActive = async function(bayId, isCurrentlyActive) {
+      const patch = isCurrentlyActive ? { isActive: false, status: 'offline' } : { isActive: true, status: 'available' };
+      try {
+        const res = await fetch(`${API_BASE}/update-bay`, { 
+            method:'POST', 
+            headers:{'Content-Type':'application/json'}, 
+            body: JSON.stringify({ bayId, patch }) 
+        });
+        if (!res.ok) alert('Aktiflik durumu güncellenemedi.');
+      } catch(e) { alert('Sunucu hatası.'); }
+    };
+
+    // ── ELECTRON LOG DİNLEYİCİLERİ (Dinamik Etiketlerle) ──
     ipcRenderer.on('yeni-log', (event, mesaj) => {
+      const entries = document.getElementById('log-entries');
       const div = document.createElement('div');
-      div.className = 'log-entry';
+      div.className = 'log-row';
+      
+      let ts = "";
+      let text = mesaj;
+      
       if(mesaj.trim().startsWith('[')) {
-          const kIdx = mesaj.indexOf(']');
-          div.innerHTML = `<span class="log-time">${mesaj.substring(0, kIdx + 1)}</span>${mesaj.substring(kIdx + 1)}`;
-      } else { div.textContent = mesaj; }
-      logContainer.appendChild(div);
-      logContainer.scrollTop = logContainer.scrollHeight; 
+         const kIdx = mesaj.indexOf(']');
+         ts = mesaj.substring(1, kIdx);
+         text = mesaj.substring(kIdx + 1).trim();
+      } else {
+         const now = new Date();
+         ts = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
+      }
+
+      let tagHtml = '<span class="log-tag lt-info">SİSTEM</span>';
+      let cleanText = text;
+      
+      if(text.includes('HATA') || text.includes('❌')) {
+          tagHtml = '<span class="log-tag lt-err">HATA</span>';
+          cleanText = text.replace('HATA', '').replace('❌', '').trim();
+      } else if(text.includes('BAŞARILI') || text.includes('✅')) {
+          tagHtml = '<span class="log-tag lt-ok">OK</span>';
+          cleanText = text.replace('BAŞARILI', '').replace('✅', '').trim();
+      } else if(text.includes('UYARI') || text.includes('⚠️')) {
+          tagHtml = '<span class="log-tag lt-warn">UYARI</span>';
+          cleanText = text.replace('UYARI', '').replace('⚠️', '').trim();
+      } else if(text.includes('BEKLEME') || text.includes('🛑')) {
+          tagHtml = '<span class="log-tag lt-warn">DURDU</span>';
+          cleanText = text.replace('BEKLEME', '').replace('🛑', '').trim();
+      }
+
+      div.innerHTML = `<span class="log-ts">${ts}</span>${tagHtml}<span class="log-msg">${cleanText}</span>`;
+      
+      entries.appendChild(div);
+      entries.scrollTop = entries.scrollHeight;
     });
 
-    ipcRenderer.on('canli-durum', (event, mesaj) => { liveStatus.textContent = mesaj; });
+    ipcRenderer.on('canli-durum', (event, mesaj) => {
+      document.getElementById('live-status-text').textContent = mesaj;
+    });
+
+    // ── SAAT ──
+    function updateClock() {
+      const now = new Date();
+      document.getElementById('clock').textContent =
+        `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
+    }
+    setInterval(updateClock, 1000);
+    updateClock();
   </script>
 </body>
 </html>

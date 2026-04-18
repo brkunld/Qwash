@@ -357,6 +357,152 @@ const systemStartupClean = async () => {
 const PORT = 3000;
 const HOST = "0.0.0.0";
 
+app.get("/api/admin/bays", async (req, res) => {
+  try {
+    const snapshot = await rtdb.ref("bays").once("value");
+    if (!snapshot.exists()) return res.status(200).json({ bays: [] });
+    
+    const data = snapshot.val();
+    const bayListesi = Object.keys(data)
+      .map((key) => ({ id: key, ...data[key] }))
+      .sort((a, b) => a.id.localeCompare(b.id));
+
+    res.status(200).json({ bays: bayListesi });
+  } catch (error) {
+    safeLog(`[HATA] ❌ Admin Bay Listesi Hatası: ${error.message}`);
+    res.status(500).json({ error: "Bay listesi alınamadı." });
+  }
+});
+
+// --- 2. BAY DURUMUNU GÜNCELLE ---
+app.post("/api/admin/update-bay", async (req, res) => {
+  const { bayId, patch } = req.body;
+  if (!bayId || !patch) return res.status(400).json({ error: "Eksik parametre." });
+
+  try {
+    const guncellemeVerisi = {
+      ...patch,
+      updatedAt: admin.database.ServerValue.TIMESTAMP,
+    };
+
+    // Zombi Peron Önlemi (Mobil uygulamadaki mantık)
+    if (patch.status === "available" || patch.status === "offline") {
+      guncellemeVerisi.currentSessionId = "";
+      guncellemeVerisi.lastUserId = "";
+    }
+
+    await rtdb.ref(`bays/${bayId}`).update(guncellemeVerisi);
+    safeLog(`[ADMİN] 🛠️ Peron Güncellendi: ${bayId} -> ${JSON.stringify(patch)}`);
+    
+    res.status(200).json({ success: true, message: "Peron güncellendi." });
+  } catch (error) {
+    safeLog(`[HATA] ❌ Bay Güncelleme Hatası: ${error.message}`);
+    res.status(500).json({ error: "Güncelleme başarısız." });
+  }
+});
+
+// --- 3. KULLANICI ARA (UID, E-posta veya Telefon) ---
+app.post("/api/admin/search-user", async (req, res) => {
+  const { arama } = req.body;
+  if (!arama) return res.status(400).json({ error: "Arama terimi boş olamaz." });
+
+  try {
+    const queryVal = arama.trim();
+    
+    // 1. UID Gibi Mi Kontrolü
+    if (!queryVal.includes("@") && !queryVal.includes(" ") && queryVal.length >= 20) {
+      const uidSnap = await db.collection("users").doc(queryVal).get();
+      if (uidSnap.exists) {
+        return res.status(200).json({ user: { id: uidSnap.id, ...uidSnap.data() } });
+      }
+    }
+
+    // 2. Email İle Arama
+    if (/\S+@\S+\.\S+/.test(queryVal)) {
+      const emailSnap = await db.collection("users")
+        .where("email", "==", queryVal.toLowerCase())
+        .limit(1)
+        .get();
+      if (!emailSnap.empty) {
+        const doc = emailSnap.docs[0];
+        return res.status(200).json({ user: { id: doc.id, ...doc.data() } });
+      }
+    }
+
+    // 3. Telefon İle Arama
+    const telSnap = await db.collection("users")
+      .where("telefon", "==", queryVal)
+      .limit(1)
+      .get();
+    if (!telSnap.empty) {
+      const doc = telSnap.docs[0];
+      return res.status(200).json({ user: { id: doc.id, ...doc.data() } });
+    }
+
+    return res.status(404).json({ error: "Eşleşen kullanıcı bulunamadı." });
+  } catch (error) {
+    safeLog(`[HATA] ❌ Kullanıcı Arama Hatası: ${error.message}`);
+    res.status(500).json({ error: "Arama sırasında hata oluştu." });
+  }
+});
+
+// --- 4. ADMİN MANUEL BAKİYE YÜKLEME ---
+app.post("/api/admin/topup", async (req, res) => {
+  const { userId, tokens } = req.body;
+  
+  if (!userId || !tokens) return res.status(400).json({ error: "Kullanıcı ID ve Jeton miktarı gerekli." });
+
+  try {
+    const adet = parseInt(tokens, 10);
+    if (!Number.isFinite(adet) || adet <= 0) {
+      return res.status(400).json({ error: "Geçerli bir jeton miktarı girin." });
+    }
+
+    // Jeton fiyatını güvenlik amacıyla mobilden değil, doğrudan Backend'den Firestore'dan çekiyoruz
+    const snap = await db.collection("packages").doc("jeton").get();
+    const jetonFiyat = snap.exists ? Number(snap.data().jetonFiyat || 0) : 0;
+
+    if (jetonFiyat <= 0) {
+      return res.status(500).json({ error: "Sistemde jeton fiyatı bulunamadı." });
+    }
+
+    const amountTRY = adet * jetonFiyat;
+    const userRef = db.collection("users").doc(userId);
+
+    await db.runTransaction(async (tx) => {
+      const uDoc = await tx.get(userRef);
+      if (!uDoc.exists) throw new Error("Kullanıcı_Bulunamadı");
+
+      const yeniBakiye = Number(uDoc.data().walletTokens || 0) + adet;
+      tx.update(userRef, { walletTokens: yeniBakiye });
+
+      // İşlem geçmişine admin topup olarak kaydet
+      tx.set(db.collection("transactions").doc(), {
+        userId: userId,
+        type: "admin_topup", // Mobildekinden ayırt edebilmek için özel type
+        tokens: adet,
+        amountTRY: amountTRY,
+        unitPriceTRY: jetonFiyat,
+        bayId: null,
+        packageId: null,
+        status: "success",
+        adminId: "ELECTRON_ADMIN", // Ya da giriş yapan adminin ID'si
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    });
+
+    safeLog(`[ADMİN] 💰 Bakiye Yüklendi: ${userId} kullanıcısına ${adet} jeton (₺${amountTRY}) eklendi.`);
+    res.status(200).json({ success: true, tokensAdded: adet, amountTRY: amountTRY });
+
+  } catch (error) {
+    safeLog(`[HATA] ❌ Admin Bakiye Yükleme Hatası: ${error.message}`);
+    if (error.message === "Kullanıcı_Bulunamadı") {
+      return res.status(404).json({ error: "Kullanıcı dokümanı bulunamadı." });
+    }
+    res.status(500).json({ error: "Bakiye yükleme başarısız oldu." });
+  }
+});
+
 // Electron tamamen hazır olduğunda işlemleri başlat
 electronApp.whenReady().then(() => {
   
