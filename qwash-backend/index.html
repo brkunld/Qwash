@@ -140,7 +140,6 @@
       border-radius: 99px;
     }
 
-    /* ── YENİLENEN SIDEBAR FOOTER & ÇIKIŞ BUTONU ── */
     .sidebar-footer {
       padding: 16px 12px;
       border-top: 1px solid var(--border);
@@ -571,9 +570,9 @@
     
     <div class="sidebar-footer">
       <div class="user-row">
-        <div class="user-ava">-</div>
+        <div class="user-ava" id="sidebar-ava">-</div>
         <div class="user-info">
-          <div class="u-name">-</div>
+          <div class="u-name" id="sidebar-name">-</div>
           <div class="u-role">admin • aktif</div>
         </div>
       </div>
@@ -592,7 +591,7 @@
       <div class="topbar-sep"></div>
       <div class="topbar-crumb" id="topbar-crumb">qwash / monitor</div>
       <div class="topbar-right">
-        <div class="live-pill"><div class="live-dot"></div><span id="live-status-text">Bekliyor...</span></div>
+        <div class="live-pill"><div class="live-dot"></div><span id="live-status-text">Bağlanıyor...</span></div>
         <div class="topbar-time" id="clock">--:--:--</div>
         <div class="topbar-btn" title="Görünümü Yenile" onclick="reloadCurrent()">
           <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M13.7 2.3A8 8 0 102.3 13.7" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M14 6V2h-4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -670,8 +669,9 @@
         </div>
       </div>
 
-    </div></div><script type="module">
-    const { ipcRenderer } = require('electron');
+    </div></div>
+
+  <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-app.js";
     import { getAuth, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-auth.js";
     import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-database.js";
@@ -689,7 +689,29 @@
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
     const database = getDatabase(app);
+    
+    // 🔥 ÖNEMLİ: Eğer Backend'i Render'a yüklerseniz burayı Render linki ile değiştirin.
+    // Örnek: "https://qwash-api.onrender.com/api/admin"
     const API_BASE = "http://localhost:3000/api/admin";
+
+    // ── KENDİ KENDİNE LOG ÜRETİCİSİ (Arayüz İçi) ──
+    window.appendLocalLog = function(mesaj, type = 'info') {
+      const entries = document.getElementById('log-entries');
+      const div = document.createElement('div');
+      div.className = 'log-row';
+      
+      const now = new Date();
+      const ts = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
+
+      let tagHtml = '<span class="log-tag lt-info">SİSTEM</span>';
+      if(type === 'error') tagHtml = '<span class="log-tag lt-err">HATA</span>';
+      if(type === 'success') tagHtml = '<span class="log-tag lt-ok">OK</span>';
+      if(type === 'warning') tagHtml = '<span class="log-tag lt-warn">UYARI</span>';
+
+      div.innerHTML = `<span class="log-ts">${ts}</span>${tagHtml}<span class="log-msg">${mesaj}</span>`;
+      entries.appendChild(div);
+      entries.scrollTop = entries.scrollHeight;
+    };
 
     // ── SEKMELER ──
     const tabMeta = {
@@ -705,8 +727,6 @@
       el.classList.add('active');
       document.getElementById('topbar-title').textContent = tabMeta[name].title;
       document.getElementById('topbar-crumb').textContent = tabMeta[name].crumb;
-      
-      if (name === 'bays') window.initBaysListener();
     };
 
     window.reloadCurrent = function() {
@@ -740,10 +760,11 @@
           
           const displayName = credential.user.displayName || credential.user.email;
           const initials = displayName.split(' ').map(w => w[0]).join('').toUpperCase().slice(0,2);
-          document.querySelector('.user-ava').textContent   = initials;
-          document.querySelector('.u-name').textContent     = displayName;
+          document.getElementById('sidebar-ava').textContent = initials;
+          document.getElementById('sidebar-name').textContent = displayName;
           
-          window.initBaysListener();
+          appendLocalLog(`Admin girişi yapıldı: ${displayName}`, 'info');
+          window.initBaysListener(); // Giriş yapınca peronları dinlemeye başla
         } else {
           await signOut(auth);
           err.textContent = 'Bu hesaba admin yetkisi tanımlanmamış!';
@@ -819,7 +840,7 @@
 
         card.style.display = 'block';
       } catch(e) {
-        alert('Sunucuya ulaşılamadı!');
+        alert('Sunucuya ulaşılamadı! Backend çalışıyor mu?');
       } finally {
         btn.textContent = 'Kullanıcı Bul'; btn.disabled = false;
       }
@@ -852,6 +873,9 @@
         el.textContent = parseInt(el.textContent) + amount;
         document.getElementById('tokenAmt').value = '';
         alert(`${data.tokensAdded} jeton eklendi. (₺${data.amountTRY})`);
+        
+        appendLocalLog(`Kullanıcıya (${selectedUserId}) manuel olarak ${data.tokensAdded} jeton yüklendi.`, 'success');
+
       } catch(e) { 
           alert('Sunucuya ulaşılamadı!'); 
       } finally { 
@@ -859,7 +883,7 @@
       }
     });
 
-    // ── CANLI PERON YÖNETİMİ ──
+    // ── CANLI PERON YÖNETİMİ & LOG ÜRETİCİSİ ──
     const STATUS_LABELS = {
       available:   { text: 'BOŞ',      cls: 'bb-avail', cardCls: 's-avail', barCls: 'bp-none',  barW: '0%'  },
       busy:        { text: 'DOLU',     cls: 'bb-busy',  cardCls: 's-busy',  barCls: 'bp-amber', barW: '65%' },
@@ -870,6 +894,7 @@
     const STATUS_CYCLE = ['available', 'maintenance', 'offline'];
     
     let isBaysListening = false;
+    let previousBaysState = null; // Peronların eski durumunu hafızada tutup log atmak için
 
     window.initBaysListener = function() {
       if(isBaysListening) return;
@@ -884,15 +909,44 @@
         if (!data) { 
           grid.innerHTML = "<p style='color:var(--red);font-size:12px;font-family:var(--mono);grid-column:1/-1;'>Sistemde peron bulunamadı.</p>"; 
           document.getElementById('bay-count-label').textContent = "Peronlar";
+          document.getElementById('live-status-text').textContent = "Sistem Çevrimiçi";
           return; 
         }
 
         grid.innerHTML = '';
         const baysArray = Object.keys(data).map(key => ({ id: key, ...data[key] })).sort((a,b) => a.id.localeCompare(b.id));
         
-        const aktifSayi = baysArray.filter(b => b.isActive !== false).length;
-        document.getElementById('bay-count-label').textContent = `${baysArray.length} Peron · ${aktifSayi} Aktif`;
+        // 1. Canlı Durum ve Log Hesaplamaları
+        let aktifSayi = 0;
+        let mesgulSayi = 0;
         
+        baysArray.forEach(bay => {
+          if (bay.isActive !== false) aktifSayi++;
+          if (bay.status === 'busy') mesgulSayi++;
+          
+          // Eğer önceki bir state varsa ve bu peronun durumu değiştiyse, Log üret!
+          if (previousBaysState && previousBaysState[bay.id]) {
+             const oldStatus = previousBaysState[bay.id].status;
+             const newStatus = bay.status || 'available';
+             
+             if (oldStatus !== newStatus) {
+                 if (newStatus === 'busy') appendLocalLog(`${bay.id} çalışmaya başladı.`, 'success');
+                 else if (newStatus === 'waiting') appendLocalLog(`${bay.id} bekleme moduna geçti.`, 'warning');
+                 else if (newStatus === 'maintenance') appendLocalLog(`${bay.id} bakıma alındı.`, 'error');
+                 else if (newStatus === 'available') appendLocalLog(`${bay.id} kullanıma hazır.`, 'info');
+                 else if (newStatus === 'offline') appendLocalLog(`${bay.id} kapatıldı.`, 'error');
+             }
+          }
+        });
+        
+        // Hafızayı Güncelle
+        previousBaysState = data;
+
+        // Üst Bar Yazılarını Güncelle
+        document.getElementById('bay-count-label').textContent = `${baysArray.length} Peron · ${aktifSayi} Aktif`;
+        document.getElementById('live-status-text').textContent = mesgulSayi > 0 ? `${mesgulSayi} Peron Çalışıyor` : "Tüm Peronlar Uygun";
+        
+        // 2. Kartları Ekrana Çiz
         baysArray.forEach(bay => {
           const status   = bay.status || 'available';
           const isActive = bay.isActive ?? true;
@@ -932,7 +986,7 @@
             body: JSON.stringify({ bayId, patch: { status: next } }) 
         });
         if (!res.ok) alert('Durum güncellenemedi.');
-      } catch(e) { alert('Sunucu hatası.'); }
+      } catch(e) { alert('Sunucu hatası. Backend çalışıyor mu?'); }
     };
 
     window.toggleBayActive = async function(bayId, isCurrentlyActive) {
@@ -946,51 +1000,6 @@
         if (!res.ok) alert('Aktiflik durumu güncellenemedi.');
       } catch(e) { alert('Sunucu hatası.'); }
     };
-
-    // ── ELECTRON LOG DİNLEYİCİLERİ (Dinamik Etiketlerle) ──
-    ipcRenderer.on('yeni-log', (event, mesaj) => {
-      const entries = document.getElementById('log-entries');
-      const div = document.createElement('div');
-      div.className = 'log-row';
-      
-      let ts = "";
-      let text = mesaj;
-      
-      if(mesaj.trim().startsWith('[')) {
-         const kIdx = mesaj.indexOf(']');
-         ts = mesaj.substring(1, kIdx);
-         text = mesaj.substring(kIdx + 1).trim();
-      } else {
-         const now = new Date();
-         ts = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
-      }
-
-      let tagHtml = '<span class="log-tag lt-info">SİSTEM</span>';
-      let cleanText = text;
-      
-      if(text.includes('HATA') || text.includes('❌')) {
-          tagHtml = '<span class="log-tag lt-err">HATA</span>';
-          cleanText = text.replace('HATA', '').replace('❌', '').trim();
-      } else if(text.includes('BAŞARILI') || text.includes('✅')) {
-          tagHtml = '<span class="log-tag lt-ok">OK</span>';
-          cleanText = text.replace('BAŞARILI', '').replace('✅', '').trim();
-      } else if(text.includes('UYARI') || text.includes('⚠️')) {
-          tagHtml = '<span class="log-tag lt-warn">UYARI</span>';
-          cleanText = text.replace('UYARI', '').replace('⚠️', '').trim();
-      } else if(text.includes('BEKLEME') || text.includes('🛑')) {
-          tagHtml = '<span class="log-tag lt-warn">DURDU</span>';
-          cleanText = text.replace('BEKLEME', '').replace('🛑', '').trim();
-      }
-
-      div.innerHTML = `<span class="log-ts">${ts}</span>${tagHtml}<span class="log-msg">${cleanText}</span>`;
-      
-      entries.appendChild(div);
-      entries.scrollTop = entries.scrollHeight;
-    });
-
-    ipcRenderer.on('canli-durum', (event, mesaj) => {
-      document.getElementById('live-status-text').textContent = mesaj;
-    });
 
     // ── SAAT ──
     function updateClock() {
