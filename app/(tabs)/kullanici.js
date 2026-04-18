@@ -83,21 +83,25 @@ export default function KullaniciEkrani() {
     if (!currentBayId) return;
 
     try {
-      const bayRef = ref(rtdb, `bays/${currentBayId}`);
-      await update(bayRef, {
-        status: "available",
-        updatedAt: serverTimestamp(),
-      });
+      // 1. ÖNCE URL parametresini (bayId) temizliyoruz.
+      // Bu sayede sayfa anında "zaman aşımı" dinleyicisini iptal eder.
+      router.setParams({ bayId: "" });
 
-      // bayId'yi tamamen temizle
-      router.setParams({ bayId: undefined });
+      // 2. Sayfanın (UI) geçişi algılayabilmesi için çok kısa bir süre bekleyip (300ms)
+      // veritabanını (Firebase) öyle güncelliyoruz. Böylece hata uyarısı çakışmıyor.
+      setTimeout(async () => {
+        const bayRef = ref(rtdb, `bays/${currentBayId}`);
+        await update(bayRef, {
+          status: "available",
+          updatedAt: serverTimestamp(),
+        });
 
-      Alert.alert("Başarılı", "Peron serbest bırakıldı.");
+        Alert.alert("Başarılı", "Peron serbest bırakıldı.");
+      }, 300);
     } catch (error) {
       console.error("Çıkış hatası:", error);
     }
   };
-
   if (authYukleniyor || !uid) {
     return (
       <View style={styles.centered}>

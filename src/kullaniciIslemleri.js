@@ -386,7 +386,7 @@ export function useKullaniciIslemleri() {
 
       try {
         // DİKKAT: Buradaki IP adresini de kendi Kendi PC IP adresin ile değiştir!
-        const API_URL = "http://192.168.1.159:3000/api/stop-session";
+        const API_URL = "https://qwash-8q4y.onrender.com/api/stop-session";
 
         const response = await fetch(API_URL, {
           method: "POST",
@@ -490,7 +490,7 @@ export function useKullaniciIslemleri() {
 
       // DİKKAT: Buradaki IP adresini KENDİ IPv4 ADRESİN İLE DEĞİŞTİR!
       // Eğer Android Emulator kullanıyorsan "http://10.0.2.2:3000/api/start-session" yap.
-      const API_URL = "http://192.168.1.159:3000/api/start-session";
+      const API_URL = "https://qwash-8q4y.onrender.com/api/start-session";
 
       const response = await fetch(API_URL, {
         method: "POST",
@@ -559,7 +559,7 @@ export function useKullaniciIslemleri() {
 
     try {
       // DİKKAT: IP adresini kendi PC adresin ile değiştirmeyi unutma!
-      const API_URL = "http://192.168.1.159:3000/api/topup";
+      const API_URL = "https://qwash-8q4y.onrender.com/api/topup";
 
       const response = await fetch(API_URL, {
         method: "POST",

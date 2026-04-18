@@ -1,7 +1,7 @@
 import { CameraView, useCameraPermissions } from "expo-camera";
-import { router } from "expo-router";
+import { router, useFocusEffect } from "expo-router"; // 🔥 useFocusEffect eklendi
 import { get, ref, serverTimestamp, update } from "firebase/database";
-import { useState } from "react";
+import { useCallback, useState } from "react"; // 🔥 useCallback eklendi
 import {
   ActivityIndicator,
   Alert,
@@ -10,12 +10,20 @@ import {
   Text,
   View,
 } from "react-native";
-import { rtdb } from "../../firebase"; // Firebase ayarlarınızın olduğu yolu projenize göre kontrol edin
+import { rtdb } from "../../firebase";
 
 export default function QrKamera() {
   const [permission, requestPermission] = useCameraPermissions();
   const [kilit, setKilit] = useState(false);
   const [yukleniyor, setYukleniyor] = useState(false);
+
+  // 🔥 YENİ EKLENDİ: Kullanıcı bu ekrana her geri döndüğünde kilidi sıfırlar
+  useFocusEffect(
+    useCallback(() => {
+      setKilit(false);
+      setYukleniyor(false);
+    }, []),
+  );
 
   if (!permission) {
     return (
@@ -57,13 +65,12 @@ export default function QrKamera() {
 
   const okundu = async ({ data }) => {
     if (kilit) return;
-    setKilit(true);
-    setYukleniyor(true); // Yükleme ekranını başlat
+    setKilit(true); // 🔥 Kamera kilitlendi, işlem bitene/sayfa değişene kadar başka okuma yapamaz
+    setYukleniyor(true);
 
     const raw = String(data ?? "").trim();
     let bayId = raw;
 
-    // JSON formatında gelirse id'yi ayıkla
     if (raw.startsWith("{")) {
       try {
         const obj = JSON.parse(raw);
@@ -71,11 +78,9 @@ export default function QrKamera() {
       } catch {}
     }
 
-    // Gereksiz önekleri ve boşlukları temizle
     bayId = bayId.replace(/^\/?bays\//i, "").trim();
     bayId = bayId.replace(/\s+/g, "");
 
-    // Format kontrolü
     const re = /^bay_\d{5}_\d{2}_\d{2}$/i;
     if (!re.test(bayId)) {
       setYukleniyor(false);
@@ -83,52 +88,45 @@ export default function QrKamera() {
         "Geçersiz QR",
         `Okunan: "${raw}"\nBeklenen örnek: bay_42060_01_01`,
       );
-      setKilit(false);
+      // Hatalı okumada sürekli alert spamlamaması için kilidi 2 saniye sonra açıyoruz
+      setTimeout(() => setKilit(false), 2000);
       return;
     }
 
     try {
-      // 1. Veritabanında peron referansını oluştur
       const bayRef = ref(rtdb, `bays/${bayId}`);
-
-      // 2. Peronun mevcut durumunu kontrol et
       const snapshot = await get(bayRef);
 
       if (snapshot.exists()) {
         const mevcutDurum = snapshot.val().status;
 
-        // Eğer peron "available" (müsait) değilse işlemi durdur
         if (mevcutDurum !== "available") {
           setYukleniyor(false);
           Alert.alert(
             "Peron Meşgul",
             "Bu peron şu anda başka bir işlem için rezerve edilmiş veya kullanımda.",
           );
-          setKilit(false);
+          setTimeout(() => setKilit(false), 2500); // 2.5 saniye sonra tekrar deneyebilir
           return;
         }
       } else {
-        // Peron veritabanında hiç yoksa
         setYukleniyor(false);
         Alert.alert("Hata", "Okutulan peron sistemde bulunamadı.");
-        setKilit(false);
+        setTimeout(() => setKilit(false), 2500);
         return;
       }
 
-      // 3. Modül durumunu "waiting" olarak güncelle
       await update(bayRef, {
         status: "waiting",
         updatedAt: serverTimestamp(),
       });
 
-      // ---------------------------------------------------------
-      // BURASI EKLENDİ: Yönlendirmeden önce yükleme ekranını kapat
-      // ---------------------------------------------------------
       setYukleniyor(false);
-      setKilit(false);
 
-      // 4. Başarılı olursa kullanıcıyı yönlendir
-      // (replace yerine navigate kullanıyoruz ve path'i basitleştiriyoruz)
+      // 🔥 DİKKAT: Burada 'setKilit(false)' SİLİNDİ!
+      // Sayfadan ayrılırken kamerayı kapalı bırakıyoruz ki geçiş esnasında arkadan tekrar okumasın.
+      // Geri dönüldüğünde zaten yukarıdaki useFocusEffect onu otomatik açacak.
+
       router.navigate({ pathname: "/kullanici", params: { bayId } });
     } catch (error) {
       console.error("RTDB Güncelleme Hatası:", error);
@@ -137,13 +135,12 @@ export default function QrKamera() {
         "Peron durumu güncellenemedi. Lütfen tekrar deneyin.",
       );
       setYukleniyor(false);
-      setKilit(false);
+      setTimeout(() => setKilit(false), 2000);
     }
   };
 
   return (
     <View style={{ flex: 1, backgroundColor: "black" }}>
-      {/* Yükleme Ekranı Katmanı */}
       {yukleniyor && (
         <View style={styles.loadingOverlay}>
           <ActivityIndicator size="large" color="white" />
@@ -151,7 +148,6 @@ export default function QrKamera() {
         </View>
       )}
 
-      {/* Kamera Görünümü */}
       <CameraView
         style={{ flex: 1 }}
         facing="back"
