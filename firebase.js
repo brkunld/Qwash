@@ -1,8 +1,10 @@
 import { initializeApp } from "firebase/app";
-import { getAuth } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
-// 1. Database modülünü içe aktarın
+// 1. getAuth yerine initializeAuth ve getReactNativePersistence içe aktarılır
+import { getReactNativePersistence, initializeAuth } from "firebase/auth";
 import { getDatabase } from "firebase/database";
+import { getFirestore } from "firebase/firestore";
+// 2. AsyncStorage içe aktarılır
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 // Firebase config
 const firebaseConfig = {
@@ -20,7 +22,10 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 
 // Servisleri export et
-export const auth = getAuth(app);
+// 3. auth objesi AsyncStorage kullanılarak kalıcı (persist) olacak şekilde başlatılır
+export const auth = initializeAuth(app, {
+  persistence: getReactNativePersistence(AsyncStorage),
+});
+
 export const db = getFirestore(app);
-// 2. rtdb örneğini oluşturun ve export edin
 export const rtdb = getDatabase(app);

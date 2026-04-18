@@ -4,29 +4,36 @@ export default function RootLayout() {
   return (
     <Stack
       screenOptions={{
-        headerShown: false, // Genellikle giriş ekranlarında header istenmez
+        headerShown: false, // Tüm sayfalarda varsayılan olarak header'ı gizler
       }}
     >
-      {/* Ana Giriş Sayfaları */}
-      <Stack.Screen name="index" />
-      <Stack.Screen name="login" />
-      <Stack.Screen name="register" />
-      <Stack.Screen name="forgot-password" />
-      <Stack.Screen name="profil-tamamla" />
+      {/* Expo Router dosyaları otomatik algılar. 
+        Ana giriş sayfalarını (index, login, register vb.) tekrar yazmanıza gerek yoktur.
+      */}
 
-      {/* Alt Sekmeler (Tabs) Grubu */}
-      {/* name="(tabs)" olması için (tabs) klasörü içinde _layout.js olmalı */}
-      <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+      {/* Sadece görünümünü özelleştirmek istediğiniz sayfaları belirtin */}
+      <Stack.Screen
+        name="admin/index"
+        options={{
+          headerShown: true, // Admin panelinde header görünmesini istiyorsanız true yapın
+          title: "Admin Paneli",
+        }}
+      />
 
-      {/* Admin Paneli Grubu */}
-      <Stack.Screen name="admin/index" options={{ title: "Admin Paneli" }} />
       <Stack.Screen
         name="admin/AdminKullaniciAra"
-        options={{ title: "Kullanıcı Ara" }}
+        options={{
+          headerShown: true,
+          title: "Kullanıcı Ara",
+        }}
       />
+
       <Stack.Screen
         name="admin/AdminBayDuzenle"
-        options={{ title: "Bayi Düzenle" }}
+        options={{
+          headerShown: true,
+          title: "Bayi Düzenle",
+        }}
       />
     </Stack>
   );

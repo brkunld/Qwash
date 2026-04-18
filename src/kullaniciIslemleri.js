@@ -629,8 +629,6 @@ export function useKullaniciIslemleri() {
     }
   };
 
-  const qrKameraAc = () => router.push("/qr-kamera");
-
   const cikisYap = async () => {
     try {
       await signOut(auth);
@@ -744,7 +742,6 @@ export function useKullaniciIslemleri() {
     sessionBitir,
     bakiyeYukle,
     profilKaydet,
-    qrKameraAc,
     cikisYap,
   };
 }

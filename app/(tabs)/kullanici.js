@@ -70,7 +70,6 @@ export default function KullaniciEkrani() {
     sessionBitir,
     bakiyeYukle,
     profilKaydet,
-    qrKameraAc,
     cikisYap,
   } = useKullaniciIslemleri();
 
@@ -158,11 +157,6 @@ export default function KullaniciEkrani() {
                   <Text style={styles.badgeText}>AKTİF</Text>
                 </View>
               )}
-
-              {/* QR OKUT BUTONU */}
-              <Pressable onPress={qrKameraAc} style={styles.qrBtn}>
-                <Text style={styles.qrBtnText}>📷 QR Okut</Text>
-              </Pressable>
 
               {/* PERONU TERKET BUTONU - Sadece bay seçiliyse görünür */}
               {seciliBay?.id && (
@@ -455,7 +449,6 @@ const styles = StyleSheet.create({
   },
   headerBtnText: { color: WHITE, fontWeight: "600", fontSize: 12 },
 
-  /* QR Button */
   qrBtn: {
     backgroundColor: DARK,
     borderRadius: 10,

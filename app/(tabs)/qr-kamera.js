@@ -1,6 +1,6 @@
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { router } from "expo-router";
-import { ref, serverTimestamp, update, get } from "firebase/database";
+import { get, ref, serverTimestamp, update } from "firebase/database";
 import { useState } from "react";
 import {
   ActivityIndicator,
@@ -55,7 +55,7 @@ export default function QrKamera() {
     );
   }
 
-const okundu = async ({ data }) => {
+  const okundu = async ({ data }) => {
     if (kilit) return;
     setKilit(true);
     setYukleniyor(true); // Yükleme ekranını başlat
@@ -93,7 +93,7 @@ const okundu = async ({ data }) => {
 
       // 2. Peronun mevcut durumunu kontrol et
       const snapshot = await get(bayRef);
-      
+
       if (snapshot.exists()) {
         const mevcutDurum = snapshot.val().status;
 
@@ -102,7 +102,7 @@ const okundu = async ({ data }) => {
           setYukleniyor(false);
           Alert.alert(
             "Peron Meşgul",
-            "Bu peron şu anda başka bir işlem için rezerve edilmiş veya kullanımda."
+            "Bu peron şu anda başka bir işlem için rezerve edilmiş veya kullanımda.",
           );
           setKilit(false);
           return;
@@ -121,8 +121,15 @@ const okundu = async ({ data }) => {
         updatedAt: serverTimestamp(),
       });
 
+      // ---------------------------------------------------------
+      // BURASI EKLENDİ: Yönlendirmeden önce yükleme ekranını kapat
+      // ---------------------------------------------------------
+      setYukleniyor(false);
+      setKilit(false);
+
       // 4. Başarılı olursa kullanıcıyı yönlendir
-      router.replace({ pathname: "/(tabs)/kullanici", params: { bayId } });
+      // (replace yerine navigate kullanıyoruz ve path'i basitleştiriyoruz)
+      router.navigate({ pathname: "/kullanici", params: { bayId } });
     } catch (error) {
       console.error("RTDB Güncelleme Hatası:", error);
       Alert.alert(
@@ -130,7 +137,7 @@ const okundu = async ({ data }) => {
         "Peron durumu güncellenemedi. Lütfen tekrar deneyin.",
       );
       setYukleniyor(false);
-      setKilit(false); // Tekrar okutabilmesi için kilidi aç
+      setKilit(false);
     }
   };
 
