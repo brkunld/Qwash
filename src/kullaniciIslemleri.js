@@ -5,18 +5,15 @@ import NfcManager, { Ndef, NfcEvents } from "react-native-nfc-manager";
 
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import {
-  collection,
   doc,
   serverTimestamp as firestoreServerTimestamp,
   getDoc,
   onSnapshot,
-  runTransaction as runFirestoreTransaction,
   setDoc,
 } from "firebase/firestore";
 
 // DİKKAT: RTDB fonksiyonları eklendi
 import {
-  get as getRtdb,
   onValue,
   ref,
   serverTimestamp as rtdbServerTimestamp,
@@ -25,7 +22,6 @@ import {
 
 import { auth, db, rtdb } from "../firebase"; // rtdb exportunuzu import etmeyi unutmayın
 
-let globalJetonLock = false;
 export function useKullaniciIslemleri() {
   const { bayId } = useLocalSearchParams();
   const router = useRouter();
@@ -250,39 +246,19 @@ export function useKullaniciIslemleri() {
   }, [uid]);
 
   // --- OTOMATİK BAĞLANTI KESME (1 Dk İşlemsizlik) ---
+  // Sadece ekrandan atmak için görsel zamanlayıcı (Firebase işlemi sunucuda)
+  // Sunucunun süreyi bitirip bitirmediğini dinleyen sistem
   useEffect(() => {
-    const bayBagli = !!seciliBay?.id;
-    // Artık 'waiting' durumundayken de zamanlayıcı çalışacak
-    const bayMusaitMi =
-      (seciliBay?.status === "available" || seciliBay?.status === "waiting") &&
-      !seciliBay?.currentSessionId;
-
-    if (!bayBagli || !bayMusaitMi) return;
-
-    const inaktifZamanlayici = setTimeout(async () => {
+    // Eğer ekranda bir peron seçiliyse (bayId varsa)
+    // VE sunucu o peronun durumunu "available" (müsait) yaptıysa:
+    if (bayId && seciliBay?.status === "available") {
       Alert.alert(
         "Zaman Aşımı",
-        "1 dakika boyunca seçim yapmadığınız için peron bağlantısı kesildi.",
+        "Süreniz doldu veya işlem yapmadığınız için peron bağlantısı kesildi.",
       );
-
-      // ZOMBİ ÖNLEMİ: Kullanıcı atılırken peronu RTDB'de boşa (available) al
-      if (seciliBay?.id) {
-        try {
-          const rtdbBayRef = ref(rtdb, `bays/${seciliBay.id}`);
-          await update(rtdbBayRef, {
-            status: "available",
-            updatedAt: rtdbServerTimestamp(), // veya Date.now() kullanıyorsan ona göre
-          });
-        } catch (e) {
-          console.error("Zaman aşımı reset hatası:", e);
-        }
-      }
-
-      router.setParams({ bayId: "" });
-    }, 60000);
-
-    return () => clearTimeout(inaktifZamanlayici);
-  }, [seciliBay?.id, seciliBay?.status, seciliBay?.currentSessionId, router]);
+      router.setParams({ bayId: "" }); // Kullanıcıyı peron ekranından at
+    }
+  }, [bayId, seciliBay?.status, router]);
   // ---------------------------------------------------
 
   // ========================================================
@@ -390,51 +366,40 @@ export function useKullaniciIslemleri() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [seciliBay?.currentSessionId]);
 
-  // ========================================================
-  // SESSION BİTİRME MANTIĞI HİBRİT OLARAK GÜNCELLENDİ
-  // ========================================================
+  // kullaniciIslemleri.js içerisindeki YENİ sessionBitir fonksiyonu
+
   const sessionBitir = useCallback(
     async (reason = "user_stop") => {
       if (!uid) return router.replace("/login");
       if (!seciliBay?.id || !seciliBay?.currentSessionId) return;
       if (sessionBitiriliyorRef.current) return;
 
-      const sRef = doc(db, "sessions", seciliBay.currentSessionId);
-      const rtdbBayRef = ref(rtdb, `bays/${seciliBay.id}`);
-
       sessionBitiriliyorRef.current = true;
       setSessionBitiriliyor(true);
 
       try {
-        // 1. Önce Firestore'daki session belgesini "ended" yapıyoruz
-        await runFirestoreTransaction(db, async (t) => {
-          const sSnap = await t.get(sRef);
+        // DİKKAT: Buradaki IP adresini de kendi Kendi PC IP adresin ile değiştir!
+        const API_URL = "http://192.168.1.159:3000/api/stop-session";
 
-          if (sSnap.exists()) {
-            const s = sSnap.data();
-            if (s?.status === "running") {
-              t.set(
-                sRef,
-                {
-                  status: "ended",
-                  endedAt: firestoreServerTimestamp(),
-                  endedReason: reason,
-                },
-                { merge: true },
-              );
-            }
-          }
+        const response = await fetch(API_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            uid: uid,
+            bayId: seciliBay.id,
+            sessionId: seciliBay.currentSessionId,
+          }),
         });
 
-        // 2. İşlem bitince hızlıca ESP32'nin görmesi için RTDB'yi güncelliyoruz
-        await update(rtdbBayRef, {
-          status: "waiting",
-          currentSessionId: "",
-          updatedAt: rtdbServerTimestamp(),
-        });
+        const data = await response.json();
+
+        if (!response.ok) {
+          Alert.alert("Hata", data.error || "Oturum durdurulamadı.");
+        }
+        // Başarılı olursa RTDB anında güncellenir ve ekran zaten boşa döner.
       } catch (err) {
         console.error("Session kapatma hatası:", err);
-        Alert.alert("Hata", "Session kapatılamadı.");
+        Alert.alert("Sunucu Hatası", "Sunucuya ulaşılamadı.");
       } finally {
         sessionBitiriliyorRef.current = false;
         setSessionBitiriliyor(false);
@@ -492,182 +457,66 @@ export function useKullaniciIslemleri() {
     };
   };
 
-  // ========================================================
-  // SESSION BAŞLATMA MANTIĞI HİBRİT OLARAK GÜNCELLENDİ
-  // ========================================================
+  // kullaniciIslemleri.js içerisindeki YENİ sessionBaslat fonksiyonu
+
   const sessionBaslat = async (packageId) => {
     if (!uid) return router.replace("/login");
-    if (!seciliBay?.id) return Alert.alert("Bay yok", "Önce QR ile bay bağla.");
+    if (!seciliBay?.id) return Alert.alert("Bay yok", "Önce peron bağlayın.");
 
-    // Peron status'ü "available" VEYA "waiting" ise devam etmesine izin ver.
     if (
       (seciliBay?.status !== "available" && seciliBay?.status !== "waiting") ||
       seciliBay?.currentSessionId
     ) {
-      return Alert.alert("Bay dolu", "Bu bay şu anda kullanımda.");
+      return Alert.alert("Peron Dolu", "Bu peron şu anda kullanımda.");
     }
 
-    // Çift tıklamayı ve art arda basmayı önlemek için kilit
     if (sessionYukleniyor) return;
     setSessionYukleniyor(true);
 
     try {
       const paket = await paketGetir(packageId);
       if (!paket) {
-        Alert.alert("Paket yok", "Paket bulunamadı.");
+        Alert.alert("Hata", "Paket bilgisi bulunamadı.");
         setSessionYukleniyor(false);
         return;
       }
 
-      // 1. Sadece Bakiye Yeterli mi Kontrolü Yapıyoruz (JETON DÜŞMÜYORUZ)
-      const userRef = doc(db, "users", uid);
-      const userSnap = await getDoc(userRef);
-      const mevcut = userSnap.exists()
-        ? Number(userSnap.data()?.walletTokens ?? 0)
-        : 0;
+      // DİKKAT: Buradaki IP adresini KENDİ IPv4 ADRESİN İLE DEĞİŞTİR!
+      // Eğer Android Emulator kullanıyorsan "http://10.0.2.2:3000/api/start-session" yap.
+      const API_URL = "http://192.168.1.159:3000/api/start-session";
 
-      if (mevcut < paket.tokensCost) {
-        Alert.alert("Yetersiz Bakiye", "Jeton bakiyeniz yeterli değil.");
-        setSessionYukleniyor(false);
-        return;
-      }
-
-      // 2. Makineye RTDB üzerinden "HAZIRLAN VE BAŞLA" sinyali gönder
-      const rtdbBayRef = ref(rtdb, `bays/${seciliBay.id}`);
-
-      await update(rtdbBayRef, {
-        status: "starting", // Yeni durum: Makine başlama komutu aldı
-        requestedPackage: packageId, // ESP32 hangi paketi seçtiğini bilsin
-        durationSec: paket.durationSec, // ESP32 süreyi doğrudan alsın
-        tokensCost: paket.tokensCost, // Jeton düşerken lazım olacak
-        lastUserId: uid,
-        updatedAt: rtdbServerTimestamp(),
+      const response = await fetch(API_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          uid: uid,
+          bayId: seciliBay.id,
+          packageId: packageId,
+          tokensCost: paket.tokensCost,
+          durationSec: paket.durationSec,
+        }),
       });
 
-      // 3. Makinenin yanıt vermemesi veya kapalı olması ihtimaline karşı 10 saniye koruması
-      setTimeout(async () => {
-        const checkSnap = await getRtdb(rtdbBayRef);
-        if (checkSnap.exists() && checkSnap.val().status === "starting") {
-          // 10 saniye geçti ve makine başlamadıysa işlemi iptal et
-          Alert.alert(
-            "Bağlantı Hatası",
-            "Makine yanıt vermedi. Jetonunuz güvende.",
-          );
-          await update(rtdbBayRef, {
-            status: "waiting", // Geri müsait/bekleme moduna al
-            requestedPackage: null,
-            durationSec: null,
-            tokensCost: null,
-          });
-          setSessionYukleniyor(false);
-        }
-      }, 15000);
+      const data = await response.json();
+
+      if (!response.ok) {
+        Alert.alert("Hata", data.error || "İşlem yapılamadı.");
+      }
+      // Başarılı olursa Alert çıkarmaya gerek yok, RTDB onValue dinleyicisi peronu otomatik 'starting' yapacak.
     } catch (e) {
-      console.error("Başlatma hatası:", e);
-      Alert.alert("Hata", "Sinyal gönderilemedi.");
+      console.error("API İletişim Hatası:", e);
+      Alert.alert(
+        "Sunucu Hatası",
+        "Kendi sunucumuza ulaşılamadı. Node.js çalışıyor mu?",
+      );
+    } finally {
       setSessionYukleniyor(false);
     }
   };
 
-  // ========================================================
-  // MAKİNE ÇALIŞTIĞINDA JETONU DÜŞÜREN DİNLEYİCİ (GLOBAL KİLİTLİ)
-  // ========================================================
-  useEffect(() => {
-    // Eğer makine "busy" moduna geçtiyse ve işlemi biz başlattıysak:
-    if (
-      seciliBay?.status === "busy" &&
-      seciliBay?.requestedPackage &&
-      seciliBay?.lastUserId === uid
-    ) {
-      // GLOBAL KİLİT: React sayfayı iki kere render etse bile işlemi durdurur
-      if (globalJetonLock) return;
-      globalJetonLock = true; // Kapıyı kilitle
-
-      const tokenDusur = async () => {
-        try {
-          const packageId = seciliBay.requestedPackage;
-          const pTokens = Number(seciliBay.tokensCost || 0);
-          const pDuration = Number(seciliBay.durationSec || 0);
-
-          const userRef = doc(db, "users", uid);
-          const sessionRef = doc(collection(db, "sessions"));
-          const txRef = doc(collection(db, "transactions"));
-
-          // 1. Jetonu Firestore'dan düş
-          await runFirestoreTransaction(db, async (t) => {
-            const userSnap = await t.get(userRef);
-            const mevcut = userSnap.exists()
-              ? Number(userSnap.data()?.walletTokens ?? 0)
-              : 0;
-
-            t.set(
-              userRef,
-              {
-                walletTokens: Math.max(0, mevcut - pTokens),
-                updatedAt: firestoreServerTimestamp(),
-              },
-              { merge: true },
-            );
-
-            t.set(sessionRef, {
-              bayId: seciliBay.id,
-              userId: uid,
-              type: packageId,
-              packageId,
-              tokensCost: pTokens,
-              durationSec: pDuration,
-              status: "running",
-              startedAt: firestoreServerTimestamp(),
-              createdAt: firestoreServerTimestamp(),
-            });
-
-            t.set(txRef, {
-              type: packageId,
-              status: "success",
-              tokens: pTokens,
-              amountTRY: 0,
-              userId: uid,
-              bayId: seciliBay.id,
-              packageId,
-              sessionId: sessionRef.id,
-              createdAt: firestoreServerTimestamp(),
-            });
-          });
-
-          // 2. RTDB'yi temizle (Aynı jetonun tekrar düşmemesi için)
-          const rtdbBayRef = ref(rtdb, `bays/${seciliBay.id}`);
-          await update(rtdbBayRef, {
-            requestedPackage: null,
-            tokensCost: null,
-            durationSec: null,
-            currentSessionId: sessionRef.id,
-          });
-
-          setSessionYukleniyor(false); // Ekrandaki dönen ikonu kaldır
-        } catch (e) {
-          console.error("Jeton düşme hatası:", e);
-          Alert.alert(
-            "Hata",
-            "Makine çalıştı ancak jeton düşerken/kayıt açılırken hata oluştu.",
-          );
-          setSessionYukleniyor(false);
-          globalJetonLock = false; // Hata olursa kilidi aç ki tekrar deneyebilsin
-        }
-      };
-
-      tokenDusur();
-    } else if (!seciliBay?.requestedPackage) {
-      // Eğer işlem sorunsuz bitmiş ve RTDB temizlenmişse bir sonraki işlem için kilidi aç
-      globalJetonLock = false;
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    seciliBay?.status,
-    seciliBay?.requestedPackage,
-    seciliBay?.lastUserId,
-    seciliBay?.id,
-    uid,
-  ]);
+  // kullaniciIslemleri.js içerisindeki YENİ bakiyeYukle fonksiyonu
 
   const bakiyeYukle = async (tokens, amountTRYParam) => {
     if (!uid) return router.replace("/login");
@@ -677,6 +526,7 @@ export function useKullaniciIslemleri() {
       return;
     }
 
+    // Kart bilgilerini temizle ve doğrula
     const kart = String(kartNo).replace(/\s/g, "");
     const skt = String(sonKullanma).trim();
     const c = String(cvv).trim();
@@ -685,64 +535,55 @@ export function useKullaniciIslemleri() {
       Alert.alert("Hata", "Kart numarası geçersiz.");
       return;
     }
-
     if (!/^(0[1-9]|1[0-2])\/\d{2}$/.test(skt)) {
       Alert.alert("Hata", "Son kullanma formatı AA/YY olmalı.");
       return;
     }
-
     if (!/^\d{3,4}$/.test(c)) {
       Alert.alert("Hata", "CVV geçersiz.");
       return;
     }
 
     setYuklemeIslemde(true);
+    const unitPriceTRY = jetonFiyat;
+    const amountTRY =
+      typeof amountTRYParam === "number"
+        ? amountTRYParam
+        : tokens * unitPriceTRY;
 
     try {
-      const userRef = doc(db, "users", uid);
-      const txRef = doc(collection(db, "transactions"));
-      const unitPriceTRY = jetonFiyat;
-      const amountTRY =
-        typeof amountTRYParam === "number"
-          ? amountTRYParam
-          : tokens * unitPriceTRY;
+      // DİKKAT: IP adresini kendi PC adresin ile değiştirmeyi unutma!
+      const API_URL = "http://192.168.1.159:3000/api/topup";
 
-      await runFirestoreTransaction(db, async (t) => {
-        const userSnap = await t.get(userRef);
-        const mevcut = userSnap.exists()
-          ? Number(userSnap.data()?.walletTokens ?? 0)
-          : 0;
-
-        t.set(
-          userRef,
-          {
-            walletTokens: mevcut + tokens,
-            updatedAt: firestoreServerTimestamp(),
-          },
-          { merge: true },
-        );
-
-        t.set(txRef, {
-          type: "topup",
-          status: "success",
-          tokens,
-          unitPriceTRY,
-          amountTRY,
-          userId: uid,
-          adminId: null,
-          bayId: null,
-          packageId: null,
-          sessionId: null,
-          createdAt: firestoreServerTimestamp(),
-        });
+      const response = await fetch(API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          uid: uid,
+          tokens: tokens,
+          amountTRY: amountTRY,
+          kartNo: kart,
+          sonKullanma: skt,
+          cvv: c,
+        }),
       });
 
+      const data = await response.json();
+
+      if (!response.ok) {
+        Alert.alert("Hata", data.error || "Bakiye yükleme başarısız.");
+        return;
+      }
+
+      // İşlem Başarılıysa Formu Temizle
+      Alert.alert("Başarılı", `${tokens} Jeton hesabınıza eklendi!`);
       setYuklemeAcik(false);
       setKartNo("");
       setSonKullanma("");
       setCvv("");
-    } catch {
-      Alert.alert("Hata", "Bakiye yükleme başarısız.");
+    } catch (e) {
+      console.error("Yükleme API Hatası:", e);
+      Alert.alert("Bağlantı Hatası", "Sunucuya ulaşılamadı.");
     } finally {
       setYuklemeIslemde(false);
     }

@@ -1,7 +1,7 @@
 import { router } from "expo-router";
 import { signInWithEmailAndPassword, signOut } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -22,13 +22,24 @@ export default function Login() {
   const [yukleniyor, setYukleniyor] = useState(false);
   const [sifreGoster, setSifreGoster] = useState(false);
 
+  // 🔥 Sunucuyu (Backend) Önceden Isıtma (Hızlandırma Hilesi)
+  useEffect(() => {
+    // Kullanıcı giriş ekranındayken sunucuya bir 'ping' atıyoruz ki
+    // giriş yap tuşuna bastığında ağ bağlantısı (handshake) zaten hazır olsun.
+    fetch("http://192.168.1.159:3000/api/ping").catch(() => {
+      /* Sunucu kapalı olsa bile kullanıcıya hissettirme */
+    });
+  }, []);
+
   const girisYap = async () => {
     if (!email.trim() || !sifre.trim()) {
       Alert.alert("Hata", "Email ve şifre zorunlu.");
       return;
     }
     setYukleniyor(true);
+
     try {
+      // 1. Firebase Auth Girişi
       const userCredential = await signInWithEmailAndPassword(
         auth,
         email.trim(),
@@ -36,39 +47,56 @@ export default function Login() {
       );
       const user = userCredential.user;
 
+      // 2. Email Doğrulama Kontrolü
       if (!user.emailVerified) {
-        await signOut(auth);
-        Alert.alert("Doğrulama Gerekli", "Lütfen email adresini doğrula.");
-        return;
+        // En güncel durumu kontrol etmek için reload şart
+        await user.reload();
+        if (!user.emailVerified) {
+          await signOut(auth);
+          Alert.alert("Doğrulama Gerekli", "Lütfen email adresini doğrula.");
+          setYukleniyor(false);
+          return;
+        }
       }
 
-      const tokenResult = await user.getIdTokenResult(true);
+      // 3. Yetki (Claims) Kontrolü - forceRefresh: false yaparak hızlandırıyoruz
+      const tokenResult = await user.getIdTokenResult(false);
       if (tokenResult?.claims?.admin === true) {
         router.replace("/admin");
         return;
       }
 
+      // 4. Profil Kontrolü (Hızlandırmak için Firestore verisini çekiyoruz)
       const userSnap = await getDoc(doc(db, "users", user.uid));
-      const data = userSnap.exists() ? userSnap.data() : null;
-      const profilTamam = !!data?.ad?.trim?.() && !!data?.soyad?.trim?.();
 
-      if (!profilTamam) {
+      if (userSnap.exists()) {
+        const data = userSnap.data();
+        // Profil dolu mu kontrolü
+        const profilTamam = data?.ad?.trim() && data?.soyad?.trim();
+
+        if (profilTamam) {
+          router.replace("/(tabs)/kullanici");
+        } else {
+          router.replace(`/profil-tamamla?uid=${user.uid}`);
+        }
+      } else {
+        // Kullanıcı dökümanı yoksa direkt tamamlamaya gönder
         router.replace(`/profil-tamamla?uid=${user.uid}`);
-        return;
+      }
+    } catch (error) {
+      console.log("Login Hatası Kod:", error.code);
+      let mesaj = "Giriş yapılamadı. Bilgileri kontrol et.";
+
+      // Modern Firebase Hata Yönetimi
+      if (error.code === "auth/invalid-credential") {
+        mesaj = "E-posta adresi veya şifre hatalı.";
+      } else if (error.code === "auth/too-many-requests") {
+        mesaj =
+          "Çok fazla başarısız deneme. Lütfen bir süre bekleyip tekrar deneyin.";
+      } else if (error.code === "auth/invalid-email") {
+        mesaj = "Geçersiz e-posta formatı.";
       }
 
-      router.replace("/(tabs)/kullanici");
-    } catch (error) {
-      const kod = error?.code;
-      let mesaj = "Giriş yapılamadı. Bilgileri kontrol et.";
-      if (kod === "auth/invalid-email") mesaj = "Email formatı hatalı.";
-      else if (kod === "auth/user-not-found")
-        mesaj = "Bu email ile kullanıcı bulunamadı.";
-      else if (kod === "auth/wrong-password") mesaj = "Şifre yanlış.";
-      else if (kod === "auth/invalid-credential")
-        mesaj = "Email veya şifre hatalı.";
-      else if (kod === "auth/too-many-requests")
-        mesaj = "Çok fazla deneme. Bir süre sonra tekrar dene.";
       Alert.alert("Hata", mesaj);
     } finally {
       setYukleniyor(false);
@@ -78,20 +106,18 @@ export default function Login() {
   return (
     <KeyboardAvoidingView
       style={{ flex: 1 }}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
       <ScrollView
         contentContainerStyle={styles.container}
         keyboardShouldPersistTaps="handled"
         bounces={false}
       >
-        {/* Top Decoration */}
         <View style={styles.topDecor}>
           <View style={styles.decorCircleLarge} />
           <View style={styles.decorCircleSmall} />
         </View>
 
-        {/* Logo / Brand */}
         <View style={styles.brandArea}>
           <View style={styles.logoBox}>
             <Text style={styles.logoIcon}>⚡</Text>
@@ -100,9 +126,7 @@ export default function Login() {
           <Text style={styles.brandSubtitle}>Devam etmek için giriş yapın</Text>
         </View>
 
-        {/* Form Card */}
         <View style={styles.formCard}>
-          {/* Email */}
           <View style={styles.fieldGroup}>
             <Text style={styles.fieldLabel}>E-posta</Text>
             <View style={styles.inputWrapper}>
@@ -121,7 +145,6 @@ export default function Login() {
             </View>
           </View>
 
-          {/* Password */}
           <View style={styles.fieldGroup}>
             <Text style={styles.fieldLabel}>Şifre</Text>
             <View style={styles.inputWrapper}>
@@ -146,7 +169,6 @@ export default function Login() {
             </View>
           </View>
 
-          {/* Forgot Password */}
           <Pressable
             onPress={() => router.push("/forgot-password")}
             style={styles.forgotBtn}
@@ -154,7 +176,6 @@ export default function Login() {
             <Text style={styles.forgotText}>Şifremi Unuttum</Text>
           </Pressable>
 
-          {/* Login Button */}
           <Pressable
             onPress={girisYap}
             disabled={yukleniyor}
@@ -172,7 +193,6 @@ export default function Login() {
           </Pressable>
         </View>
 
-        {/* Register Link */}
         <View style={styles.registerRow}>
           <Text style={styles.registerHint}>Hesabın yok mu?</Text>
           <Pressable
@@ -194,8 +214,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingBottom: 40,
   },
-
-  // Top Decoration
   topDecor: {
     position: "absolute",
     top: 0,
@@ -224,8 +242,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#111827",
     opacity: 0.04,
   },
-
-  // Brand
   brandArea: {
     alignItems: "center",
     paddingTop: 80,
@@ -258,8 +274,6 @@ const styles = StyleSheet.create({
     color: "#9ca3af",
     fontWeight: "500",
   },
-
-  // Form Card
   formCard: {
     backgroundColor: "#fff",
     borderRadius: 20,
@@ -273,8 +287,6 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
     elevation: 3,
   },
-
-  // Fields
   fieldGroup: { gap: 6 },
   fieldLabel: {
     fontSize: 13,
@@ -300,24 +312,15 @@ const styles = StyleSheet.create({
     color: "#111827",
     fontWeight: "500",
   },
-  eyeBtn: {
-    padding: 4,
-  },
+  eyeBtn: { padding: 4 },
   eyeIcon: { fontSize: 16 },
-
-  // Forgot
-  forgotBtn: {
-    alignSelf: "flex-end",
-    marginTop: -4,
-  },
+  forgotBtn: { alignSelf: "flex-end", marginTop: -4 },
   forgotText: {
     fontSize: 12,
     color: "#6b7280",
     fontWeight: "700",
     textDecorationLine: "underline",
   },
-
-  // Login Button
   loginBtn: {
     backgroundColor: "#111827",
     borderRadius: 14,
@@ -338,8 +341,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     letterSpacing: 0.2,
   },
-
-  // Register
   registerRow: {
     flexDirection: "row",
     justifyContent: "center",
