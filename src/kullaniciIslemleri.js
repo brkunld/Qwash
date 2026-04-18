@@ -504,7 +504,6 @@ export function useKullaniciIslemleri() {
       if (!response.ok) {
         Alert.alert("Hata", data.error || "İşlem yapılamadı.");
       }
-      // Başarılı olursa Alert çıkarmaya gerek yok, RTDB onValue dinleyicisi peronu otomatik 'starting' yapacak.
     } catch (e) {
       console.error("API İletişim Hatası:", e);
       Alert.alert(

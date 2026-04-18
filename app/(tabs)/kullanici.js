@@ -1,5 +1,6 @@
 import {
   ActivityIndicator,
+  Alert,
   Modal,
   Pressable,
   ScrollView,
@@ -9,6 +10,12 @@ import {
   View,
 } from "react-native";
 import { useKullaniciIslemleri } from "../../src/kullaniciIslemleri";
+
+// 1. useLocalSearchParams'ı ekleyin
+import { useLocalSearchParams, useRouter } from "expo-router";
+// 2. serverTimestamp ve ref/update'i doğru yerden import edin
+import { ref, serverTimestamp, update } from "firebase/database";
+import { rtdb } from "../../firebase";
 
 const DARK = "#1a1a2e";
 const YELLOW = "#f5a623";
@@ -67,6 +74,31 @@ export default function KullaniciEkrani() {
     cikisYap,
   } = useKullaniciIslemleri();
 
+  const router = useRouter(); // Bileşen içinde tanımlayın
+  const params = useLocalSearchParams();
+
+  // perondanCik fonksiyonunu şu şekilde güncelleyin:
+  const perondanCik = async () => {
+    const currentBayId = seciliBay?.id || params?.bayId;
+
+    if (!currentBayId) return;
+
+    try {
+      const bayRef = ref(rtdb, `bays/${currentBayId}`);
+      await update(bayRef, {
+        status: "available",
+        updatedAt: serverTimestamp(),
+      });
+
+      // bayId'yi tamamen temizle
+      router.setParams({ bayId: undefined });
+
+      Alert.alert("Başarılı", "Peron serbest bırakıldı.");
+    } catch (error) {
+      console.error("Çıkış hatası:", error);
+    }
+  };
+
   if (authYukleniyor || !uid) {
     return (
       <View style={styles.centered}>
@@ -119,15 +151,33 @@ export default function KullaniciEkrani() {
                 </Text>
               ) : null}
             </View>
-            <View style={{ alignItems: "flex-end", gap: 6 }}>
+
+            <View style={{ alignItems: "flex-end", gap: 8 }}>
               {seciliBay?.isActive && (
                 <View style={styles.badgeGreen}>
                   <Text style={styles.badgeText}>AKTİF</Text>
                 </View>
               )}
+
+              {/* QR OKUT BUTONU */}
               <Pressable onPress={qrKameraAc} style={styles.qrBtn}>
                 <Text style={styles.qrBtnText}>📷 QR Okut</Text>
               </Pressable>
+
+              {/* PERONU TERKET BUTONU - Sadece bay seçiliyse görünür */}
+              {seciliBay?.id && (
+                <Pressable
+                  onPress={perondanCik}
+                  style={[
+                    styles.qrBtn,
+                    { backgroundColor: "#FF3B30", marginTop: 4 },
+                  ]}
+                >
+                  <Text style={[styles.qrBtnText, { color: "white" }]}>
+                    🚪 Terket
+                  </Text>
+                </Pressable>
+              )}
             </View>
           </View>
 
