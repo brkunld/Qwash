@@ -11,12 +11,14 @@ FirebaseData fbdo;
 FirebaseAuth auth;
 FirebaseConfig config;
 
-// Peron Bilgileri
+// --- Peron Bilgileri ---
 String bayId = "bay_42060_01_01";
 String currentStatus = "baslangic";
 bool isBayActive = true;
+String requestedPackage = "";
+int durationSec = 60;
 
-// Zamanlayıcılar ve Kilitler
+// --- Zamanlayıcılar ve Kilitler ---
 unsigned long bitisZamaniMs = 0;
 bool durumDegisti = true;
 bool dokunmatikKilit = false; 
@@ -58,6 +60,7 @@ void ekrandaSayaciGuncelle() {
     int toplamSaniye = kalanMs / 1000;
     int saniye = toplamSaniye % 60;
     int dakika = toplamSaniye / 60;
+    
     if (saniye != sonSaniye) {
       tft.setTextColor(TFT_YELLOW, TFT_BLACK); 
       tft.setTextSize(5);
@@ -73,28 +76,23 @@ void ekrandaSayaciGuncelle() {
   }
 }
 
-// ================= STREAM CALLBACK =================
+// ================= STREAM CALLBACK (Asenkron Veri Takibi) =================
 void streamCallback(FirebaseStream data) {
+  durumDegisti = true; 
+  
   if (data.dataType() == "json") {
     StaticJsonDocument<512> doc;
     deserializeJson(doc, data.jsonString());
-    if (doc.containsKey("status")) {
-      String s = doc["status"].as<String>();
-      if(currentStatus != s) { currentStatus = s; durumDegisti = true; }
-    }
-    if (doc.containsKey("isActive")) {
-      bool a = doc["isActive"].as<bool>();
-      if(isBayActive != a) { isBayActive = a; durumDegisti = true; }
-    }
+    if (doc.containsKey("status")) currentStatus = doc["status"].as<String>();
+    if (doc.containsKey("isActive")) isBayActive = doc["isActive"].as<bool>();
+    if (doc.containsKey("requestedPackage")) requestedPackage = doc["requestedPackage"].as<String>();
+    if (doc.containsKey("durationSec")) durationSec = doc["durationSec"].as<int>();
   } else {
     String path = data.dataPath();
-    if (path == "/status") {
-      String s = data.stringData();
-      if(currentStatus != s) { currentStatus = s; durumDegisti = true; }
-    } else if (path == "/isActive") {
-      isBayActive = data.boolData();
-      durumDegisti = true;
-    }
+    if (path == "/status") currentStatus = data.stringData();
+    else if (path == "/isActive") isBayActive = data.boolData();
+    else if (path == "/requestedPackage") requestedPackage = data.stringData();
+    else if (path == "/durationSec") durationSec = data.intData();
   }
 }
 
@@ -105,8 +103,17 @@ void streamTimeoutCallback(bool timeout) {
 // ================= SETUP =================
 void setup() {
   Serial.begin(115200);
-  tft.init(); tft.setRotation(1); tft.fillScreen(TFT_BLACK);
+  tft.init(); 
+  tft.setRotation(1); 
+  tft.fillScreen(TFT_BLACK);
   
+  // Dokunmatik Kalibrasyonu (Ekranına göre bu değerleri güncellemelisin)
+  uint16_t calData[5] = { 275, 3620, 264, 3532, 1 };
+  tft.setTouch(calData);
+
+  tft.setCursor(20, 100); tft.setTextSize(2); tft.setTextColor(TFT_WHITE);
+  tft.println("WiFi Baglaniyor...");
+
   WiFi.begin("1", "12121214");
   while (WiFi.status() != WL_CONNECTED) { delay(500); Serial.print("."); }
   
@@ -117,95 +124,94 @@ void setup() {
   
   Firebase.begin(&config, &auth);
   Firebase.reconnectWiFi(true);
+  
   Firebase.RTDB.beginStream(&streamFbdo, "/bays/" + bayId);
   Firebase.RTDB.setStreamCallback(&streamFbdo, streamCallback, streamTimeoutCallback);
+  
+  Serial.println("Sistem Hazır.");
 }
 
 // ================= LOOP =================
 void loop() {
-  if (!isBayActive) {
-    if (durumDegisti) { durumDegisti = false; ekranaKapaliYaz(); }
-    return;
+  // --- 1. ÖNCELİK: AKTİFLİK VE KAPALI DURUMU ---
+  if (!isBayActive || currentStatus == "offline") {
+    if (durumDegisti) {
+      durumDegisti = false;
+      ekranaKapaliYaz();
+      Serial.println("DURUM: PERON KAPALI");
+    }
+    return; 
   }
 
-  // Durum Değişikliği Yönetimi
+  // --- 2. ÖNCELİK: DURUM DEĞİŞİKLİKLERİ ---
   if (durumDegisti) {
     durumDegisti = false;
+    Serial.print("YENİ DURUM: "); Serial.println(currentStatus);
 
     if (currentStatus == "available") {
       ekranaQRCiz(bayId);
     } 
+    else if (currentStatus == "maintenance") {
+      tft.fillScreen(TFT_BLACK);
+      tft.setTextColor(TFT_ORANGE); tft.setTextSize(3);
+      tft.setCursor(40, 100); tft.println("BAKIM MODU");
+    }
     else if (currentStatus == "waiting") {
-      dokunmatikKilit = false; // Yeni paket seçimi için kilidi aç
+      dokunmatikKilit = false; 
       tft.fillScreen(TFT_BLACK);
       tft.setTextColor(TFT_WHITE); tft.setTextSize(2);
       tft.setCursor(30, 20); tft.println("Lutfen Paket Seciniz");
+      
+      // SU Butonu
       tft.fillRoundRect(20, 80, 130, 90, 10, TFT_BLUE);
       tft.setCursor(65, 115); tft.setTextColor(TFT_WHITE, TFT_BLUE); tft.setTextSize(3); tft.println("SU");
+      
+      // KÖPÜK Butonu
       tft.fillRoundRect(170, 80, 130, 90, 10, TFT_CYAN);
       tft.setCursor(185, 115); tft.setTextColor(TFT_BLACK, TFT_CYAN); tft.println("KOPUK");
     } 
     else if (currentStatus == "busy") {
-      // SUNUCU BUSY YAPINCA VERİLERİ ÇEK
-      int sure = 60;
-      String packageId = "";
-      if (Firebase.RTDB.getString(&fbdo, "/bays/" + bayId + "/requestedPackage")) packageId = fbdo.stringData();
-      if (Firebase.RTDB.getInt(&fbdo, "/bays/" + bayId + "/durationSec")) sure = fbdo.intData();
-
       tft.fillScreen(TFT_BLACK);
       tft.setTextSize(3); tft.setTextColor(TFT_GREEN);
       tft.setCursor(30, 40);
-      if (packageId == "foam") tft.println("KOPUK MODU");
+      
+      if (requestedPackage == "foam") tft.println("KOPUK MODU");
       else tft.println("SU MODU");
 
-      bitisZamaniMs = millis() + ((unsigned long)sure * 1000);
+      bitisZamaniMs = millis() + ((unsigned long)durationSec * 1000);
     }
   }
 
-  // Makine Çalışıyor Modu
+  // --- 3. SÜREKLİ GÖREVLER (SAYAÇ) ---
   if (currentStatus == "busy") {
     ekrandaSayaciGuncelle();
   }
 
-  // Dokunmatik Kontrolü (YENİLENMİŞ SENKRON YAPI)
+  // --- 4. DOKUNMATİK (BEKLEME MODUNDA) ---
   if (currentStatus == "waiting" && !dokunmatikKilit) {
     uint16_t x, y;
     if (tft.getTouch(&x, &y)) {
       if (y > 80 && y < 170) {
-        
         String secilenPaket = "";
         if (x > 20 && x < 150) secilenPaket = "wash";
         else if (x > 170 && x < 300) secilenPaket = "foam";
 
         if (secilenPaket != "") {
-          dokunmatikKilit = true; // Sisteme ikinci basmayı kapat
-          
+          dokunmatikKilit = true;
           tft.fillScreen(TFT_BLACK); 
-          tft.setCursor(20, 110); 
-          tft.setTextSize(2);
-          tft.setTextColor(TFT_YELLOW); 
-          tft.println("Istek iletiliyor...");
+          tft.setCursor(20, 110); tft.setTextSize(2);
+          tft.setTextColor(TFT_YELLOW); tft.println("Istek iletiliyor...");
 
-          // 🔥 Async yerine garantili Set komutu
           if (Firebase.RTDB.setString(&fbdo, "/bays/" + bayId + "/hardwareSelection", secilenPaket)) {
-            // Başarılı olursa ödeme ekranına geç
             tft.fillScreen(TFT_BLACK); 
-            tft.setCursor(20, 110); 
-            tft.setTextColor(TFT_WHITE); 
+            tft.setCursor(20, 110); tft.setTextColor(TFT_WHITE); 
             tft.println("Odeme bekleniyor...");
           } else {
-            // İnternet kopması vs. nedeniyle veritabanına yazılamazsa
             tft.fillScreen(TFT_BLACK); 
-            tft.setCursor(30, 110); 
-            tft.setTextColor(TFT_RED); 
+            tft.setCursor(30, 110); tft.setTextColor(TFT_RED); 
             tft.println("Baglanti Hatasi!");
-            
-            Serial.println("Firebase Yazma Hatasi: " + fbdo.errorReason());
             delay(2000);
-            
-            // Kullanıcının tekrar deneyebilmesi için kilidi aç ve ekranı yenile
-            dokunmatikKilit = false; 
-            durumDegisti = true; 
+            dokunmatikKilit = false; durumDegisti = true; 
           }
         }
       }
