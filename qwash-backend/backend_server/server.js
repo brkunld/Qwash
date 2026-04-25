@@ -366,6 +366,34 @@ app.post("/api/admin/search-user", async (req, res) => {
   }
 });
 
+// ---------------------------------------------------------
+// KULLANICI DURUMUNU GÜNCELLEME (ENGELLEME) API'Sİ
+// ---------------------------------------------------------
+app.post("/api/admin/update-user", async (req, res) => {
+  const { userId, patch } = req.body;
+  
+  if (!userId || !patch) {
+    return res.status(400).json({ error: "Eksik parametre gönderildi." });
+  }
+
+  try {
+    // Firestore'da kullanıcının isBlocked alanını güncelliyoruz
+    await db.collection("users").doc(userId).update({
+      isBlocked: patch.isBlocked,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+
+    const islemTipi = patch.isBlocked ? "Engellendi" : "Engeli Kaldırıldı";
+    safeLog(`🛡️ KULLANICI İŞLEMİ: ${userId} -> ${islemTipi}`);
+    
+    res.status(200).json({ success: true, message: `Kullanıcı durumu güncellendi.` });
+
+  } catch (error) {
+    safeLog(`❌ Kullanıcı Güncelleme Hatası: ${error.message}`);
+    res.status(500).json({ error: "Kullanıcı güncellenirken sunucu hatası oluştu." });
+  }
+});
+
 app.post("/api/admin/topup", async (req, res) => {
   const { userId, tokens } = req.body;
   

@@ -26,9 +26,7 @@ export default function Login() {
   useEffect(() => {
     // Kullanıcı giriş ekranındayken sunucuya bir 'ping' atıyoruz ki
     // giriş yap tuşuna bastığında ağ bağlantısı (handshake) zaten hazır olsun.
-    fetch("https://qwash-8q4y.onrender.com/api/ping").catch(() => {
-      /* Sunucu kapalı olsa bile kullanıcıya hissettirme */
-    });
+    fetch("https://qwash-8q4y.onrender.com/api/ping").catch(() => {});
   }, []);
 
   const girisYap = async () => {
