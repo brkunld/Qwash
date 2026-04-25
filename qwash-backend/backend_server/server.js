@@ -3,6 +3,8 @@ const fs = require('fs'); // 🔥 Dosya kontrolü için fs modülünü ekledik
 const express = require("express");
 const cors = require("cors");
 const admin = require("firebase-admin");
+const cron = require('node-cron');
+const nodemailer = require('nodemailer');
 
 // 🔥 1. Yol: Render'ın standart Secret File dizini
 const renderSecretPath = '/etc/secrets/serviceAccountKey.json';
@@ -507,6 +509,84 @@ const systemStartupClean = async () => {
     safeLog(`❌ Temizlik sırasında hata: ${error.message}`);
   }
 };
+
+// =========================================================
+// 🔥 MAİL GÖNDERME AYARLARI (Nodemailer)
+// =========================================================
+const transporter = nodemailer.createTransport({
+  host: 'smtp.yandex.com.tr', // Eğer mailin .com ile bitiyorsa smtp.yandex.com yapabilirsin
+  port: 465,
+  secure: true, // Port 465 kullanıldığı için SSL/TLS zorunludur
+  auth: {
+    user: process.env.EMAIL_USER, // senin.mailin@yandex.com
+    pass: process.env.EMAIL_PASS  // Yandex Uygulama Şifren
+  }
+});
+
+const sendAdminAlert = (bayId) => {
+  const mailOptions = {
+    from: process.env.EMAIL_USER, // Yandex adresin
+    to: 'burakunaldi001@gmail.com',
+    subject: `🚨 DİKKAT: ${bayId} Çevrimdışı!`,
+    html: `
+      <h2 style="color: red;">Sistem Uyarısı</h2>
+      <p><b>${bayId}</b> isimli perondan 2 dakikadan uzun süredir haber alınamıyor.</p>
+      <p>Muhtemel Sorunlar:</p>
+      <ul>
+        <li>Makinenin elektriği kesilmiş olabilir.</li>
+        <li>İstasyonun Wi-Fi bağlantısı kopmuş olabilir.</li>
+        <li>ESP32 modülü kilitlenmiş olabilir.</li>
+      </ul>
+      <p>Sistem, müşterilerin mağdur olmaması için bu peronu otomatik olarak <b>KAPALI (offline)</b> durumuna geçirdi.</p>
+    `
+  };
+
+  transporter.sendMail(mailOptions, (error, info) => {
+    if (error) safeLog(`❌ Mail Gönderme Hatası: ${error.message}`);
+    else safeLog(`📧 E-Posta başarıyla gönderildi: Admin uyarıldı.`);
+  });
+};
+
+// =========================================================
+// 🔥 HEARTBEAT (NABIZ) KONTROLCÜSÜ - HER DAKİKA ÇALIŞIR
+// =========================================================
+cron.schedule('* * * * *', async () => {
+  try {
+    const baysSnap = await rtdb.ref("bays").once("value");
+    const bays = baysSnap.val();
+
+    if (!bays) return;
+
+    const now = Date.now();
+    const timeoutMs = 2 * 60 * 1000; // 2 Dakika (120.000 milisaniye)
+
+    Object.keys(bays).forEach(async (bayId) => {
+      const bay = bays[bayId];
+      
+      // Eğer peron zaten bilerek kapatılmışsa (offline) veya bakımdaysa kontrol etme
+      if (bay.status === "offline" || bay.status === "maintenance") return;
+
+      const lastSeen = bay.lastSeen;
+
+      // Eğer lastSeen değeri varsa VE üzerinden 2 dakikadan fazla geçmişse
+      if (lastSeen && (now - lastSeen > timeoutMs)) {
+        safeLog(`⚠️ BAĞLANTI KOPTU: ${bayId} 2 dakikadır yanıt vermiyor!`);
+        
+        // 1. Veritabanında peronu Çevrimdışı (offline) yap
+        await rtdb.ref(`bays/${bayId}`).update({
+          status: "offline",
+          isActive: false, // Mobil uygulamada grileşir ve seçilemez
+          updatedAt: admin.database.ServerValue.TIMESTAMP
+        });
+
+        // 2. Admine Acil Durum Maili At
+        sendAdminAlert(bayId);
+      }
+    });
+  } catch (error) {
+     safeLog(`❌ Cron Job Hatası: ${error.message}`);
+  }
+});
 
 // =========================================================
 // 🚀 BAŞLATMA ZİNCİRİ (Render.com için ayarlandı)

@@ -264,7 +264,6 @@ useEffect(() => {
     return () => unsub();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [uid]);
-
   
   // --- OTOMATİK BAĞLANTI KESME (1 Dk İşlemsizlik) ---
   // Sadece ekrandan atmak için görsel zamanlayıcı (Firebase işlemi sunucuda)
