@@ -23,6 +23,10 @@ unsigned long bitisZamaniMs = 0;
 bool durumDegisti = true;
 bool dokunmatikKilit = false; 
 
+// 🔥 YENİ: Nabız (Heartbeat) Değişkenleri 🔥
+unsigned long sonNabizZamani = 0;
+const long nabizAraligi = 30000; // 30 saniyede bir
+
 // ================= QR ÇİZİMİ =================
 void drawQR_to_TFT(esp_qrcode_handle_t qrcode) {
   int size = esp_qrcode_get_size(qrcode);
@@ -76,7 +80,7 @@ void ekrandaSayaciGuncelle() {
   }
 }
 
-// ================= STREAM CALLBACK (Asenkron Veri Takibi) =================
+// ================= STREAM CALLBACK =================
 void streamCallback(FirebaseStream data) {
   durumDegisti = true; 
   
@@ -100,6 +104,16 @@ void streamTimeoutCallback(bool timeout) {
   if (timeout) Serial.println("Stream koptu, yeniden baglaniliyor...");
 }
 
+// 🔥 YENİ: Nabız Gönderme Fonksiyonu 🔥
+void nabizGonder() {
+  if (Firebase.ready()) {
+    String path = "/bays/" + bayId + "/lastSeen";
+    // Firebase Server Timestamp yazar (Cihazın saati yanlış olsa bile doğru kayıt düşer)
+    Firebase.RTDB.setTimestamp(&fbdo, path.c_str()); 
+    Serial.println("💓 Nabiz gonderildi: " + bayId);
+  }
+}
+
 // ================= SETUP =================
 void setup() {
   Serial.begin(115200);
@@ -107,7 +121,6 @@ void setup() {
   tft.setRotation(1); 
   tft.fillScreen(TFT_BLACK);
   
-  // Dokunmatik Kalibrasyonu (Ekranına göre bu değerleri güncellemelisin)
   uint16_t calData[5] = { 275, 3620, 264, 3532, 1 };
   tft.setTouch(calData);
 
@@ -133,6 +146,12 @@ void setup() {
 
 // ================= LOOP =================
 void loop() {
+  // 🔥 YENİ: 30 Saniyede Bir Nabız Gönderme (Bloklamadan) 🔥
+  if (millis() - sonNabizZamani >= nabizAraligi) {
+    sonNabizZamani = millis();
+    nabizGonder();
+  }
+
   // --- 1. ÖNCELİK: AKTİFLİK VE KAPALI DURUMU ---
   if (!isBayActive || currentStatus == "offline") {
     if (durumDegisti) {
@@ -162,11 +181,11 @@ void loop() {
       tft.setTextColor(TFT_WHITE); tft.setTextSize(2);
       tft.setCursor(30, 20); tft.println("Lutfen Paket Seciniz");
       
-      // SU Butonu
+      // SU Butonu (Sol Tarafta Çiziliyor)
       tft.fillRoundRect(20, 80, 130, 90, 10, TFT_BLUE);
       tft.setCursor(65, 115); tft.setTextColor(TFT_WHITE, TFT_BLUE); tft.setTextSize(3); tft.println("SU");
       
-      // KÖPÜK Butonu
+      // KÖPÜK Butonu (Sağ Tarafta Çiziliyor)
       tft.fillRoundRect(170, 80, 130, 90, 10, TFT_CYAN);
       tft.setCursor(185, 115); tft.setTextColor(TFT_BLACK, TFT_CYAN); tft.println("KOPUK");
     } 
@@ -193,8 +212,17 @@ void loop() {
     if (tft.getTouch(&x, &y)) {
       if (y > 80 && y < 170) {
         String secilenPaket = "";
-        if (x > 20 && x < 150) secilenPaket = "wash";
-        else if (x > 170 && x < 300) secilenPaket = "foam";
+        
+        // 🛠️ DÜZELTME: X Ekseni Ters Dönmesi (Inversion) Koruması 🛠️
+        // Ekran dokunmatiği aynalanmış çalıştığı için sol ve sağ dokunmaları ters atıyoruz.
+        // x < 150 normalde sol taraftır ama ters olduğu için KÖPÜK butonunu tetikliyor.
+        
+        if (x > 20 && x < 150) { 
+            secilenPaket = "foam"; // Önceden wash idi, ters çevrildi.
+        } 
+        else if (x > 170 && x < 300) { 
+            secilenPaket = "wash"; // Önceden foam idi, ters çevrildi.
+        }
 
         if (secilenPaket != "") {
           dokunmatikKilit = true;
@@ -210,7 +238,7 @@ void loop() {
             tft.fillScreen(TFT_BLACK); 
             tft.setCursor(30, 110); tft.setTextColor(TFT_RED); 
             tft.println("Baglanti Hatasi!");
-            delay(2000);
+            delay(2000); // Uyarıyı okuması için kısa bekleme
             dokunmatikKilit = false; durumDegisti = true; 
           }
         }
