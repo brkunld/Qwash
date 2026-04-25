@@ -548,38 +548,54 @@ const sendAdminAlert = (bayId) => {
 };
 
 // =========================================================
-// 🔥 HEARTBEAT (NABIZ) KONTROLCÜSÜ - HER DAKİKA ÇALIŞIR
+// 🔥 HEARTBEAT (NABIZ) KONTROLCÜSÜ - HER DAKİKA ÇALIŞIR (DEDEKTİF MODU)
 // =========================================================
 cron.schedule('* * * * *', async () => {
+  safeLog("🔍 [CRON] Nabız kontrolü tetiklendi..."); // 1. Render uyuyor mu kontrolü
+
   try {
     const baysSnap = await rtdb.ref("bays").once("value");
     const bays = baysSnap.val();
 
-    if (!bays) return;
+    if (!bays) {
+      safeLog("⚠️ [CRON] Firebase'de hiç peron bulunamadı!");
+      return;
+    }
 
     const now = Date.now();
-    const timeoutMs = 2 * 60 * 1000; // 2 Dakika (120.000 milisaniye)
+    const timeoutMs = 2 * 60 * 1000; // 2 Dakika
 
     Object.keys(bays).forEach(async (bayId) => {
       const bay = bays[bayId];
       
-      // Eğer peron zaten bilerek kapatılmışsa (offline) veya bakımdaysa kontrol etme
-      if (bay.status === "offline" || bay.status === "maintenance") return;
+      // Çevrimdışı veya bakımda olanları atla
+      if (bay.status === "offline" || bay.status === "maintenance") {
+        safeLog(`ℹ️ [CRON] ${bayId} zaten ${bay.status} modunda, es geçiliyor.`);
+        return;
+      }
 
       const lastSeen = bay.lastSeen;
 
-      // Eğer lastSeen değeri varsa VE üzerinden 2 dakikadan fazla geçmişse
-      if (lastSeen && (now - lastSeen > timeoutMs)) {
-        safeLog(`⚠️ BAĞLANTI KOPTU: ${bayId} 2 dakikadır yanıt vermiyor!`);
+      if (!lastSeen) {
+        safeLog(`❌ [CRON] ${bayId} için 'lastSeen' verisi Firebase'de HİÇ YOK! (ESP32 veri gönderemiyor)`);
+        return;
+      }
+
+      // Zaman farkını saniye cinsinden hesapla ve terminale yaz
+      const farkSaniye = Math.floor((now - lastSeen) / 1000);
+      safeLog(`📊 [CRON] ${bayId} en son ${farkSaniye} saniye önce haber verdi.`);
+
+      // Eğer 2 dakikayı (120 saniyeyi) geçtiyse
+      if (now - lastSeen > timeoutMs) {
+        safeLog(`⚠️ BAĞLANTI KOPTU: ${bayId} 120 saniyeyi aştı! Çevrimdışı yapılıyor...`);
         
-        // 1. Veritabanında peronu Çevrimdışı (offline) yap
         await rtdb.ref(`bays/${bayId}`).update({
           status: "offline",
-          isActive: false, // Mobil uygulamada grileşir ve seçilemez
+          isActive: false, 
           updatedAt: admin.database.ServerValue.TIMESTAMP
         });
 
-        // 2. Admine Acil Durum Maili At
+        // Mail Gönder
         sendAdminAlert(bayId);
       }
     });
