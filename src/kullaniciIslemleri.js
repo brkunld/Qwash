@@ -216,7 +216,7 @@ export function useKullaniciIslemleri() {
     return () => unsub();
   }, []);
 
-  useEffect(() => {
+useEffect(() => {
     if (!uid) return;
 
     const userRef = doc(db, "users", uid);
@@ -228,6 +228,18 @@ export function useKullaniciIslemleri() {
       (snap) => {
         if (snap.exists()) {
           const data = snap.data();
+          
+          // 🔥 YENİ EKLENEN KISIM: Engelleme Kontrolü 🔥
+          if (data?.isBlocked === true) {
+            Alert.alert(
+              "Erişim Engellendi", 
+              "Hesabınız sistem yöneticisi tarafından askıya alınmıştır."
+            );
+            cikisYap(); // Kullanıcıyı anında sistemden atar ve logine yönlendirir
+            return; 
+          }
+          // ---------------------------------------------
+
           setBakiye(Number(data?.walletTokens ?? 0));
           setAd(String(data?.ad ?? ""));
           setSoyad(String(data?.soyad ?? ""));
@@ -250,8 +262,10 @@ export function useKullaniciIslemleri() {
     );
 
     return () => unsub();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [uid]);
 
+  
   // --- OTOMATİK BAĞLANTI KESME (1 Dk İşlemsizlik) ---
   // Sadece ekrandan atmak için görsel zamanlayıcı (Firebase işlemi sunucuda)
   // Sunucunun süreyi bitirip bitirmediğini dinleyen sistem

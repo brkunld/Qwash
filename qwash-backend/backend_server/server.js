@@ -126,6 +126,11 @@ app.post("/api/start-session", async (req, res) => {
       const userDoc = await t.get(userRef);
       if (!userDoc.exists) throw new Error("Kullanıcı bulunamadı");
 
+      // 🔥 YIKILMAZ GÜVENLİK DUVARI: KULLANICI ENGELLİ Mİ? 🔥
+      if (userDoc.data().isBlocked === true) {
+        throw new Error("Engellenmis_Kullanici");
+      }
+
       const mevcutBakiye = Number(userDoc.data().walletTokens || 0);
       if (mevcutBakiye < tokensCost) throw new Error("Yetersiz_Bakiye");
 
@@ -190,6 +195,11 @@ app.post("/api/start-session", async (req, res) => {
     return res.status(200).json({ success: true, message: "Makine başlatıldı." });
 
   } catch (error) {
+    // 🔥 ENGELLİ KULLANICI YAKALAMA 🔥
+    if (error.message === "Engellenmis_Kullanici") {
+      safeLog(`🚨 GÜVENLİK İHLALİ DENEMESİ: Engelli kullanıcı (${uid}) makineyi başlatmaya çalıştı!`);
+      return res.status(403).json({ error: "Hesabınız askıya alındığı için işlem yapamazsınız." });
+    }
     if (error.message === "Yetersiz_Bakiye") return res.status(400).json({ error: "Jeton bakiyeniz yetersiz." });
     safeLog(`❌ Başlatma hatası: ${error.message}`);
     return res.status(500).json({ error: "Sunucu hatası." });
@@ -249,6 +259,11 @@ app.post("/api/topup", async (req, res) => {
       const userDoc = await t.get(userRef);
       if (!userDoc.exists) throw new Error("Kullanıcı bulunamadı");
 
+      // 🔥 YIKILMAZ GÜVENLİK DUVARI: KULLANICI ENGELLİ Mİ? 🔥
+      if (userDoc.data().isBlocked === true) {
+        throw new Error("Engellenmis_Kullanici");
+      }
+
       const mevcutBakiye = Number(userDoc.data().walletTokens || 0);
 
       t.update(userRef, {
@@ -271,11 +286,15 @@ app.post("/api/topup", async (req, res) => {
       });
     });
 
-    safeLog(`✅ MÜŞTERİ ÖÖDEMESİ BAŞARILI: ${uid} -> ${tokens} jeton eklendi.`);
+    safeLog(`✅ MÜŞTERİ ÖDEMESİ BAŞARILI: ${uid} -> ${tokens} jeton eklendi.`);
     return res.status(200).json({ success: true, message: "Bakiye başarıyla yüklendi." });
 
   } catch (error) {
     safeLog(`❌ Müşteri ödeme hatası: ${error.message}`);
+    // 🔥 ENGELLİ KULLANICI YAKALAMA 🔥
+    if (error.message === "Engellenmis_Kullanici") {
+      return res.status(403).json({ error: "Hesabınız askıya alındığı için bakiye yükleyemezsiniz." });
+    }
     return res.status(500).json({ error: "Sunucu hatası, yükleme yapılamadı." });
   }
 });
