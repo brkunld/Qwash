@@ -514,89 +514,98 @@ const systemStartupClean = async () => {
 // 🔥 MAİL GÖNDERME AYARLARI (Nodemailer)
 // =========================================================
 const transporter = nodemailer.createTransport({
-  host: 'smtp.yandex.com.tr', // Eğer mailin .com ile bitiyorsa smtp.yandex.com yapabilirsin
+  host: 'smtp.yandex.com.tr', 
   port: 465,
-  secure: true, // Port 465 kullanıldığı için SSL/TLS zorunludur
+  secure: true, 
   auth: {
-    user: process.env.EMAIL_USER, // senin.mailin@yandex.com
-    pass: process.env.EMAIL_PASS  // Yandex Uygulama Şifren
+    user: process.env.EMAIL_USER, 
+    pass: process.env.EMAIL_PASS  
   }
 });
 
-const sendAdminAlert = (bayId) => {
+// Mail fonksiyonunu hem KOPMA hem DÜZELME durumları için çift yönlü yaptık
+const sendAdminAlert = (bayId, type) => {
+  let subject, htmlBody;
+
+  if (type === "down") {
+    subject = `🚨 DİKKAT: ${bayId} Bağlantısı Koptu!`;
+    htmlBody = `
+      <h2 style="color: red;">Sistem Uyarısı: Peron Çevrimdışı</h2>
+      <p><b>${bayId}</b> isimli perondan 2 dakikadan uzun süredir haber alınamıyor. Sistem, müşterilerin mağdur olmaması için peronu otomatik olarak <b>KAPALI</b> durumuna aldı.</p>
+    `;
+  } else if (type === "up") {
+    subject = `✅ DÜZELDİ: ${bayId} Yeniden Çevrimiçi!`;
+    htmlBody = `
+      <h2 style="color: green;">Sistem Bilgilendirmesi: Bağlantı Geldi</h2>
+      <p><b>${bayId}</b> isimli peronun bağlantısı tekrar sağlandı. Sistem peronu otomatik olarak kullanıma <b>(BOŞ)</b> açtı.</p>
+    `;
+  }
+
   const mailOptions = {
-    from: process.env.EMAIL_USER, // Yandex adresin
-    to: 'burakunaldi001@gmail.com',
-    subject: `🚨 DİKKAT: ${bayId} Çevrimdışı!`,
-    html: `
-      <h2 style="color: red;">Sistem Uyarısı</h2>
-      <p><b>${bayId}</b> isimli perondan 2 dakikadan uzun süredir haber alınamıyor.</p>
-      <p>Muhtemel Sorunlar:</p>
-      <ul>
-        <li>Makinenin elektriği kesilmiş olabilir.</li>
-        <li>İstasyonun Wi-Fi bağlantısı kopmuş olabilir.</li>
-        <li>ESP32 modülü kilitlenmiş olabilir.</li>
-      </ul>
-      <p>Sistem, müşterilerin mağdur olmaması için bu peronu otomatik olarak <b>KAPALI (offline)</b> durumuna geçirdi.</p>
-    `
+    from: process.env.EMAIL_USER,
+    to: 'burakunaldi001@gmail.com', // Bildirimlerin düşeceği adres
+    subject: subject,
+    html: htmlBody
   };
 
   transporter.sendMail(mailOptions, (error, info) => {
     if (error) safeLog(`❌ Mail Gönderme Hatası: ${error.message}`);
-    else safeLog(`📧 E-Posta başarıyla gönderildi: Admin uyarıldı.`);
+    else safeLog(`📧 E-Posta başarıyla gönderildi: ${type === 'down' ? 'Kopma' : 'Düzelme'} bildirimi.`);
   });
 };
 
 // =========================================================
-// 🔥 HEARTBEAT (NABIZ) KONTROLCÜSÜ - HER DAKİKA ÇALIŞIR (DEDEKTİF MODU)
+// 🔥 HEARTBEAT (NABIZ) KONTROLCÜSÜ - OTOMATİK KURTARMA ÖZELLİKLİ
 // =========================================================
 cron.schedule('* * * * *', async () => {
-  safeLog("🔍 [CRON] Nabız kontrolü tetiklendi..."); // 1. Render uyuyor mu kontrolü
-
   try {
     const baysSnap = await rtdb.ref("bays").once("value");
     const bays = baysSnap.val();
 
-    if (!bays) {
-      safeLog("⚠️ [CRON] Firebase'de hiç peron bulunamadı!");
-      return;
-    }
+    if (!bays) return;
 
     const now = Date.now();
     const timeoutMs = 2 * 60 * 1000; // 2 Dakika
 
     Object.keys(bays).forEach(async (bayId) => {
       const bay = bays[bayId];
-      
-      // Çevrimdışı veya bakımda olanları atla
-      if (bay.status === "offline" || bay.status === "maintenance") {
-        safeLog(`ℹ️ [CRON] ${bayId} zaten ${bay.status} modunda, es geçiliyor.`);
-        return;
-      }
-
       const lastSeen = bay.lastSeen;
 
-      if (!lastSeen) {
-        safeLog(`❌ [CRON] ${bayId} için 'lastSeen' verisi Firebase'de HİÇ YOK! (ESP32 veri gönderemiyor)`);
-        return;
-      }
+      if (!lastSeen) return;
 
-      // Zaman farkını saniye cinsinden hesapla ve terminale yaz
-      const farkSaniye = Math.floor((now - lastSeen) / 1000);
-      safeLog(`📊 [CRON] ${bayId} en son ${farkSaniye} saniye önce haber verdi.`);
+      const isDisconnected = (now - lastSeen > timeoutMs);
 
-      // Eğer 2 dakikayı (120 saniyeyi) geçtiyse
-      if (now - lastSeen > timeoutMs) {
-        safeLog(`⚠️ BAĞLANTI KOPTU: ${bayId} 120 saniyeyi aştı! Çevrimdışı yapılıyor...`);
-        
-        await rtdb.ref(`bays/${bayId}`).update({
-          status: "offline",
-          isActive: false, 
-          updatedAt: admin.database.ServerValue.TIMESTAMP
-        });
+      // 🔴 SENARYO 1: BAĞLANTI KOPTU
+      if (isDisconnected) {
+        // Eğer cihaz admin tarafından bilerek kapatılmamışsa (Yeni koptuysa)
+        if (bay.status !== "offline" && bay.status !== "maintenance") {
+          safeLog(`⚠️ BAĞLANTI KOPTU: ${bayId} 120 saniyeyi aştı! Otomatik kapatılıyor...`);
+          
+          await rtdb.ref(`bays/${bayId}`).update({
+            status: "offline",
+            isActive: false, 
+            autoOffline: true, // Sistemin kendi kapattığını işaretliyoruz (Admin kapatmadı)
+            updatedAt: admin.database.ServerValue.TIMESTAMP
+          });
 
-        // Mail Gönder
-        sendAdminAlert(bayId);
+          sendAdminAlert(bayId, "down"); // Kopma maili at
+        }
+      } 
+      // 🟢 SENARYO 2: BAĞLANTI GERİ GELDİ (Otomatik Kurtarma)
+      else {
+        // Eğer bu makineyi SİSTEM (autoOffline) kapattıysa ve şimdi interneti geri geldiyse
+        if (bay.status === "offline" && bay.autoOffline === true) {
+          safeLog(`✅ BAĞLANTI GELDİ: ${bayId} yeniden nabız atıyor! Otomatik açılıyor...`);
+
+          await rtdb.ref(`bays/${bayId}`).update({
+            status: "available",
+            isActive: true, 
+            autoOffline: null, // İşareti kaldırıyoruz
+            updatedAt: admin.database.ServerValue.TIMESTAMP
+          });
+
+          sendAdminAlert(bayId, "up"); // Düzelme maili at
+        }
       }
     });
   } catch (error) {
@@ -607,13 +616,9 @@ cron.schedule('* * * * *', async () => {
 // =========================================================
 // 🚀 BAŞLATMA ZİNCİRİ (Render.com için ayarlandı)
 // =========================================================
-
-// Render, kendi portunu `process.env.PORT` üzerinden verir. 
-// Eğer lokalde çalıştırırsan 3000 portunu kullanır.
 const PORT = process.env.PORT || 3000;
 const HOST = "0.0.0.0";
 
-// Önce temizliği yap, sonra sunucuyu dinlemeye başla
 systemStartupClean().then(() => {
   app.listen(PORT, HOST, () => {
     safeLog(`🚀 QWash Sunucusu Başarıyla Başlatıldı!`);

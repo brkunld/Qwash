@@ -23,7 +23,7 @@ unsigned long bitisZamaniMs = 0;
 bool durumDegisti = true;
 bool dokunmatikKilit = false; 
 
-// 🔥 YENİ: Nabız (Heartbeat) Değişkenleri 🔥
+// 🔥 Nabız (Heartbeat) Değişkenleri 🔥
 unsigned long sonNabizZamani = 0;
 const long nabizAraligi = 30000; // 30 saniyede bir
 
@@ -104,13 +104,21 @@ void streamTimeoutCallback(bool timeout) {
   if (timeout) Serial.println("Stream koptu, yeniden baglaniliyor...");
 }
 
-// 🔥 YENİ: Nabız Gönderme Fonksiyonu 🔥
+// 🔥 YENİ: Hata Dedektifli Nabız Gönderme Fonksiyonu 🔥
 void nabizGonder() {
   if (Firebase.ready()) {
     String path = "/bays/" + bayId + "/lastSeen";
-    // Firebase Server Timestamp yazar (Cihazın saati yanlış olsa bile doğru kayıt düşer)
-    Firebase.RTDB.setTimestamp(&fbdo, path.c_str()); 
-    Serial.println("💓 Nabiz gonderildi: " + bayId);
+    
+    // İşlem başarılı olursa true döner, olmazsa false döner
+    if (Firebase.RTDB.setTimestamp(&fbdo, path.c_str())) {
+      Serial.println("💓 Nabiz gonderildi: " + bayId);
+    } else {
+      Serial.println("❌ NABIZ GONDERILEMEDI!");
+      Serial.print("Hata Sebebi: ");
+      Serial.println(fbdo.errorReason()); // BURASI ÇOK ÖNEMLİ! Hatayı ekrana basar.
+    }
+  } else {
+    Serial.println("❌ Firebase henüz hazir degil, nabiz atlandi.");
   }
 }
 
@@ -129,6 +137,7 @@ void setup() {
 
   WiFi.begin("1", "12121214");
   while (WiFi.status() != WL_CONNECTED) { delay(500); Serial.print("."); }
+  Serial.println("\nWiFi Baglandi!");
   
   config.api_key = "AIzaSyDXXgyY_NW6_D1Ecr0ZQljYUvQSTypgJaU";
   auth.user.email = "brkunld1@yandex.com";
@@ -137,16 +146,28 @@ void setup() {
   
   Firebase.begin(&config, &auth);
   Firebase.reconnectWiFi(true);
+
+  // Token'ın (Kimlik doğrulamanın) hazır olmasını bekle
+  Serial.print("Firebase Baglantisi Bekleniyor");
+  while (!Firebase.ready()) {
+      Serial.print(".");
+      delay(300);
+  }
+  Serial.println("\nFirebase Hazir!");
   
   Firebase.RTDB.beginStream(&streamFbdo, "/bays/" + bayId);
   Firebase.RTDB.setStreamCallback(&streamFbdo, streamCallback, streamTimeoutCallback);
   
   Serial.println("Sistem Hazır.");
+
+  // 🔥 YENİ: Cihaz açılır açılmaz ilk nabzı anında at! 🔥
+  nabizGonder();
+  sonNabizZamani = millis();
 }
 
 // ================= LOOP =================
 void loop() {
-  // 🔥 YENİ: 30 Saniyede Bir Nabız Gönderme (Bloklamadan) 🔥
+  // 🔥 30 Saniyede Bir Nabız Gönderme (Bloklamadan) 🔥
   if (millis() - sonNabizZamani >= nabizAraligi) {
     sonNabizZamani = millis();
     nabizGonder();
@@ -181,11 +202,11 @@ void loop() {
       tft.setTextColor(TFT_WHITE); tft.setTextSize(2);
       tft.setCursor(30, 20); tft.println("Lutfen Paket Seciniz");
       
-      // SU Butonu (Sol Tarafta Çiziliyor)
+      // SU Butonu
       tft.fillRoundRect(20, 80, 130, 90, 10, TFT_BLUE);
       tft.setCursor(65, 115); tft.setTextColor(TFT_WHITE, TFT_BLUE); tft.setTextSize(3); tft.println("SU");
       
-      // KÖPÜK Butonu (Sağ Tarafta Çiziliyor)
+      // KÖPÜK Butonu
       tft.fillRoundRect(170, 80, 130, 90, 10, TFT_CYAN);
       tft.setCursor(185, 115); tft.setTextColor(TFT_BLACK, TFT_CYAN); tft.println("KOPUK");
     } 
@@ -213,15 +234,11 @@ void loop() {
       if (y > 80 && y < 170) {
         String secilenPaket = "";
         
-        // 🛠️ DÜZELTME: X Ekseni Ters Dönmesi (Inversion) Koruması 🛠️
-        // Ekran dokunmatiği aynalanmış çalıştığı için sol ve sağ dokunmaları ters atıyoruz.
-        // x < 150 normalde sol taraftır ama ters olduğu için KÖPÜK butonunu tetikliyor.
-        
         if (x > 20 && x < 150) { 
-            secilenPaket = "foam"; // Önceden wash idi, ters çevrildi.
+            secilenPaket = "foam"; 
         } 
         else if (x > 170 && x < 300) { 
-            secilenPaket = "wash"; // Önceden foam idi, ters çevrildi.
+            secilenPaket = "wash"; 
         }
 
         if (secilenPaket != "") {
@@ -238,7 +255,7 @@ void loop() {
             tft.fillScreen(TFT_BLACK); 
             tft.setCursor(30, 110); tft.setTextColor(TFT_RED); 
             tft.println("Baglanti Hatasi!");
-            delay(2000); // Uyarıyı okuması için kısa bekleme
+            delay(2000);
             dokunmatikKilit = false; durumDegisti = true; 
           }
         }
