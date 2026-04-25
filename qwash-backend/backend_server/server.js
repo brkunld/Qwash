@@ -511,10 +511,10 @@ const systemStartupClean = async () => {
 };
 
 // =========================================================
-// 🔥 MAİL GÖNDERME AYARLARI (Nodemailer)
+// 🔥 MAİL GÖNDERME AYARLARI (YANDEX -> GMAIL)
 // =========================================================
 const transporter = nodemailer.createTransport({
-  host: 'smtp.yandex.com', 
+  host: 'smtp.yandex.com', // Daha stabil olduğu için .com.tr yerine .com
   port: 465,
   secure: true, 
   auth: {
@@ -523,7 +523,7 @@ const transporter = nodemailer.createTransport({
   }
 });
 
-// Mail fonksiyonunu hem KOPMA hem DÜZELME durumları için çift yönlü yaptık
+// Hem KOPMA hem DÜZELME maillerini atan fonksiyon
 const sendAdminAlert = (bayId, type) => {
   let subject, htmlBody;
 
@@ -543,7 +543,7 @@ const sendAdminAlert = (bayId, type) => {
 
   const mailOptions = {
     from: process.env.EMAIL_USER,
-    to: 'burakunaldi001@gmail.com', // Bildirimlerin düşeceği adres
+    to: 'burakunaldi001@gmail.com', // 🎯 Bildirimlerin düşeceği adres
     subject: subject,
     html: htmlBody
   };
@@ -555,31 +555,48 @@ const sendAdminAlert = (bayId, type) => {
 };
 
 // =========================================================
-// 🔥 HEARTBEAT (NABIZ) KONTROLCÜSÜ - OTOMATİK KURTARMA ÖZELLİKLİ
+// 🔥 HEARTBEAT (NABIZ) KONTROLCÜSÜ - DEDEKTİF + OTOMATİK KURTARMA
 // =========================================================
 cron.schedule('* * * * *', async () => {
+  safeLog("🔍 [CRON] Nabız kontrolü çalışıyor...");
+
   try {
     const baysSnap = await rtdb.ref("bays").once("value");
     const bays = baysSnap.val();
 
-    if (!bays) return;
+    if (!bays) {
+      safeLog("⚠️ [CRON] Firebase'de hiç peron bulunamadı!");
+      return;
+    }
 
     const now = Date.now();
-    const timeoutMs = 2 * 60 * 1000; // 2 Dakika
+    const timeoutMs = 2 * 60 * 1000; // 2 Dakika Tolerans
 
     Object.keys(bays).forEach(async (bayId) => {
       const bay = bays[bayId];
+      
+      // Admin bilerek kapattıysa veya bakıma aldıysa es geç
+      if ((bay.status === "offline" && !bay.autoOffline) || bay.status === "maintenance") {
+        safeLog(`ℹ️ [CRON] ${bayId} admin tarafından kapatılmış veya bakımda, es geçiliyor.`);
+        return;
+      }
+
       const lastSeen = bay.lastSeen;
 
-      if (!lastSeen) return;
+      if (!lastSeen) {
+        safeLog(`❌ [CRON] ${bayId} için 'lastSeen' verisi YOK!`);
+        return;
+      }
+
+      const farkSaniye = Math.floor((now - lastSeen) / 1000);
+      safeLog(`📊 [CRON] ${bayId} en son ${farkSaniye} saniye önce haber verdi.`);
 
       const isDisconnected = (now - lastSeen > timeoutMs);
 
-      // 🔴 SENARYO 1: BAĞLANTI KOPTU
+      // 🔴 SENARYO 1: BAĞLANTI KOPTU (İnternet gitti veya fiş çekildi)
       if (isDisconnected) {
-        // Eğer cihaz admin tarafından bilerek kapatılmamışsa (Yeni koptuysa)
-        if (bay.status !== "offline" && bay.status !== "maintenance") {
-          safeLog(`⚠️ BAĞLANTI KOPTU: ${bayId} 120 saniyeyi aştı! Otomatik kapatılıyor...`);
+        if (bay.status !== "offline") {
+          safeLog(`⚠️ KOPMA TESPİT EDİLDİ: ${bayId} otomatik kapatılıyor...`);
           
           await rtdb.ref(`bays/${bayId}`).update({
             status: "offline",
@@ -595,7 +612,7 @@ cron.schedule('* * * * *', async () => {
       else {
         // Eğer bu makineyi SİSTEM (autoOffline) kapattıysa ve şimdi interneti geri geldiyse
         if (bay.status === "offline" && bay.autoOffline === true) {
-          safeLog(`✅ BAĞLANTI GELDİ: ${bayId} yeniden nabız atıyor! Otomatik açılıyor...`);
+          safeLog(`✅ İNTERNET GELDİ: ${bayId} otomatik olarak açılıyor...`);
 
           await rtdb.ref(`bays/${bayId}`).update({
             status: "available",
