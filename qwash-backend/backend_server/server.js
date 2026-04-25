@@ -514,7 +514,7 @@ const systemStartupClean = async () => {
 // 🔥 MAİL GÖNDERME AYARLARI (Nodemailer)
 // =========================================================
 const transporter = nodemailer.createTransport({
-  host: 'smtp.yandex.com.tr', 
+  host: 'smtp.yandex.com', 
   port: 465,
   secure: true, 
   auth: {
