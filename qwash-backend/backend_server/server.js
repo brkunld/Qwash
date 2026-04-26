@@ -38,6 +38,13 @@ app.use(cors());
 app.use(express.json());
 
 // =========================================================
+// 🔥 UPTIMEROBOT İÇİN PING (YAŞIYORUM) YANITI
+// =========================================================
+app.get("/", (req, res) => {
+  res.status(200).send("QWash API Sapasağlam Ayakta! 🚀");
+});
+
+// =========================================================
 // 🔥 LOG SİSTEMİ (Artık doğrudan sunucu terminaline yazıyor)
 // =========================================================
 const safeLog = (message) => {
