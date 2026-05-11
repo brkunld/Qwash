@@ -1,0 +1,62 @@
+{
+  "expo": {
+    "name": "ut_project",
+    "slug": "qwash",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "scheme": "utproject",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.brkunld.utproject",
+      "infoPlist": {
+        "NFCReaderUsageDescription": "Araç yıkama peronlarına bağlanmak için NFC özelliğine ihtiyacımız var.",
+        "NSCameraUsageDescription": "QR kod okumak için kameraya erişim gereklidir."
+      }
+    },
+    "android": {
+      "package": "com.brkunld.utproject",
+      "permissions": [
+        "android.permission.NFC",
+        "android.permission.CAMERA"
+      ],
+      "adaptiveIcon": {
+        "backgroundColor": "#E6F4FE"
+      },
+      "edgeToEdgeEnabled": true,
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "output": "static",
+      "favicon": "./assets/images/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/images/splash-icon.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#ffffff",
+          "dark": {
+            "backgroundColor": "#000000"
+          }
+        }
+      ],
+      "react-native-nfc-manager"
+    ],
+    "experiments": {
+      "typedRoutes": true,
+      "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "faf14d43-2c24-46d4-aae5-b98d85d1c1d4"
+      }
+    },
+    "owner": "brkunlds-organization"
+  }
+}

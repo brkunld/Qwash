@@ -1,0 +1,9 @@
+node_modules/
+android/
+ios/
+qwash-backend/
+Arduino code/
+
+**/node_modules/
+Admin/node_modules/
+Admin/.expo/
