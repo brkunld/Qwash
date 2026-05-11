@@ -24,7 +24,6 @@
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE"
       },
-      "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false
     },
     "web": {
