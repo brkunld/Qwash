@@ -193,23 +193,23 @@ rtdb.ref("bays").on("child_changed", (snapshot) => {
 // ---------------------------------------------------------
 // 1. OTURUM BAŞLATMA API'Sİ (Mobil Uygulama)
 // ---------------------------------------------------------
-app.post("/api/start-session",verifyUser, async (req, res) => {
-  const { uid, bayId, packageId, tokensCost, durationSec } = req.body;
+app.post("/api/start-session", verifyUser, async (req, res) => {
+  // 🔥 GÜVENLİK 1: Mobil uygulamadan artık fiyat ve süre ALMIYORUZ!
+  // Sadece kimlik (uid), peron (bayId) ve istenilen paketi (packageId) alıyoruz.
+  const { uid, bayId, packageId } = req.body;
 
-  if (
-    !uid ||
-    !bayId ||
-    !packageId ||
-    tokensCost === undefined ||
-    !durationSec
-  ) {
+  if (!uid || !bayId || !packageId) {
     return res.status(400).json({ error: "Eksik parametre gönderildi." });
   }
 
   try {
     const userRef = db.collection("users").doc(uid);
     const rtdbBayRef = rtdb.ref(`bays/${bayId}`);
+    const packageRef = db.collection("packages").doc(packageId); // 🔥 Paketin referansı
+    
     let newSessionId = null;
+    let finalTokensCost = 0;
+    let finalDurationSec = 0;
 
     const baySnap = await rtdbBayRef.once("value");
     const bayData = baySnap.val();
@@ -222,50 +222,66 @@ app.post("/api/start-session",verifyUser, async (req, res) => {
     }
 
     await db.runTransaction(async (t) => {
+      // 1. Kullanıcıyı kontrol et
       const userDoc = await t.get(userRef);
       if (!userDoc.exists) throw new Error("Kullanıcı bulunamadı");
+
+      // 🔥 GÜVENLİK 2: Paketi (Fiyat ve Süre) veritabanından GÜVENLİ bir şekilde çekiyoruz
+      const packageDoc = await t.get(packageRef);
+      if (!packageDoc.exists) throw new Error("Paket_Bulunamadi");
+
+      finalTokensCost = Number(packageDoc.data().tokensCost || 0);
+      finalDurationSec = Number(packageDoc.data().durationSec || 0);
+
+      // Veritabanındaki paket fiyatı yanlışlıkla 0 veya eksi girilmişse sistemi koru
+      if (finalTokensCost <= 0 || finalDurationSec <= 0) {
+        throw new Error("Gecersiz_Paket_Degerleri");
+      }
 
       // 🔥 YIKILMAZ GÜVENLİK DUVARI: KULLANICI ENGELLİ Mİ? 🔥
       if (userDoc.data().isBlocked === true) {
         throw new Error("Engellenmis_Kullanici");
       }
 
+      // Artık "finalTokensCost" değişkeni, kullanıcının gönderdiği değil, senin belirlediğin fiyattır!
       const mevcutBakiye = Number(userDoc.data().walletTokens || 0);
-      if (mevcutBakiye < tokensCost) throw new Error("Yetersiz_Bakiye");
+      if (mevcutBakiye < finalTokensCost) throw new Error("Yetersiz_Bakiye");
 
       const sessionRef = db.collection("sessions").doc();
       newSessionId = sessionRef.id;
 
-      t.update(userRef, { walletTokens: mevcutBakiye - tokensCost });
+      // Bakiyeyi güvenle düş ve logla
+      t.update(userRef, { walletTokens: mevcutBakiye - finalTokensCost });
       t.set(sessionRef, {
         bayId,
         userId: uid,
         type: packageId,
         packageId,
-        tokensCost,
-        durationSec,
+        tokensCost: finalTokensCost,
+        durationSec: finalDurationSec,
         status: "running",
         startedAt: admin.firestore.FieldValue.serverTimestamp(),
       });
     });
 
+    // Makinayı (Peronu) güvenli verilerle çalıştır
     await rtdbBayRef.update({
       status: "busy",
       requestedPackage: packageId,
-      durationSec: durationSec,
-      tokensCost: tokensCost,
+      durationSec: finalDurationSec,
+      tokensCost: finalTokensCost,
       lastUserId: uid,
       currentSessionId: newSessionId,
       updatedAt: admin.database.ServerValue.TIMESTAMP,
     });
 
     safeLog(
-      `✅ BAŞARILI: ${bayId} başlatıldı. Yıkama süresi: ${durationSec} sn`,
+      `✅ BAŞARILI: ${bayId} başlatıldı. Yıkama süresi: ${finalDurationSec} sn, Kesilen: ${finalTokensCost} jeton`,
     );
 
     clearBayTimer(bayId);
 
-    const timeoutMs = durationSec * 1000;
+    const timeoutMs = finalDurationSec * 1000;
     activeTimers[bayId] = {
       type: `Çalışıyor`,
       endTime: Date.now() + timeoutMs,
@@ -306,17 +322,17 @@ app.post("/api/start-session",verifyUser, async (req, res) => {
       .status(200)
       .json({ success: true, message: "Makine başlatıldı." });
   } catch (error) {
-    // 🔥 ENGELLİ KULLANICI YAKALAMA 🔥
     if (error.message === "Engellenmis_Kullanici") {
-      safeLog(
-        `🚨 GÜVENLİK İHLALİ DENEMESİ: Engelli kullanıcı (${uid}) makineyi başlatmaya çalıştı!`,
-      );
-      return res
-        .status(403)
-        .json({ error: "Hesabınız askıya alındığı için işlem yapamazsınız." });
+      safeLog(`🚨 GÜVENLİK İHLALİ: Engelli kullanıcı (${uid}) işlem yapmayı denedi!`);
+      return res.status(403).json({ error: "Hesabınız askıya alındığı için işlem yapamazsınız." });
     }
     if (error.message === "Yetersiz_Bakiye")
       return res.status(400).json({ error: "Jeton bakiyeniz yetersiz." });
+    if (error.message === "Paket_Bulunamadi")
+      return res.status(404).json({ error: "İstenilen paket sistemde bulunamadı." });
+    if (error.message === "Gecersiz_Paket_Degerleri")
+      return res.status(500).json({ error: "Sistemdeki paket değerleri hatalı. Lütfen yöneticiye bildirin." });
+      
     safeLog(`❌ Başlatma hatası: ${error.message}`);
     return res.status(500).json({ error: "Sunucu hatası." });
   }
