@@ -26,8 +26,11 @@ export default function Login() {
   // 🔥 Sunucuyu (Backend) Önceden Isıtma (Hızlandırma Hilesi)
   useEffect(() => {
     // Kullanıcı giriş ekranındayken sunucuya bir 'ping' atıyoruz ki
-    // giriş yap tuşuna bastığında ağ bağlantısı (handshake) zaten hazır olsun.
-    fetch("https://qwash-8q4y.onrender.com/");
+    // giriş yap tuşuna bastığında ağ bağlantısı zaten hazır olsun.
+    // .catch() ekledik: Eğer sunucu o an uykudaysa ve cevap geç gelirse uygulama hata vermesin.
+    fetch("https://qwash-8q4y.onrender.com/").catch(() =>
+      console.log("Sunucu uyanıyor..."),
+    );
   }, []);
 
   const girisYap = async () => {
@@ -58,14 +61,11 @@ export default function Login() {
         }
       }
 
-      // NOT: Admin yönlendirmesi masaüstü uygulamasına taşındığı için buradan kaldırıldı.
-
-      // 3. Profil Kontrolü (Hızlandırmak için Firestore verisini çekiyoruz)
+      // 3. Profil Kontrolü
       const userSnap = await getDoc(doc(db, "users", user.uid));
 
       if (userSnap.exists()) {
         const data = userSnap.data();
-        // Profil dolu mu kontrolü
         const profilTamam = data?.ad?.trim() && data?.soyad?.trim();
 
         if (profilTamam) {
@@ -74,14 +74,12 @@ export default function Login() {
           router.replace(`/profil-tamamla?uid=${user.uid}`);
         }
       } else {
-        // Kullanıcı dökümanı yoksa direkt tamamlamaya gönder
         router.replace(`/profil-tamamla?uid=${user.uid}`);
       }
     } catch (error) {
       console.log("Login Hatası Kod:", error.code);
       let mesaj = "Giriş yapılamadı. Bilgileri kontrol et.";
 
-      // Modern Firebase Hata Yönetimi
       if (error.code === "auth/invalid-credential") {
         mesaj = "E-posta adresi veya şifre hatalı.";
       } else if (error.code === "auth/too-many-requests") {
@@ -115,7 +113,7 @@ export default function Login() {
         <View style={styles.brandArea}>
           <View style={styles.logoBox}>
             <Image
-              source={require("../assets/images/buyuklogo.png")} // Kendi png dosyanızın yolunu ve adını buraya yazın
+              source={require("../assets/images/buyuklogo.png")}
               style={styles.logoImage}
               resizeMode="contain"
             />
@@ -247,10 +245,9 @@ const styles = StyleSheet.create({
     gap: 8,
   },
 
+  /* 🔥 CSS HATASI BURADA DÜZELTİLDİ: width:1, height:1 değerleri silindi 🔥 */
   logoBox: {
-    width: 1,
-    height: 1,
-    backgroundColor: "transparent", // Eğer logonuzun kendi arka planı varsa ve bu siyah kutuyu kaldırmak isterseniz burayı "transparent" yapabilirsiniz.
+    backgroundColor: "transparent",
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 40,
@@ -258,10 +255,9 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   logoImage: {
-    // Logonun kutu içindeki genişliği
-    height: 40, // Logonun kutu içindeki yüksekliği
+    width: 150, // Logonun tam görünebilmesi için genişlik eklendi
+    height: 50, // Yükseklik biraz daha okunabilir olması için artırıldı
   },
-  // logoIcon: { fontSize: 28 }, <-- Eğer emojiyi başka bir yerde kullanmıyorsanız bu satırı silebilirsiniz.
   brandTitle: {
     fontSize: 26,
     fontWeight: "900",
