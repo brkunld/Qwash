@@ -1374,16 +1374,7 @@
         onValue,
       } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-database.js";
 
-      const firebaseConfig = {
-        apiKey: "AIzaSyDXXgyY_NW6_D1Ecr0ZQljYUvQSTypgJaU",
-        authDomain: "ut-project-1c283.firebaseapp.com",
-        projectId: "ut-project-1c283",
-        storageBucket: "ut-project-1c283.appspot.com",
-        messagingSenderId: "269291398032",
-        appId: "1:269291398032:web:b37697ae1350efe9938915",
-        databaseURL:
-          "https://ut-project-1c283-default-rtdb.europe-west1.firebasedatabase.app/",
-      };
+      const firebaseConfig = window.electronAPI.getFirebaseConfig();
 
       const app = initializeApp(firebaseConfig);
       const auth = getAuth(app);
