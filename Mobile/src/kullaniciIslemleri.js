@@ -415,7 +415,7 @@ export function useKullaniciIslemleri() {
     };
   };
 
-  const sessionBaslat = async (islemBayId, packageId) => {
+ const sessionBaslat = async (islemBayId, packageId) => {
     if (!uid) return router.replace("/login");
     const bay = baylarData[islemBayId];
 
@@ -435,10 +435,16 @@ export function useKullaniciIslemleri() {
         return;
       }
 
+      // 🔥 YENİ: Firebase'den anlık güvenlik token'ını alıyoruz
+      const token = await auth.currentUser?.getIdToken();
+
       const API_URL = "https://qwash-8q4y.onrender.com/api/start-session";
       const response = await fetch(API_URL, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}` // 🔥 YENİ: Güvenlik görevlisine kimliği gösteriyoruz
+        },
         body: JSON.stringify({
           uid: uid,
           bayId: islemBayId,
@@ -467,10 +473,16 @@ export function useKullaniciIslemleri() {
 
       setIslemdekiBaylar((prev) => ({ ...prev, [islemBayId]: true }));
       try {
+        // 🔥 YENİ: Firebase'den anlık güvenlik token'ını alıyoruz
+        const token = await auth.currentUser?.getIdToken();
+
         const API_URL = "https://qwash-8q4y.onrender.com/api/stop-session";
         const response = await fetch(API_URL, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { 
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${token}` // 🔥 YENİ: Güvenlik görevlisine kimliği gösteriyoruz
+          },
           body: JSON.stringify({
             uid: uid,
             bayId: islemBayId,
@@ -539,10 +551,16 @@ export function useKullaniciIslemleri() {
       typeof amountTRYParam === "number" ? amountTRYParam : tokens * jetonFiyat;
 
     try {
+      // 🔥 YENİ: Firebase'den anlık güvenlik token'ını alıyoruz
+      const token = await auth.currentUser?.getIdToken();
+
       const API_URL = "https://qwash-8q4y.onrender.com/api/topup";
       const response = await fetch(API_URL, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}` // 🔥 YENİ: Güvenlik görevlisine kimliği gösteriyoruz
+        },
         body: JSON.stringify({
           uid: uid,
           tokens: tokens,
@@ -568,7 +586,7 @@ export function useKullaniciIslemleri() {
       setYuklemeIslemde(false);
     }
   };
-
+  
   const profilKaydet = async () => {
     if (!uid) return router.replace("/login");
 

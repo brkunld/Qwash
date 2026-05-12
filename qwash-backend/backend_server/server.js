@@ -17,6 +17,62 @@ const localSecretPath = path.join(
   "serviceAccountKey.json",
 );
 
+// =========================================================
+// 🛡️ GÜVENLİK DUVARLARI (MIDDLEWARE)
+// =========================================================
+
+// 🔥 1. MOBİL UYGULAMA İÇİN: STANDART KULLANICI DOĞRULAMASI
+const verifyUser = async (req, res, next) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    safeLog(`🚨 YETKİSİZ ERİŞİM DENEMESİ: Kimlik (Token) gönderilmedi.`);
+    return res.status(401).json({ error: "İşlem reddedildi: Giriş yapmanız gerekiyor." });
+  }
+
+  const token = authHeader.split(' ')[1];
+  try {
+    // Firebase'e soruyoruz: "Bu token gerçek mi?"
+    const decodedToken = await admin.auth().verifyIdToken(token);
+    
+    // 🔥 EN BÜYÜK AÇIĞI KAPATAN YER: 
+    // Gelen istekteki uid ile, Token'ın sahibinin uid'si aynı mı?
+    if (req.body.uid && req.body.uid !== decodedToken.uid) {
+       safeLog(`🚨 SAHTEKARLIK TESPİTİ! Kendi hesabı yerine başkasının işlemi yapılmaya çalışıldı. Kurban UID: ${req.body.uid}, Saldırgan: ${decodedToken.uid}`);
+       return res.status(403).json({ error: "Güvenlik ihlali: Başka bir kullanıcının adına işlem yapamazsınız!" });
+    }
+    
+    req.user = decodedToken; // Kimlik onaylandı, içeri girebilir!
+    next(); 
+  } catch (error) {
+    safeLog(`❌ Geçersiz Token: ${error.message}`);
+    return res.status(401).json({ error: "Geçersiz veya süresi dolmuş oturum." });
+  }
+};
+
+// 🔥 2. ELECTRON (MASAÜSTÜ) İÇİN: ADMİN DOĞRULAMASI
+const verifyAdmin = async (req, res, next) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ error: "Yetkisiz erişim." });
+  }
+
+  const token = authHeader.split(' ')[1];
+  try {
+    const decodedToken = await admin.auth().verifyIdToken(token);
+    
+    // Senin admin giriş mantığına (login.js) uygun olarak admin mi diye bakıyoruz
+    if (decodedToken.admin === true || decodedToken.role === 'admin') {
+       req.admin = decodedToken;
+       next();
+    } else {
+       safeLog(`🚨 YETKİSİZ ADMİN DENEMESİ: Normal kullanıcı (${decodedToken.email}) admin paneline girmeye çalıştı!`);
+       return res.status(403).json({ error: "Bu işlem için yetkiniz yok." });
+    }
+  } catch (error) {
+    return res.status(401).json({ error: "Geçersiz admin oturumu." });
+  }
+};
+
 let serviceAccountPath;
 
 // Dosyanın Render'da olup olmadığını kontrol et, yoksa lokal yolu kullan
@@ -137,7 +193,7 @@ rtdb.ref("bays").on("child_changed", (snapshot) => {
 // ---------------------------------------------------------
 // 1. OTURUM BAŞLATMA API'Sİ (Mobil Uygulama)
 // ---------------------------------------------------------
-app.post("/api/start-session", async (req, res) => {
+app.post("/api/start-session",verifyUser, async (req, res) => {
   const { uid, bayId, packageId, tokensCost, durationSec } = req.body;
 
   if (
@@ -269,7 +325,7 @@ app.post("/api/start-session", async (req, res) => {
 // ---------------------------------------------------------
 // 2. OTURUMU MANUEL DURDURMA API'Sİ (Mobil Uygulama)
 // ---------------------------------------------------------
-app.post("/api/stop-session", async (req, res) => {
+app.post("/api/stop-session",verifyUser, async (req, res) => {
   const { bayId, sessionId, uid } = req.body;
 
   if (!bayId || !sessionId)
@@ -307,7 +363,7 @@ app.post("/api/stop-session", async (req, res) => {
 // ---------------------------------------------------------
 // 3. MÜŞTERİ KART İLE BAKİYE YÜKLEME API'Sİ (Mobil Uygulama)
 // ---------------------------------------------------------
-app.post("/api/topup", async (req, res) => {
+app.post("/api/topup", verifyUser,async (req, res) => {
   const { uid, tokens, amountTRY, kartNo, sonKullanma, cvv } = req.body;
 
   if (!uid || !tokens || !amountTRY)
@@ -384,7 +440,7 @@ app.post("/api/topup", async (req, res) => {
 // ---------------------------------------------------------
 // 4. ADMİN PANELİ API'LERİ (Electron Masaüstü İçin)
 // ---------------------------------------------------------
-app.get("/api/admin/bays", async (req, res) => {
+app.get("/api/admin/bays",verifyAdmin, async (req, res) => {
   try {
     const snapshot = await rtdb.ref("bays").once("value");
     if (!snapshot.exists()) return res.status(200).json({ bays: [] });
@@ -401,7 +457,7 @@ app.get("/api/admin/bays", async (req, res) => {
   }
 });
 
-app.post("/api/admin/update-bay", async (req, res) => {
+app.post("/api/admin/update-bay",verifyAdmin, async (req, res) => {
   const { bayId, patch } = req.body;
   if (!bayId || !patch)
     return res.status(400).json({ error: "Eksik parametre." });
@@ -427,7 +483,7 @@ app.post("/api/admin/update-bay", async (req, res) => {
   }
 });
 
-app.post("/api/admin/search-user", async (req, res) => {
+app.post("/api/admin/search-user",verifyAdmin, async (req, res) => {
   const { arama } = req.body;
   if (!arama)
     return res.status(400).json({ error: "Arama terimi boş olamaz." });
@@ -480,7 +536,7 @@ app.post("/api/admin/search-user", async (req, res) => {
 // ---------------------------------------------------------
 // KULLANICI DURUMUNU GÜNCELLEME (ENGELLEME) API'Sİ
 // ---------------------------------------------------------
-app.post("/api/admin/update-user", async (req, res) => {
+app.post("/api/admin/update-user",verifyAdmin, async (req, res) => {
   const { userId, patch } = req.body;
 
   if (!userId || !patch) {
@@ -508,7 +564,7 @@ app.post("/api/admin/update-user", async (req, res) => {
   }
 });
 
-app.post("/api/admin/topup", async (req, res) => {
+app.post("/api/admin/topup",verifyAdmin, async (req, res) => {
   const { userId, tokens } = req.body;
 
   if (!userId || !tokens)
