@@ -49,27 +49,28 @@ const verifyUser = async (req, res, next) => {
   }
 };
 
-// 🔥 2. ELECTRON (MASAÜSTÜ) İÇİN: ADMİN DOĞRULAMASI
 const verifyAdmin = async (req, res, next) => {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({ error: "Yetkisiz erişim." });
+    return res.status(401).json({ error: "Yetkisiz erişim: Token bulunamadı." });
   }
 
   const token = authHeader.split(' ')[1];
   try {
     const decodedToken = await admin.auth().verifyIdToken(token);
     
-    // Senin admin giriş mantığına (login.js) uygun olarak admin mi diye bakıyoruz
-    if (decodedToken.admin === true || decodedToken.role === 'admin') {
+    // 🔥 GÜVENLİ YÖNTEM: E-postaları .env dosyasından çekip diziye çeviriyoruz
+    const authorizedEmails = process.env.AUTHORIZED_ADMINS ? process.env.AUTHORIZED_ADMINS.split(',') : [];
+
+    if (authorizedEmails.includes(decodedToken.email)) {
        req.admin = decodedToken;
        next();
     } else {
-       safeLog(`🚨 YETKİSİZ ADMİN DENEMESİ: Normal kullanıcı (${decodedToken.email}) admin paneline girmeye çalıştı!`);
-       return res.status(403).json({ error: "Bu işlem için yetkiniz yok." });
+       safeLog(`🚨 YETKİSİZ GİRİŞ DENEMESİ: ${decodedToken.email}`);
+       return res.status(403).json({ error: "Bu panele erişim yetkiniz yok!" });
     }
   } catch (error) {
-    return res.status(401).json({ error: "Geçersiz admin oturumu." });
+    return res.status(401).json({ error: "Oturum geçersiz." });
   }
 };
 
