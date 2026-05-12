@@ -1,98 +1,20 @@
 require("dotenv").config();
 
 const path = require("path");
-const fs = require("fs"); // 🔥 Dosya kontrolü için fs modülünü ekledik
+const fs = require("fs");
 const express = require("express");
 const cors = require("cors");
 const admin = require("firebase-admin");
 const cron = require("node-cron");
 
-// 🔥 1. Yol: Render'ın standart Secret File dizini
+// =========================================================
+// 🔥 SERVICE ACCOUNT AYARLARI
+// =========================================================
 const renderSecretPath = "/etc/secrets/serviceAccountKey.json";
-// 🔥 2. Yol: Bilgisayarınızdaki (lokal) dosya yolu
-const localSecretPath = path.join(
-  __dirname,
-  "..",
-  "..",
-  "serviceAccountKey.json",
-);
-
-// =========================================================
-// 🛡️ GÜVENLİK DUVARLARI (MIDDLEWARE)
-// =========================================================
-
-// 🔥 1. MOBİL UYGULAMA İÇİN: STANDART KULLANICI DOĞRULAMASI
-const verifyUser = async (req, res, next) => {
-  const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    safeLog(`🚨 YETKİSİZ ERİŞİM DENEMESİ: Kimlik (Token) gönderilmedi.`);
-    return res.status(401).json({ error: "İşlem reddedildi: Giriş yapmanız gerekiyor." });
-  }
-
-  const token = authHeader.split(' ')[1];
-  try {
-    // Firebase'e soruyoruz: "Bu token gerçek mi?"
-    const decodedToken = await admin.auth().verifyIdToken(token);
-    
-    // 🔥 EN BÜYÜK AÇIĞI KAPATAN YER: 
-    // Gelen istekteki uid ile, Token'ın sahibinin uid'si aynı mı?
-    if (req.body.uid && req.body.uid !== decodedToken.uid) {
-       safeLog(`🚨 SAHTEKARLIK TESPİTİ! Kendi hesabı yerine başkasının işlemi yapılmaya çalışıldı. Kurban UID: ${req.body.uid}, Saldırgan: ${decodedToken.uid}`);
-       return res.status(403).json({ error: "Güvenlik ihlali: Başka bir kullanıcının adına işlem yapamazsınız!" });
-    }
-    
-    req.user = decodedToken; // Kimlik onaylandı, içeri girebilir!
-    next(); 
-  } catch (error) {
-    safeLog(`❌ Geçersiz Token: ${error.message}`);
-    return res.status(401).json({ error: "Geçersiz veya süresi dolmuş oturum." });
-  }
-};
-
-const verifyAdmin = async (req, res, next) => {
-  const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({ error: "Yetkisiz erişim: Token bulunamadı." });
-  }
-
-  const token = authHeader.split(' ')[1];
-  try {
-    const decodedToken = await admin.auth().verifyIdToken(token);
-    
-    // 🔥 GÜVENLİ YÖNTEM: E-postaları .env dosyasından çekip diziye çeviriyoruz
-    const authorizedEmails = process.env.AUTHORIZED_ADMINS
-  ? process.env.AUTHORIZED_ADMINS
-      .split(",")
-      .map((email) => email.trim().toLowerCase())
-  : [];
-
-const requestEmail = decodedToken.email
-  ? decodedToken.email.trim().toLowerCase()
-  : "";
-
-if (authorizedEmails.includes(requestEmail)) {
-  req.admin = decodedToken;
-  next();
-} else {
-  safeLog(`🚨 YETKİSİZ GİRİŞ DENEMESİ: ${decodedToken.email}`);
-  return res.status(403).json({ error: "Bu panele erişim yetkiniz yok!" });
-}
-
-    if (authorizedEmails.includes(decodedToken.email)) {
-       req.admin = decodedToken;
-       next();
-    } else {
-       safeLog(`🚨 YETKİSİZ GİRİŞ DENEMESİ: ${decodedToken.email}`);
-       return res.status(403).json({ error: "Bu panele erişim yetkiniz yok!" });
-    }
-  } catch (error) {
-    return res.status(401).json({ error: "Oturum geçersiz." });
-  }
-};
+const localSecretPath = path.join(__dirname, "..", "..", "serviceAccountKey.json");
 
 let serviceAccountPath;
 
-// Dosyanın Render'da olup olmadığını kontrol et, yoksa lokal yolu kullan
 if (fs.existsSync(renderSecretPath)) {
   serviceAccountPath = renderSecretPath;
   console.log("✅ Render Secret File bulundu ve kullanılıyor.");
@@ -103,7 +25,6 @@ if (fs.existsSync(renderSecretPath)) {
 
 const serviceAccount = require(serviceAccountPath);
 
-// 🔥 DİKKAT: firebase-admin sadece BİR KERE initialize edilmelidir.
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
   databaseURL: process.env.FIREBASE_DB_URL,
@@ -117,14 +38,7 @@ app.use(cors());
 app.use(express.json());
 
 // =========================================================
-// 🔥 UPTIMEROBOT İÇİN PING (YAŞIYORUM) YANITI
-// =========================================================
-app.get("/", (req, res) => {
-  res.status(200).send("QWash API Sapasağlam Ayakta! 🚀");
-});
-
-// =========================================================
-// 🔥 LOG SİSTEMİ (Artık doğrudan sunucu terminaline yazıyor)
+// 🔥 LOG SİSTEMİ
 // =========================================================
 const safeLog = (message) => {
   const saat = new Date().toLocaleTimeString("tr-TR");
@@ -137,7 +51,108 @@ app.use((req, res, next) => {
 });
 
 // =========================================================
-// 🔥 CANLI SAYAÇ TAKİP SİSTEMİ (DASHBOARD)
+// 🛡️ GÜVENLİK DUVARLARI
+// =========================================================
+const verifyUser = async (req, res, next) => {
+  const authHeader = req.headers.authorization || "";
+
+  if (!authHeader.startsWith("Bearer ")) {
+    safeLog("🚨 YETKİSİZ ERİŞİM DENEMESİ: Kimlik tokenı gönderilmedi.");
+    return res.status(401).json({
+      error: "İşlem reddedildi: Giriş yapmanız gerekiyor.",
+    });
+  }
+
+  const token = authHeader.replace("Bearer ", "").trim();
+
+  if (!token) {
+    return res.status(401).json({
+      error: "Geçersiz token.",
+    });
+  }
+
+  try {
+    const decodedToken = await admin.auth().verifyIdToken(token);
+
+    if (req.body.uid && req.body.uid !== decodedToken.uid) {
+      safeLog(
+        `🚨 SAHTEKARLIK TESPİTİ! Kurban UID: ${req.body.uid}, Saldırgan: ${decodedToken.uid}`,
+      );
+
+      return res.status(403).json({
+        error: "Güvenlik ihlali: Başka bir kullanıcının adına işlem yapamazsınız!",
+      });
+    }
+
+    req.user = decodedToken;
+    return next();
+  } catch (error) {
+    safeLog(`❌ Geçersiz Token: ${error.message}`);
+
+    return res.status(401).json({
+      error: "Geçersiz veya süresi dolmuş oturum.",
+    });
+  }
+};
+
+const verifyAdmin = async (req, res, next) => {
+  const authHeader = req.headers.authorization || "";
+
+  if (!authHeader.startsWith("Bearer ")) {
+    return res.status(401).json({
+      error: "Yetkisiz erişim: Token bulunamadı.",
+    });
+  }
+
+  const token = authHeader.replace("Bearer ", "").trim();
+
+  if (!token) {
+    return res.status(401).json({
+      error: "Yetkisiz erişim: Token boş geldi.",
+    });
+  }
+
+  try {
+    const decodedToken = await admin.auth().verifyIdToken(token);
+
+    const authorizedEmails = process.env.AUTHORIZED_ADMINS
+      ? process.env.AUTHORIZED_ADMINS.split(",")
+          .map((email) => email.trim().toLowerCase())
+          .filter(Boolean)
+      : [];
+
+    const requestEmail = decodedToken.email
+      ? decodedToken.email.trim().toLowerCase()
+      : "";
+
+    if (!authorizedEmails.includes(requestEmail)) {
+      safeLog(`🚨 YETKİSİZ GİRİŞ DENEMESİ: ${requestEmail}`);
+
+      return res.status(403).json({
+        error: "Bu panele erişim yetkiniz yok!",
+      });
+    }
+
+    req.admin = decodedToken;
+    return next();
+  } catch (error) {
+    safeLog(`❌ ADMIN TOKEN HATASI: ${error.message}`);
+
+    return res.status(401).json({
+      error: "Oturum geçersiz.",
+    });
+  }
+};
+
+// =========================================================
+// 🔥 UPTIMEROBOT / HEALTH CHECK
+// =========================================================
+app.get("/", (req, res) => {
+  return res.status(200).send("QWash API Sapasağlam Ayakta! 🚀");
+});
+
+// =========================================================
+// 🔥 CANLI SAYAÇ TAKİP SİSTEMİ
 // =========================================================
 const activeTimers = {};
 
@@ -156,25 +171,31 @@ const startWaitingTimer = (bayId) => {
     type: "Müşteri Bekleniyor",
     endTime: Date.now() + 60000,
     timeout: setTimeout(async () => {
-      const checkSnap = await rtdb.ref(`bays/${bayId}`).once("value");
-      if (checkSnap.val()?.status === "waiting") {
-        await rtdb.ref(`bays/${bayId}`).update({
-          status: "available",
-          updatedAt: admin.database.ServerValue.TIMESTAMP,
-        });
-        safeLog(
-          `⏳ ZAMAN AŞIMI: ${bayId} işlem yapılmadığı için boşa çıkarıldı.`,
-        );
+      try {
+        const checkSnap = await rtdb.ref(`bays/${bayId}`).once("value");
+        const bayData = checkSnap.val();
+
+        if (bayData?.status === "waiting") {
+          await rtdb.ref(`bays/${bayId}`).update({
+            status: "available",
+            updatedAt: admin.database.ServerValue.TIMESTAMP,
+          });
+
+          safeLog(`⏳ ZAMAN AŞIMI: ${bayId} işlem yapılmadığı için boşa çıkarıldı.`);
+        }
+      } catch (error) {
+        safeLog(`❌ Bekleme timer hatası: ${error.message}`);
+      } finally {
+        clearBayTimer(bayId);
       }
-      clearBayTimer(bayId);
     }, 60000),
   };
 };
 
 // =========================================================
-// 🔥 1 DAKİKA BEKLEME (OTOMATİK İPTAL) DİNLEYİCİSİ
+// 🔥 1 DAKİKA BEKLEME DİNLEYİCİSİ
 // =========================================================
-const bayStatusCache = {}; // YENİ: Peronların son statülerini hafızada tutarız
+const bayStatusCache = {};
 
 rtdb.ref("bays").on("child_changed", (snapshot) => {
   const bayId = snapshot.key;
@@ -185,34 +206,31 @@ rtdb.ref("bays").on("child_changed", (snapshot) => {
   const oldStatus = bayStatusCache[bayId];
   const currentStatus = bayData.status;
 
-  bayStatusCache[bayId] = currentStatus; // Hafızayı yeni duruma göre güncelle
+  bayStatusCache[bayId] = currentStatus;
 
-  // 🔥 ÇÖZÜM: Eğer statü değişmediyse (yani sadece ESP32 nabız attığı için tetiklendiyse) GÖRMEZDEN GEL!
   if (oldStatus === currentStatus) {
     return;
   }
 
-  // Sadece statü gerçekten değiştiğinde sayaç işlemleri yapılır
   if (currentStatus === "waiting") {
     if (activeTimers[bayId]) return;
     startWaitingTimer(bayId);
-  } else if (
+    return;
+  }
+
+  if (
     currentStatus !== "waiting" &&
     activeTimers[bayId]?.type === "Müşteri Bekleniyor"
   ) {
     clearBayTimer(bayId);
-    safeLog(
-      `🛑 BEKLEME İPTAL: ${bayId} durumu değişti, 60sn sayaç durduruldu.`,
-    );
+    safeLog(`🛑 BEKLEME İPTAL: ${bayId} durumu değişti, 60sn sayaç durduruldu.`);
   }
 });
 
 // ---------------------------------------------------------
-// 1. OTURUM BAŞLATMA API'Sİ (Mobil Uygulama)
+// 1. OTURUM BAŞLATMA API'Sİ
 // ---------------------------------------------------------
 app.post("/api/start-session", verifyUser, async (req, res) => {
-  // 🔥 GÜVENLİK 1: Mobil uygulamadan artık fiyat ve süre ALMIYORUZ!
-  // Sadece kimlik (uid), peron (bayId) ve istenilen paketi (packageId) alıyoruz.
   const { uid, bayId, packageId } = req.body;
 
   if (!uid || !bayId || !packageId) {
@@ -222,8 +240,8 @@ app.post("/api/start-session", verifyUser, async (req, res) => {
   try {
     const userRef = db.collection("users").doc(uid);
     const rtdbBayRef = rtdb.ref(`bays/${bayId}`);
-    const packageRef = db.collection("packages").doc(packageId); // 🔥 Paketin referansı
-    
+    const packageRef = db.collection("packages").doc(packageId);
+
     let newSessionId = null;
     let finalTokensCost = 0;
     let finalDurationSec = 0;
@@ -231,44 +249,39 @@ app.post("/api/start-session", verifyUser, async (req, res) => {
     const baySnap = await rtdbBayRef.once("value");
     const bayData = baySnap.val();
 
-    if (
-      !bayData ||
-      (bayData.status !== "available" && bayData.status !== "waiting")
-    ) {
+    if (!bayData || (bayData.status !== "available" && bayData.status !== "waiting")) {
       return res.status(400).json({ error: "Peron şu anda kullanılıyor." });
     }
 
     await db.runTransaction(async (t) => {
-      // 1. Kullanıcıyı kontrol et
       const userDoc = await t.get(userRef);
-      if (!userDoc.exists) throw new Error("Kullanıcı bulunamadı");
+      if (!userDoc.exists) throw new Error("Kullanıcı_Bulunamadi");
 
-      // 🔥 GÜVENLİK 2: Paketi (Fiyat ve Süre) veritabanından GÜVENLİ bir şekilde çekiyoruz
       const packageDoc = await t.get(packageRef);
       if (!packageDoc.exists) throw new Error("Paket_Bulunamadi");
 
       finalTokensCost = Number(packageDoc.data().tokensCost || 0);
       finalDurationSec = Number(packageDoc.data().durationSec || 0);
 
-      // Veritabanındaki paket fiyatı yanlışlıkla 0 veya eksi girilmişse sistemi koru
       if (finalTokensCost <= 0 || finalDurationSec <= 0) {
         throw new Error("Gecersiz_Paket_Degerleri");
       }
 
-      // 🔥 YIKILMAZ GÜVENLİK DUVARI: KULLANICI ENGELLİ Mİ? 🔥
       if (userDoc.data().isBlocked === true) {
         throw new Error("Engellenmis_Kullanici");
       }
 
-      // Artık "finalTokensCost" değişkeni, kullanıcının gönderdiği değil, senin belirlediğin fiyattır!
       const mevcutBakiye = Number(userDoc.data().walletTokens || 0);
       if (mevcutBakiye < finalTokensCost) throw new Error("Yetersiz_Bakiye");
 
       const sessionRef = db.collection("sessions").doc();
       newSessionId = sessionRef.id;
 
-      // Bakiyeyi güvenle düş ve logla
-      t.update(userRef, { walletTokens: mevcutBakiye - finalTokensCost });
+      t.update(userRef, {
+        walletTokens: mevcutBakiye - finalTokensCost,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+
       t.set(sessionRef, {
         bayId,
         userId: uid,
@@ -281,7 +294,6 @@ app.post("/api/start-session", verifyUser, async (req, res) => {
       });
     });
 
-    // Makinayı (Peronu) güvenli verilerle çalıştır
     await rtdbBayRef.update({
       status: "busy",
       requestedPackage: packageId,
@@ -293,22 +305,21 @@ app.post("/api/start-session", verifyUser, async (req, res) => {
     });
 
     safeLog(
-      `✅ BAŞARILI: ${bayId} başlatıldı. Yıkama süresi: ${finalDurationSec} sn, Kesilen: ${finalTokensCost} jeton`,
+      `✅ BAŞARILI: ${bayId} başlatıldı. Süre: ${finalDurationSec} sn, Kesilen: ${finalTokensCost} jeton`,
     );
 
     clearBayTimer(bayId);
 
     const timeoutMs = finalDurationSec * 1000;
     activeTimers[bayId] = {
-      type: `Çalışıyor`,
+      type: "Çalışıyor",
       endTime: Date.now() + timeoutMs,
       timeout: setTimeout(async () => {
         try {
           safeLog(`⏰ SÜRE DOLDU: ${bayId} otomatik kapatılıyor...`);
-          const sessionCheck = await db
-            .collection("sessions")
-            .doc(newSessionId)
-            .get();
+
+          const sessionCheck = await db.collection("sessions").doc(newSessionId).get();
+
           if (sessionCheck.exists && sessionCheck.data().status === "running") {
             await db.collection("sessions").doc(newSessionId).update({
               status: "ended",
@@ -324,9 +335,8 @@ app.post("/api/start-session", verifyUser, async (req, res) => {
               tokensCost: null,
               updatedAt: admin.database.ServerValue.TIMESTAMP,
             });
-            safeLog(
-              `🏁 OTOMATİK KAPATMA BAŞARILI: ${bayId} bekleme moduna alındı.`,
-            );
+
+            safeLog(`🏁 OTOMATİK KAPATMA BAŞARILI: ${bayId} bekleme moduna alındı.`);
             startWaitingTimer(bayId);
           }
         } catch (err) {
@@ -335,34 +345,46 @@ app.post("/api/start-session", verifyUser, async (req, res) => {
       }, timeoutMs),
     };
 
-    return res
-      .status(200)
-      .json({ success: true, message: "Makine başlatıldı." });
+    return res.status(200).json({
+      success: true,
+      message: "Makine başlatıldı.",
+    });
   } catch (error) {
     if (error.message === "Engellenmis_Kullanici") {
       safeLog(`🚨 GÜVENLİK İHLALİ: Engelli kullanıcı (${uid}) işlem yapmayı denedi!`);
-      return res.status(403).json({ error: "Hesabınız askıya alındığı için işlem yapamazsınız." });
+      return res.status(403).json({
+        error: "Hesabınız askıya alındığı için işlem yapamazsınız.",
+      });
     }
-    if (error.message === "Yetersiz_Bakiye")
+
+    if (error.message === "Yetersiz_Bakiye") {
       return res.status(400).json({ error: "Jeton bakiyeniz yetersiz." });
-    if (error.message === "Paket_Bulunamadi")
+    }
+
+    if (error.message === "Paket_Bulunamadi") {
       return res.status(404).json({ error: "İstenilen paket sistemde bulunamadı." });
-    if (error.message === "Gecersiz_Paket_Degerleri")
-      return res.status(500).json({ error: "Sistemdeki paket değerleri hatalı. Lütfen yöneticiye bildirin." });
-      
+    }
+
+    if (error.message === "Gecersiz_Paket_Degerleri") {
+      return res.status(500).json({
+        error: "Sistemdeki paket değerleri hatalı. Lütfen yöneticiye bildirin.",
+      });
+    }
+
     safeLog(`❌ Başlatma hatası: ${error.message}`);
     return res.status(500).json({ error: "Sunucu hatası." });
   }
 });
 
 // ---------------------------------------------------------
-// 2. OTURUMU MANUEL DURDURMA API'Sİ (Mobil Uygulama)
+// 2. OTURUMU MANUEL DURDURMA API'Sİ
 // ---------------------------------------------------------
-app.post("/api/stop-session",verifyUser, async (req, res) => {
-  const { bayId, sessionId, uid } = req.body;
+app.post("/api/stop-session", verifyUser, async (req, res) => {
+  const { bayId, sessionId } = req.body;
 
-  if (!bayId || !sessionId)
+  if (!bayId || !sessionId) {
     return res.status(400).json({ error: "Eksik parametre." });
+  }
 
   try {
     const sessionRef = db.collection("sessions").doc(sessionId);
@@ -384,9 +406,11 @@ app.post("/api/stop-session",verifyUser, async (req, res) => {
 
     safeLog(`⛔ MANUEL DURDURMA BAŞARILI: ${bayId} durduruldu.`);
     startWaitingTimer(bayId);
-    return res
-      .status(200)
-      .json({ success: true, message: "Oturum durduruldu." });
+
+    return res.status(200).json({
+      success: true,
+      message: "Oturum durduruldu.",
+    });
   } catch (error) {
     safeLog(`❌ Durdurma hatası: ${error.message}`);
     return res.status(500).json({ error: "Sunucu hatası." });
@@ -394,25 +418,29 @@ app.post("/api/stop-session",verifyUser, async (req, res) => {
 });
 
 // ---------------------------------------------------------
-// 3. MÜŞTERİ KART İLE BAKİYE YÜKLEME API'Sİ (Mobil Uygulama)
+// 3. MÜŞTERİ BAKİYE YÜKLEME API'Sİ
 // ---------------------------------------------------------
-app.post("/api/topup", verifyUser,async (req, res) => {
-  const { uid, tokens, amountTRY, kartNo, sonKullanma, cvv } = req.body;
+app.post("/api/topup", verifyUser, async (req, res) => {
+  const { uid, tokens, amountTRY, kartNo } = req.body;
 
-  if (!uid || !tokens || !amountTRY)
+  if (!uid || !tokens || !amountTRY) {
     return res.status(400).json({ error: "Eksik parametre." });
-  if (!kartNo || kartNo.length < 12)
-    return res.status(400).json({ error: "Geçersiz Kart Numarası" });
+  }
 
-  // 🔥 1. GÜVENLİK: Gelen verileri kesinlikle sayıya (integer/number) çeviriyoruz 🔥
+  if (!kartNo || kartNo.length < 12) {
+    return res.status(400).json({ error: "Geçersiz Kart Numarası" });
+  }
+
   const eklenecekJeton = parseInt(tokens, 10);
   const eklenecekTutar = Number(amountTRY);
 
-  // 🔥 2. GÜVENLİK: Sayı değilse (NaN) veya 0'dan küçükse/eşitse hileyi engelle 🔥
-  if (isNaN(eklenecekJeton) || eklenecekJeton <= 0) {
-    return res.status(400).json({ error: "Geçersiz jeton miktarı! Sistem manipülasyonu engellendi." });
+  if (!Number.isFinite(eklenecekJeton) || eklenecekJeton <= 0) {
+    return res.status(400).json({
+      error: "Geçersiz jeton miktarı! Sistem manipülasyonu engellendi.",
+    });
   }
-  if (isNaN(eklenecekTutar) || eklenecekTutar <= 0) {
+
+  if (!Number.isFinite(eklenecekTutar) || eklenecekTutar <= 0) {
     return res.status(400).json({ error: "Geçersiz ödeme tutarı!" });
   }
 
@@ -422,9 +450,8 @@ app.post("/api/topup", verifyUser,async (req, res) => {
 
     await db.runTransaction(async (t) => {
       const userDoc = await t.get(userRef);
-      if (!userDoc.exists) throw new Error("Kullanıcı bulunamadı");
+      if (!userDoc.exists) throw new Error("Kullanıcı_Bulunamadi");
 
-      // 🔥 YIKILMAZ GÜVENLİK DUVARI: KULLANICI ENGELLİ Mİ? 🔥
       if (userDoc.data().isBlocked === true) {
         throw new Error("Engellenmis_Kullanici");
       }
@@ -432,17 +459,16 @@ app.post("/api/topup", verifyUser,async (req, res) => {
       const mevcutBakiye = Number(userDoc.data().walletTokens || 0);
 
       t.update(userRef, {
-        // Artık iki değerin de kesinlikle "Sayı" olduğundan eminiz. (Örn: 50 + 100 = 150)
-        walletTokens: mevcutBakiye + eklenecekJeton, 
+        walletTokens: mevcutBakiye + eklenecekJeton,
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       });
 
       t.set(txRef, {
         type: "topup",
         status: "success",
-        tokens: eklenecekJeton, // Güvenli değişkeni kullandık
-        unitPriceTRY: eklenecekTutar / eklenecekJeton, // Güvenli matematiksel işlem
-        amountTRY: eklenecekTutar, // Güvenli değişkeni kullandık
+        tokens: eklenecekJeton,
+        unitPriceTRY: eklenecekTutar / eklenecekJeton,
+        amountTRY: eklenecekTutar,
         userId: uid,
         adminId: null,
         bayId: null,
@@ -453,47 +479,57 @@ app.post("/api/topup", verifyUser,async (req, res) => {
     });
 
     safeLog(`✅ MÜŞTERİ ÖDEMESİ BAŞARILI: ${uid} -> ${eklenecekJeton} jeton eklendi.`);
-    return res
-      .status(200)
-      .json({ success: true, message: "Bakiye başarıyla yüklendi." });
+
+    return res.status(200).json({
+      success: true,
+      message: "Bakiye başarıyla yüklendi.",
+    });
   } catch (error) {
     safeLog(`❌ Müşteri ödeme hatası: ${error.message}`);
-    // 🔥 ENGELLİ KULLANICI YAKALAMA 🔥
+
     if (error.message === "Engellenmis_Kullanici") {
       return res.status(403).json({
         error: "Hesabınız askıya alındığı için bakiye yükleyemezsiniz.",
       });
     }
-    return res
-      .status(500)
-      .json({ error: "Sunucu hatası, yükleme yapılamadı." });
+
+    return res.status(500).json({
+      error: "Sunucu hatası, yükleme yapılamadı.",
+    });
   }
 });
 
 // ---------------------------------------------------------
-// 4. ADMİN PANELİ API'LERİ (Electron Masaüstü İçin)
+// 4. ADMİN PANELİ API'LERİ
 // ---------------------------------------------------------
-app.get("/api/admin/bays",verifyAdmin, async (req, res) => {
+app.get("/api/admin/bays", verifyAdmin, async (req, res) => {
   try {
     const snapshot = await rtdb.ref("bays").once("value");
-    if (!snapshot.exists()) return res.status(200).json({ bays: [] });
+
+    if (!snapshot.exists()) {
+      return res.status(200).json({ bays: [] });
+    }
 
     const data = snapshot.val();
     const bayListesi = Object.keys(data)
       .map((key) => ({ id: key, ...data[key] }))
       .sort((a, b) => a.id.localeCompare(b.id));
 
-    res.status(200).json({ bays: bayListesi });
+    return res.status(200).json({ bays: bayListesi });
   } catch (error) {
     safeLog(`❌ Admin Bay Listesi Hatası: ${error.message}`);
-    res.status(500).json({ error: "Bay listesi alınamadı." });
+
+    if (res.headersSent) return;
+    return res.status(500).json({ error: "Bay listesi alınamadı." });
   }
 });
 
-app.post("/api/admin/update-bay",verifyAdmin, async (req, res) => {
+app.post("/api/admin/update-bay", verifyAdmin, async (req, res) => {
   const { bayId, patch } = req.body;
-  if (!bayId || !patch)
+
+  if (!bayId || !patch) {
     return res.status(400).json({ error: "Eksik parametre." });
+  }
 
   try {
     const guncellemeVerisi = {
@@ -504,36 +540,48 @@ app.post("/api/admin/update-bay",verifyAdmin, async (req, res) => {
     if (patch.status === "available" || patch.status === "offline") {
       guncellemeVerisi.currentSessionId = "";
       guncellemeVerisi.lastUserId = "";
+      guncellemeVerisi.requestedPackage = null;
+      guncellemeVerisi.durationSec = null;
+      guncellemeVerisi.tokensCost = null;
     }
 
     await rtdb.ref(`bays/${bayId}`).update(guncellemeVerisi);
+
     safeLog(`🛠️ Peron Güncellendi: ${bayId} -> ${JSON.stringify(patch)}`);
 
-    res.status(200).json({ success: true, message: "Peron güncellendi." });
+    return res.status(200).json({
+      success: true,
+      message: "Peron güncellendi.",
+    });
   } catch (error) {
     safeLog(`❌ Bay Güncelleme Hatası: ${error.message}`);
-    res.status(500).json({ error: "Güncelleme başarısız." });
+
+    if (res.headersSent) return;
+    return res.status(500).json({ error: "Güncelleme başarısız." });
   }
 });
 
-app.post("/api/admin/search-user",verifyAdmin, async (req, res) => {
+app.post("/api/admin/search-user", verifyAdmin, async (req, res) => {
   const { arama } = req.body;
-  if (!arama)
+
+  if (!arama) {
     return res.status(400).json({ error: "Arama terimi boş olamaz." });
+  }
 
   try {
     const queryVal = arama.trim();
 
-    if (
-      !queryVal.includes("@") &&
-      !queryVal.includes(" ") &&
-      queryVal.length >= 20
-    ) {
+    if (!queryVal) {
+      return res.status(400).json({ error: "Arama terimi boş olamaz." });
+    }
+
+    if (!queryVal.includes("@") && !queryVal.includes(" ") && queryVal.length >= 20) {
       const uidSnap = await db.collection("users").doc(queryVal).get();
+
       if (uidSnap.exists) {
-        return res
-          .status(200)
-          .json({ user: { id: uidSnap.id, ...uidSnap.data() } });
+        return res.status(200).json({
+          user: { id: uidSnap.id, ...uidSnap.data() },
+        });
       }
     }
 
@@ -543,9 +591,13 @@ app.post("/api/admin/search-user",verifyAdmin, async (req, res) => {
         .where("email", "==", queryVal.toLowerCase())
         .limit(1)
         .get();
+
       if (!emailSnap.empty) {
         const doc = emailSnap.docs[0];
-        return res.status(200).json({ user: { id: doc.id, ...doc.data() } });
+
+        return res.status(200).json({
+          user: { id: doc.id, ...doc.data() },
+        });
       }
     }
 
@@ -554,22 +606,29 @@ app.post("/api/admin/search-user",verifyAdmin, async (req, res) => {
       .where("telefon", "==", queryVal)
       .limit(1)
       .get();
+
     if (!telSnap.empty) {
       const doc = telSnap.docs[0];
-      return res.status(200).json({ user: { id: doc.id, ...doc.data() } });
+
+      return res.status(200).json({
+        user: { id: doc.id, ...doc.data() },
+      });
     }
 
-    return res.status(404).json({ error: "Eşleşen kullanıcı bulunamadı." });
+    return res.status(404).json({
+      error: "Eşleşen kullanıcı bulunamadı.",
+    });
   } catch (error) {
     safeLog(`❌ Kullanıcı Arama Hatası: ${error.message}`);
-    res.status(500).json({ error: "Arama sırasında hata oluştu." });
+
+    if (res.headersSent) return;
+    return res.status(500).json({
+      error: "Arama sırasında hata oluştu.",
+    });
   }
 });
 
-// ---------------------------------------------------------
-// KULLANICI DURUMUNU GÜNCELLEME (ENGELLEME) API'Sİ
-// ---------------------------------------------------------
-app.post("/api/admin/update-user",verifyAdmin, async (req, res) => {
+app.post("/api/admin/update-user", verifyAdmin, async (req, res) => {
   const { userId, patch } = req.body;
 
   if (!userId || !patch) {
@@ -577,7 +636,6 @@ app.post("/api/admin/update-user",verifyAdmin, async (req, res) => {
   }
 
   try {
-    // Firestore'da kullanıcının isBlocked alanını güncelliyoruz
     await db.collection("users").doc(userId).update({
       isBlocked: patch.isBlocked,
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -586,40 +644,45 @@ app.post("/api/admin/update-user",verifyAdmin, async (req, res) => {
     const islemTipi = patch.isBlocked ? "Engellendi" : "Engeli Kaldırıldı";
     safeLog(`🛡️ KULLANICI İŞLEMİ: ${userId} -> ${islemTipi}`);
 
-    res
-      .status(200)
-      .json({ success: true, message: `Kullanıcı durumu güncellendi.` });
+    return res.status(200).json({
+      success: true,
+      message: "Kullanıcı durumu güncellendi.",
+    });
   } catch (error) {
     safeLog(`❌ Kullanıcı Güncelleme Hatası: ${error.message}`);
-    res
-      .status(500)
-      .json({ error: "Kullanıcı güncellenirken sunucu hatası oluştu." });
+
+    if (res.headersSent) return;
+    return res.status(500).json({
+      error: "Kullanıcı güncellenirken sunucu hatası oluştu.",
+    });
   }
 });
 
-app.post("/api/admin/topup",verifyAdmin, async (req, res) => {
+app.post("/api/admin/topup", verifyAdmin, async (req, res) => {
   const { userId, tokens } = req.body;
 
-  if (!userId || !tokens)
-    return res
-      .status(400)
-      .json({ error: "Kullanıcı ID ve Jeton miktarı gerekli." });
+  if (!userId || !tokens) {
+    return res.status(400).json({
+      error: "Kullanıcı ID ve Jeton miktarı gerekli.",
+    });
+  }
 
   try {
     const adet = parseInt(tokens, 10);
+
     if (!Number.isFinite(adet) || adet <= 0) {
-      return res
-        .status(400)
-        .json({ error: "Geçerli bir jeton miktarı girin." });
+      return res.status(400).json({
+        error: "Geçerli bir jeton miktarı girin.",
+      });
     }
 
     const snap = await db.collection("packages").doc("jeton").get();
     const jetonFiyat = snap.exists ? Number(snap.data().jetonFiyat || 0) : 0;
 
     if (jetonFiyat <= 0) {
-      return res
-        .status(500)
-        .json({ error: "Sistemde jeton fiyatı bulunamadı." });
+      return res.status(500).json({
+        error: "Sistemde jeton fiyatı bulunamadı.",
+      });
     }
 
     const amountTRY = adet * jetonFiyat;
@@ -627,60 +690,73 @@ app.post("/api/admin/topup",verifyAdmin, async (req, res) => {
 
     await db.runTransaction(async (tx) => {
       const uDoc = await tx.get(userRef);
-      if (!uDoc.exists) throw new Error("Kullanıcı_Bulunamadı");
+      if (!uDoc.exists) throw new Error("Kullanıcı_Bulunamadi");
 
       const yeniBakiye = Number(uDoc.data().walletTokens || 0) + adet;
-      tx.update(userRef, { walletTokens: yeniBakiye });
+
+      tx.update(userRef, {
+        walletTokens: yeniBakiye,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
 
       tx.set(db.collection("transactions").doc(), {
-        userId: userId,
+        userId,
         type: "admin_topup",
         tokens: adet,
-        amountTRY: amountTRY,
+        amountTRY,
         unitPriceTRY: jetonFiyat,
         bayId: null,
         packageId: null,
         status: "success",
-        adminId: "ELECTRON_ADMIN",
+        adminId: req.admin?.uid || req.admin?.email || "ELECTRON_ADMIN",
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
       });
     });
 
-    safeLog(
-      `💰 ADMİN BAKİYE YÜKLEDİ: ${userId} kullanıcısına ${adet} jeton eklendi.`,
-    );
-    res
-      .status(200)
-      .json({ success: true, tokensAdded: adet, amountTRY: amountTRY });
+    safeLog(`💰 ADMİN BAKİYE YÜKLEDİ: ${userId} kullanıcısına ${adet} jeton eklendi.`);
+
+    return res.status(200).json({
+      success: true,
+      tokensAdded: adet,
+      amountTRY,
+    });
   } catch (error) {
     safeLog(`❌ Admin Bakiye Yükleme Hatası: ${error.message}`);
-    if (error.message === "Kullanıcı_Bulunamadı") {
+
+    if (error.message === "Kullanıcı_Bulunamadi") {
       return res.status(404).json({ error: "Kullanıcı dokümanı bulunamadı." });
     }
-    res.status(500).json({ error: "Bakiye yükleme başarısız oldu." });
+
+    if (res.headersSent) return;
+    return res.status(500).json({ error: "Bakiye yükleme başarısız oldu." });
   }
 });
 
 // =========================================================
-// 🔥 SUNUCU AYAĞA KALKARKEN YAPILACAK SİSTEM TEMİZLİĞİ
+// 🔥 SUNUCU AYAĞA KALKARKEN TEMİZLİK
 // =========================================================
 const systemStartupClean = async () => {
   try {
     safeLog("🔄 Veritabanı temizliği yapılıyor...");
 
     const baysSnap = await rtdb.ref("bays").once("value");
+
     if (baysSnap.exists()) {
       const updates = {};
-      Object.keys(baysSnap.val()).forEach((bayId) => {
+      const bays = baysSnap.val();
+
+      Object.keys(bays).forEach((bayId) => {
         updates[`bays/${bayId}/status`] = "available";
+        updates[`bays/${bayId}/isActive`] = true;
+        updates[`bays/${bayId}/autoOffline`] = null;
         updates[`bays/${bayId}/currentSessionId`] = "";
         updates[`bays/${bayId}/requestedPackage`] = null;
         updates[`bays/${bayId}/durationSec`] = null;
         updates[`bays/${bayId}/tokensCost`] = null;
         updates[`bays/${bayId}/lastUserId`] = null;
-        updates[`bays/${bayId}/updatedAt`] =
-          admin.database.ServerValue.TIMESTAMP;
+        updates[`bays/${bayId}/updatedAt`] = admin.database.ServerValue.TIMESTAMP;
       });
+
       await rtdb.ref().update(updates);
     }
 
@@ -688,8 +764,10 @@ const systemStartupClean = async () => {
       .collection("sessions")
       .where("status", "==", "running")
       .get();
+
     if (!runningSessions.empty) {
       const batch = db.batch();
+
       runningSessions.forEach((doc) => {
         batch.update(doc.ref, {
           status: "ended",
@@ -697,6 +775,7 @@ const systemStartupClean = async () => {
           endedReason: "server_restart",
         });
       });
+
       await batch.commit();
     }
 
@@ -707,16 +786,22 @@ const systemStartupClean = async () => {
 };
 
 // =========================================================
-// 🔥 MAİL GÖNDERME AYARLARI - BREVO HTTP API
+// 🔥 MAIL GÖNDERME - BREVO HTTP API
 // =========================================================
-// Render Free SMTP portlarını engellediği için Nodemailer/Yandex SMTP yerine
-// Brevo'nun HTTPS API'si kullanılıyor.
-// Gerekli Environment Variables:
-// BREVO_API_KEY
-// EMAIL_FROM
-// ADMIN_EMAIL
+const mailCooldown = {};
+const MAIL_COOLDOWN_MS = 10 * 60 * 1000;
 
 const sendAdminAlert = async (bayId, type) => {
+  const cooldownKey = `${bayId}_${type}`;
+  const lastSent = mailCooldown[cooldownKey] || 0;
+
+  if (Date.now() - lastSent < MAIL_COOLDOWN_MS) {
+    safeLog(`📧 Mail atlandı: ${bayId} ${type} bildirimi cooldown içinde.`);
+    return;
+  }
+
+  mailCooldown[cooldownKey] = Date.now();
+
   let subject;
   let htmlBody;
 
@@ -790,9 +875,7 @@ const sendAdminAlert = async (bayId, type) => {
     }
 
     safeLog(
-      `📧 E-Posta başarıyla gönderildi: ${
-        type === "down" ? "Kopma" : "Düzelme"
-      } bildirimi.`,
+      `📧 E-Posta başarıyla gönderildi: ${type === "down" ? "Kopma" : "Düzelme"} bildirimi.`,
     );
   } catch (error) {
     safeLog(`❌ Mail API Bağlantı Hatası: ${error.message}`);
@@ -800,9 +883,17 @@ const sendAdminAlert = async (bayId, type) => {
 };
 
 // =========================================================
-// 🔥 HEARTBEAT (NABIZ) KONTROLCÜSÜ - DEDEKTİF + OTOMATİK KURTARMA
+// 🔥 HEARTBEAT / NABIZ KONTROLÜ
 // =========================================================
+let isHeartbeatCronRunning = false;
+
 cron.schedule("* * * * *", async () => {
+  if (isHeartbeatCronRunning) {
+    safeLog("⏭️ [CRON] Önceki nabız kontrolü hâlâ çalışıyor, bu tur atlandı.");
+    return;
+  }
+
+  isHeartbeatCronRunning = true;
   safeLog("🔍 [CRON] Nabız kontrolü çalışıyor...");
 
   try {
@@ -815,82 +906,74 @@ cron.schedule("* * * * *", async () => {
     }
 
     const now = Date.now();
-    const timeoutMs = 2 * 60 * 1000; // 2 Dakika Tolerans
+    const timeoutMs = 2 * 60 * 1000;
 
-    Object.keys(bays).forEach(async (bayId) => {
+    for (const bayId of Object.keys(bays)) {
       const bay = bays[bayId];
 
-      // Admin bilerek kapattıysa veya bakıma aldıysa es geç
-      if (
-        (bay.status === "offline" && !bay.autoOffline) ||
-        bay.status === "maintenance"
-      ) {
-        safeLog(
-          `ℹ️ [CRON] ${bayId} admin tarafından kapatılmış veya bakımda, es geçiliyor.`,
-        );
-        return;
+      if ((bay.status === "offline" && !bay.autoOffline) || bay.status === "maintenance") {
+        safeLog(`ℹ️ [CRON] ${bayId} admin tarafından kapatılmış veya bakımda, es geçiliyor.`);
+        continue;
       }
 
       const lastSeen = bay.lastSeen;
 
       if (!lastSeen) {
         safeLog(`❌ [CRON] ${bayId} için 'lastSeen' verisi YOK!`);
-        return;
+        continue;
       }
 
       const farkSaniye = Math.floor((now - lastSeen) / 1000);
-      safeLog(
-        `📊 [CRON] ${bayId} en son ${farkSaniye} saniye önce haber verdi.`,
-      );
+      safeLog(`📊 [CRON] ${bayId} en son ${farkSaniye} saniye önce haber verdi.`);
 
       const isDisconnected = now - lastSeen > timeoutMs;
 
-      // 🔴 SENARYO 1: BAĞLANTI KOPTU (İnternet gitti veya fiş çekildi)
       if (isDisconnected) {
-        if (bay.status !== "offline") {
+        if (bay.status !== "offline" || bay.autoOffline !== true) {
           safeLog(`⚠️ KOPMA TESPİT EDİLDİ: ${bayId} otomatik kapatılıyor...`);
 
           await rtdb.ref(`bays/${bayId}`).update({
             status: "offline",
             isActive: false,
-            autoOffline: true, // Sistemin kendi kapattığını işaretliyoruz (Admin kapatmadı)
+            autoOffline: true,
             updatedAt: admin.database.ServerValue.TIMESTAMP,
           });
 
-          sendAdminAlert(bayId, "down"); // Kopma maili at
+          await sendAdminAlert(bayId, "down");
         }
-      }
-      // 🟢 SENARYO 2: BAĞLANTI GERİ GELDİ (Otomatik Kurtarma)
-      else {
-        // Eğer bu makineyi SİSTEM (autoOffline) kapattıysa ve şimdi interneti geri geldiyse
-        if (bay.status === "offline" && bay.autoOffline === true) {
-          safeLog(`✅ İNTERNET GELDİ: ${bayId} otomatik olarak açılıyor...`);
 
-          await rtdb.ref(`bays/${bayId}`).update({
-            status: "available",
-            isActive: true,
-            autoOffline: null, // İşareti kaldırıyoruz
-            updatedAt: admin.database.ServerValue.TIMESTAMP,
-          });
-
-          sendAdminAlert(bayId, "up"); // Düzelme maili at
-        }
+        continue;
       }
-    });
+
+      if (bay.status === "offline" && bay.autoOffline === true) {
+        safeLog(`✅ İNTERNET GELDİ: ${bayId} otomatik olarak açılıyor...`);
+
+        await rtdb.ref(`bays/${bayId}`).update({
+          status: "available",
+          isActive: true,
+          autoOffline: null,
+          updatedAt: admin.database.ServerValue.TIMESTAMP,
+        });
+
+        await sendAdminAlert(bayId, "up");
+      }
+    }
   } catch (error) {
     safeLog(`❌ Cron Job Hatası: ${error.message}`);
+  } finally {
+    isHeartbeatCronRunning = false;
   }
 });
 
 // =========================================================
-// 🚀 BAŞLATMA ZİNCİRİ (Render.com için ayarlandı)
+// 🚀 BAŞLATMA
 // =========================================================
 const PORT = process.env.PORT || 3000;
 const HOST = "0.0.0.0";
 
 systemStartupClean().then(() => {
   app.listen(PORT, HOST, () => {
-    safeLog(`🚀 QWash Sunucusu Başarıyla Başlatıldı!`);
+    safeLog("🚀 QWash Sunucusu Başarıyla Başlatıldı!");
     safeLog(`📡 API Portu: ${PORT}`);
   });
 });
