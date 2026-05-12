@@ -27,7 +27,8 @@ export default function Login() {
   useEffect(() => {
     // Kullanıcı giriş ekranındayken sunucuya bir 'ping' atıyoruz ki
     // giriş yap tuşuna bastığında ağ bağlantısı (handshake) zaten hazır olsun.
-fetch("https://qwash-8q4y.onrender.com/")  }, []);
+    fetch("https://qwash-8q4y.onrender.com/");
+  }, []);
 
   const girisYap = async () => {
     if (!email.trim() || !sifre.trim()) {
@@ -246,7 +247,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
 
-logoBox: {
+  logoBox: {
     width: 1,
     height: 1,
     backgroundColor: "transparent", // Eğer logonuzun kendi arka planı varsa ve bu siyah kutuyu kaldırmak isterseniz burayı "transparent" yapabilirsiniz.
@@ -256,7 +257,8 @@ logoBox: {
     marginTop: 40,
     elevation: 8,
   },
-  logoImage: { // Logonun kutu içindeki genişliği
+  logoImage: {
+    // Logonun kutu içindeki genişliği
     height: 40, // Logonun kutu içindeki yüksekliği
   },
   // logoIcon: { fontSize: 28 }, <-- Eğer emojiyi başka bir yerde kullanmıyorsanız bu satırı silebilirsiniz.
