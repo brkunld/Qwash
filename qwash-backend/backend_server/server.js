@@ -60,7 +60,23 @@ const verifyAdmin = async (req, res, next) => {
     const decodedToken = await admin.auth().verifyIdToken(token);
     
     // 🔥 GÜVENLİ YÖNTEM: E-postaları .env dosyasından çekip diziye çeviriyoruz
-    const authorizedEmails = process.env.AUTHORIZED_ADMINS ? process.env.AUTHORIZED_ADMINS.split(',') : [];
+    const authorizedEmails = process.env.AUTHORIZED_ADMINS
+  ? process.env.AUTHORIZED_ADMINS
+      .split(",")
+      .map((email) => email.trim().toLowerCase())
+  : [];
+
+const requestEmail = decodedToken.email
+  ? decodedToken.email.trim().toLowerCase()
+  : "";
+
+if (authorizedEmails.includes(requestEmail)) {
+  req.admin = decodedToken;
+  next();
+} else {
+  safeLog(`🚨 YETKİSİZ GİRİŞ DENEMESİ: ${decodedToken.email}`);
+  return res.status(403).json({ error: "Bu panele erişim yetkiniz yok!" });
+}
 
     if (authorizedEmails.includes(decodedToken.email)) {
        req.admin = decodedToken;

@@ -704,6 +704,182 @@
         background: rgba(0, 229, 160, 0.2);
       }
 
+      /* ── BULK BAY ACTIONS ── */
+      .bulk-actions {
+        background: var(--bg2);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 14px;
+        margin-bottom: 14px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+
+      .bulk-actions-title {
+        font-family: var(--mono);
+        font-size: 11px;
+        color: var(--text3);
+        letter-spacing: 1px;
+        text-transform: uppercase;
+        margin-right: 6px;
+      }
+
+      .bulk-btn {
+        padding: 8px 13px;
+        background: var(--bg3);
+        color: var(--text2);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        font-family: var(--sans);
+        font-size: 12px;
+        font-weight: 700;
+        cursor: pointer;
+        transition: all 0.2s;
+      }
+
+      .bulk-btn:hover {
+        border-color: var(--border-bright);
+        color: var(--text);
+        transform: translateY(-1px);
+      }
+
+      .bulk-btn.green {
+        background: var(--green-dim);
+        color: var(--green);
+        border-color: rgba(0, 229, 160, 0.2);
+      }
+
+      .bulk-btn.amber {
+        background: var(--amber-dim);
+        color: var(--amber);
+        border-color: rgba(255, 176, 32, 0.2);
+      }
+
+      .bulk-btn.blue {
+        background: var(--accent-dim);
+        color: var(--accent);
+        border-color: rgba(0, 200, 255, 0.2);
+      }
+
+      .bulk-btn.red {
+        background: var(--red-dim);
+        color: var(--red);
+        border-color: rgba(255, 77, 106, 0.2);
+      }
+
+      /* ── STATS ── */
+      .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+        gap: 14px;
+        margin-bottom: 18px;
+      }
+      .stat-card {
+        background: var(--bg2);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 18px;
+        position: relative;
+        overflow: hidden;
+      }
+      .stat-card::before {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: 18px;
+        right: 18px;
+        height: 1px;
+        background: linear-gradient(
+          90deg,
+          transparent,
+          var(--accent-glow),
+          transparent
+        );
+      }
+      .stat-label {
+        font-family: var(--mono);
+        font-size: 10px;
+        color: var(--text3);
+        letter-spacing: 1.4px;
+        text-transform: uppercase;
+        margin-bottom: 10px;
+      }
+      .stat-value {
+        font-size: 32px;
+        font-weight: 800;
+        line-height: 1;
+        color: var(--text);
+      }
+      .stat-sub {
+        margin-top: 8px;
+        font-family: var(--mono);
+        font-size: 11px;
+        color: var(--text3);
+      }
+      .stat-value.green {
+        color: var(--green);
+      }
+      .stat-value.amber {
+        color: var(--amber);
+      }
+      .stat-value.red {
+        color: var(--red);
+      }
+      .stat-value.blue {
+        color: var(--accent);
+      }
+      .stats-panel {
+        background: var(--bg2);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 18px;
+      }
+      .stat-bar-row {
+        margin-bottom: 14px;
+      }
+      .stat-bar-row:last-child {
+        margin-bottom: 0;
+      }
+      .stat-bar-head {
+        display: flex;
+        justify-content: space-between;
+        font-family: var(--mono);
+        font-size: 11px;
+        color: var(--text2);
+        margin-bottom: 7px;
+      }
+      .stat-bar {
+        height: 6px;
+        background: var(--bg3);
+        border-radius: 99px;
+        overflow: hidden;
+      }
+      .stat-bar-fill {
+        height: 100%;
+        border-radius: 99px;
+        background: linear-gradient(90deg, var(--accent2), var(--accent));
+        transition: width 0.4s ease;
+      }
+      .stat-bar-fill.green {
+        background: linear-gradient(
+          90deg,
+          var(--green),
+          rgba(0, 229, 160, 0.5)
+        );
+      }
+      .stat-bar-fill.amber {
+        background: linear-gradient(
+          90deg,
+          var(--amber),
+          rgba(255, 176, 32, 0.5)
+        );
+      }
+      .stat-bar-fill.red {
+        background: linear-gradient(90deg, var(--red), rgba(255, 77, 106, 0.5));
+      }
+
       /* ── BAY GRID ── */
       .bay-grid {
         display: grid;
@@ -1099,6 +1275,17 @@
           Sistem Monitörü
           <span class="nav-badge">CANLI</span>
         </div>
+        <div class="nav-item" onclick="switchTab('stats', this)">
+          <svg class="nav-ico" viewBox="0 0 16 16" fill="none">
+            <path
+              d="M3 13V7M8 13V3M13 13V10"
+              stroke="currentColor"
+              stroke-width="1.4"
+              stroke-linecap="round"
+            />
+          </svg>
+          İstatistikler
+        </div>
         <div class="nav-item" onclick="switchTab('users', this)">
           <svg class="nav-ico" viewBox="0 0 16 16" fill="none">
             <circle
@@ -1227,6 +1414,128 @@
           </div>
         </div>
 
+        <div id="tab-stats" class="tab">
+          <div class="sec-header">
+            <div class="sec-title">Genel İstatistikler</div>
+            <div class="live-pill">
+              <div class="live-dot"></div>
+              Canlı Veriler
+            </div>
+          </div>
+
+          <div class="stats-grid">
+            <div class="stat-card">
+              <div class="stat-label">Toplam Peron</div>
+              <div class="stat-value blue" id="stat-total-bays">0</div>
+              <div class="stat-sub">Sisteme kayıtlı peron</div>
+            </div>
+
+            <div class="stat-card">
+              <div class="stat-label">Aktif Peron</div>
+              <div class="stat-value green" id="stat-active-bays">0</div>
+              <div class="stat-sub">Kullanıma açık</div>
+            </div>
+
+            <div class="stat-card">
+              <div class="stat-label">Boş Peron</div>
+              <div class="stat-value green" id="stat-available-bays">0</div>
+              <div class="stat-sub">Şu anda uygun</div>
+            </div>
+
+            <div class="stat-card">
+              <div class="stat-label">Çalışan Peron</div>
+              <div class="stat-value amber" id="stat-busy-bays">0</div>
+              <div class="stat-sub">Şu anda kullanımda</div>
+            </div>
+
+            <div class="stat-card">
+              <div class="stat-label">Bakımda</div>
+              <div class="stat-value red" id="stat-maint-bays">0</div>
+              <div class="stat-sub">Bakım modunda</div>
+            </div>
+
+            <div class="stat-card">
+              <div class="stat-label">Kapalı</div>
+              <div class="stat-value" id="stat-offline-bays">0</div>
+              <div class="stat-sub">Devre dışı / offline</div>
+            </div>
+
+            <div class="stat-card">
+              <div class="stat-label">Uygunluk Oranı</div>
+              <div class="stat-value green" id="stat-available-rate">0%</div>
+              <div class="stat-sub">Boş / aktif peron oranı</div>
+            </div>
+
+            <div class="stat-card">
+              <div class="stat-label">Kullanım Oranı</div>
+              <div class="stat-value amber" id="stat-busy-rate">0%</div>
+              <div class="stat-sub">Dolu / aktif peron oranı</div>
+            </div>
+          </div>
+
+          <div class="stats-panel">
+            <div class="sec-title" style="margin-bottom: 16px">
+              Peron Durum Dağılımı
+            </div>
+
+            <div class="stat-bar-row">
+              <div class="stat-bar-head">
+                <span>Boş</span>
+                <span id="stat-bar-available-label">0%</span>
+              </div>
+              <div class="stat-bar">
+                <div
+                  class="stat-bar-fill green"
+                  id="stat-bar-available"
+                  style="width: 0%"
+                ></div>
+              </div>
+            </div>
+
+            <div class="stat-bar-row">
+              <div class="stat-bar-head">
+                <span>Dolu</span>
+                <span id="stat-bar-busy-label">0%</span>
+              </div>
+              <div class="stat-bar">
+                <div
+                  class="stat-bar-fill amber"
+                  id="stat-bar-busy"
+                  style="width: 0%"
+                ></div>
+              </div>
+            </div>
+
+            <div class="stat-bar-row">
+              <div class="stat-bar-head">
+                <span>Bakım</span>
+                <span id="stat-bar-maint-label">0%</span>
+              </div>
+              <div class="stat-bar">
+                <div
+                  class="stat-bar-fill"
+                  id="stat-bar-maint"
+                  style="width: 0%"
+                ></div>
+              </div>
+            </div>
+
+            <div class="stat-bar-row">
+              <div class="stat-bar-head">
+                <span>Kapalı</span>
+                <span id="stat-bar-offline-label">0%</span>
+              </div>
+              <div class="stat-bar">
+                <div
+                  class="stat-bar-fill red"
+                  id="stat-bar-offline"
+                  style="width: 0%"
+                ></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <div id="tab-users" class="tab">
           <div class="search-wrap">
             <div class="sec-title">Kullanıcı Ara</div>
@@ -1345,6 +1654,31 @@
               Canlı Senkronizasyon
             </div>
           </div>
+          <div class="bulk-actions">
+            <span class="bulk-actions-title">Toplu İşlem</span>
+
+            <button
+              class="bulk-btn green"
+              onclick="bulkUpdateBays('available')"
+            >
+              Tümünü Boş Yap
+            </button>
+
+            <button
+              class="bulk-btn amber"
+              onclick="bulkUpdateBays('maintenance')"
+            >
+              Tümünü Bakıma Al
+            </button>
+
+            <button class="bulk-btn red" onclick="bulkDisableBays()">
+              Tümünü Kapat
+            </button>
+
+            <button class="bulk-btn blue" onclick="bulkEnableBays()">
+              Tümünü Aktif Et
+            </button>
+          </div>
           <div id="bay-list" class="bay-grid">
             <p
               style="
@@ -1382,6 +1716,33 @@
 
       const API_BASE = "https://qwash-8q4y.onrender.com/api/admin";
 
+      async function getAdminToken() {
+        const user = auth.currentUser;
+
+        if (!user) {
+          throw new Error(
+            "Admin oturumu bulunamadı. Lütfen tekrar giriş yapın.",
+          );
+        }
+
+        return await user.getIdToken(true);
+      }
+
+      async function adminFetch(path, options = {}) {
+        const token = await getAdminToken();
+
+        const headers = {
+          "Content-Type": "application/json",
+          ...(options.headers || {}),
+          Authorization: `Bearer ${token}`,
+        };
+
+        return await fetch(`${API_BASE}${path}`, {
+          ...options,
+          headers,
+        });
+      }
+
       // ── KENDİ KENDİNE LOG ÜRETİCİSİ ──
       window.appendLocalLog = function (mesaj, type = "info") {
         const entries = document.getElementById("log-entries");
@@ -1407,6 +1768,7 @@
       // ── SEKMELER ──
       const tabMeta = {
         monitor: { title: "Sistem Monitörü", crumb: "qwash / monitor" },
+        stats: { title: "İstatistikler", crumb: "qwash / stats" },
         users: { title: "Kullanıcı İşlemleri", crumb: "qwash / users" },
         bays: { title: "Peron Yönetimi", crumb: "qwash / bays" },
       };
@@ -1527,9 +1889,8 @@
         btn.disabled = true;
 
         try {
-          const res = await fetch(`${API_BASE}/search-user`, {
+          const res = await adminFetch("/search-user", {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ arama: term }),
           });
           const data = await res.json();
@@ -1607,24 +1968,23 @@
         btn.disabled = true;
 
         try {
-          const user = auth.currentUser;
-          const token = user ? await user.getIdToken() : "";
-
-          const res = await fetch(`${API_BASE}/update-user`, {
+          const res = await adminFetch("/update-user", {
             method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${token}`,
-            },
             body: JSON.stringify({
               userId: selectedUserId,
               patch: { isBlocked: newState },
             }),
           });
 
+          let data = {};
+          try {
+            data = await res.json();
+          } catch (_) {
+            data = {};
+          }
+
           if (!res.ok) {
-            const errText = await res.json();
-            alert("Hata: " + (errText.error || "İşlem başarısız."));
+            alert("Hata: " + (data.error || "İşlem başarısız."));
             return;
           }
 
@@ -1671,21 +2031,33 @@
           btn.disabled = true;
 
           try {
-            const res = await fetch(`${API_BASE}/topup`, {
+            const res = await adminFetch("/topup", {
               method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ userId: selectedUserId, tokens: amount }),
+              body: JSON.stringify({
+                userId: selectedUserId,
+                tokens: amount,
+              }),
             });
-            const data = await res.json();
+
+            let data = {};
+            try {
+              data = await res.json();
+            } catch (_) {
+              data = {};
+            }
 
             if (!res.ok) {
-              alert("Hata: " + data.error);
+              alert(
+                "Hata: " + (data.error || "Jeton yükleme işlemi başarısız."),
+              );
               return;
             }
 
             const el = document.getElementById("res-tokens");
-            el.textContent = parseInt(el.textContent) + amount;
+            el.textContent = parseInt(el.textContent || "0", 10) + amount;
+
             document.getElementById("tokenAmt").value = "";
+
             alert(`${data.tokensAdded} jeton eklendi. (₺${data.amountTRY})`);
 
             appendLocalLog(
@@ -1699,6 +2071,66 @@
             btn.disabled = false;
           }
         });
+
+      // ── İSTATİSTİKLER ──
+      function setText(id, value) {
+        const el = document.getElementById(id);
+        if (el) el.textContent = value;
+      }
+
+      function setBar(id, labelId, percent) {
+        const safePercent = Math.max(0, Math.min(100, percent));
+        const bar = document.getElementById(id);
+        const label = document.getElementById(labelId);
+
+        if (bar) bar.style.width = `${safePercent}%`;
+        if (label) label.textContent = `${safePercent}%`;
+      }
+
+      function updateStats(baysArray) {
+        const total = baysArray.length;
+
+        const active = baysArray.filter((b) => b.isActive !== false).length;
+        const available = baysArray.filter(
+          (b) =>
+            (b.status || "available") === "available" && b.isActive !== false,
+        ).length;
+        const busy = baysArray.filter(
+          (b) => b.status === "busy" && b.isActive !== false,
+        ).length;
+        const maintenance = baysArray.filter(
+          (b) => b.status === "maintenance",
+        ).length;
+        const offline = baysArray.filter(
+          (b) => b.status === "offline" || b.isActive === false,
+        ).length;
+
+        const availableRate =
+          active > 0 ? Math.round((available / active) * 100) : 0;
+        const busyRate = active > 0 ? Math.round((busy / active) * 100) : 0;
+
+        const pct = (count) => {
+          return total > 0 ? Math.round((count / total) * 100) : 0;
+        };
+
+        setText("stat-total-bays", total);
+        setText("stat-active-bays", active);
+        setText("stat-available-bays", available);
+        setText("stat-busy-bays", busy);
+        setText("stat-maint-bays", maintenance);
+        setText("stat-offline-bays", offline);
+        setText("stat-available-rate", `${availableRate}%`);
+        setText("stat-busy-rate", `${busyRate}%`);
+
+        setBar(
+          "stat-bar-available",
+          "stat-bar-available-label",
+          pct(available),
+        );
+        setBar("stat-bar-busy", "stat-bar-busy-label", pct(busy));
+        setBar("stat-bar-maint", "stat-bar-maint-label", pct(maintenance));
+        setBar("stat-bar-offline", "stat-bar-offline-label", pct(offline));
+      }
 
       // ── CANLI PERON YÖNETİMİ & LOG ÜRETİCİSİ ──
       const STATUS_LABELS = {
@@ -1769,6 +2201,8 @@
             const baysArray = Object.keys(data)
               .map((key) => ({ id: key, ...data[key] }))
               .sort((a, b) => a.id.localeCompare(b.id));
+
+            updateStats(baysArray);
 
             let aktifSayi = 0;
             let mesgulSayi = 0;
@@ -1845,31 +2279,32 @@
           )
         )
           return;
+
         const idx = STATUS_CYCLE.indexOf(currentStatus);
         const next =
           STATUS_CYCLE[idx === -1 ? 0 : (idx + 1) % STATUS_CYCLE.length];
 
         try {
-          const user = auth.currentUser;
-          const token = user ? await user.getIdToken() : "";
-
-          const res = await fetch(`${API_BASE}/update-bay`, {
+          const res = await adminFetch("/update-bay", {
             method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${token}`,
-            },
             body: JSON.stringify({ bayId, patch: { status: next } }),
           });
 
+          let data = {};
+          try {
+            data = await res.json();
+          } catch (_) {
+            data = {};
+          }
+
           if (!res.ok) {
-            const errText = await res.text();
-            console.error("Backend Hatası:", res.status, errText);
-            alert("Durum güncellenemedi. Konsolu (F12) kontrol et.");
+            console.error("Backend Hatası:", res.status, data);
+            alert("Hata: " + (data.error || "Durum güncellenemedi."));
+            return;
           }
         } catch (e) {
           console.error(e);
-          alert("Sunucu hatası. Backend çalışıyor mu?");
+          alert(e.message || "Sunucu hatası. Backend çalışıyor mu?");
         }
       };
 
@@ -1877,30 +2312,190 @@
         const patch = isCurrentlyActive
           ? { isActive: false, status: "offline" }
           : { isActive: true, status: "available" };
-        try {
-          const user = auth.currentUser;
-          const token = user ? await user.getIdToken() : "";
 
-          const res = await fetch(`${API_BASE}/update-bay`, {
+        try {
+          const res = await adminFetch("/update-bay", {
             method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${token}`,
-            },
             body: JSON.stringify({ bayId, patch }),
           });
 
+          let data = {};
+          try {
+            data = await res.json();
+          } catch (_) {
+            data = {};
+          }
+
           if (!res.ok) {
-            const errText = await res.text();
-            console.error("Backend Hatası:", res.status, errText);
-            alert("Aktiflik durumu güncellenemedi. Konsolu kontrol et.");
+            console.error("Backend Hatası:", res.status, data);
+            alert("Hata: " + (data.error || "Aktiflik durumu güncellenemedi."));
+            return;
           }
         } catch (e) {
           console.error(e);
-          alert("Sunucu hatası.");
+          alert(e.message || "Sunucu hatası.");
         }
       };
 
+      async function getBaysSnapshotOnce() {
+        return await new Promise((resolve, reject) => {
+          const baysRef = ref(database, "bays");
+
+          onValue(
+            baysRef,
+            (snap) => resolve(snap),
+            (err) => reject(err),
+            { onlyOnce: true },
+          );
+        });
+      }
+
+      async function updateBayFromAdmin(bayId, patch) {
+        const res = await adminFetch("/update-bay", {
+          method: "POST",
+          body: JSON.stringify({ bayId, patch }),
+        });
+
+        if (!res.ok) {
+          let errorMessage = "";
+
+          try {
+            const errJson = await res.json();
+            errorMessage = errJson.error || JSON.stringify(errJson);
+          } catch (_) {
+            errorMessage = await res.text();
+          }
+
+          throw new Error(`${bayId}: ${res.status} ${errorMessage}`);
+        }
+
+        return true;
+      }
+
+      async function bulkPatchBays(actionLabel, patchBuilder) {
+        try {
+          const snapshot = await getBaysSnapshotOnce();
+          const data = snapshot.val();
+
+          if (!data) {
+            alert("Güncellenecek peron bulunamadı.");
+            return;
+          }
+
+          const bayIds = Object.keys(data);
+
+          let successCount = 0;
+          const failed = [];
+
+          for (const bayId of bayIds) {
+            try {
+              const bay = data[bayId];
+              const patch = patchBuilder(bayId, bay);
+
+              if (!patch) {
+                continue;
+              }
+
+              await updateBayFromAdmin(bayId, patch);
+              successCount++;
+            } catch (err) {
+              console.error("Toplu peron güncelleme hatası:", err);
+              failed.push({
+                bayId,
+                error: err.message,
+              });
+            }
+          }
+
+          if (failed.length > 0) {
+            console.table(failed);
+
+            appendLocalLog(
+              `${actionLabel}: ${successCount} başarılı, ${failed.length} başarısız.`,
+              "warning",
+            );
+
+            alert(
+              `${successCount} peron güncellendi, ${failed.length} peron güncellenemedi. Detay için konsolu kontrol et.`,
+            );
+
+            return;
+          }
+
+          appendLocalLog(
+            `${actionLabel}: ${successCount} peron başarıyla güncellendi.`,
+            "success",
+          );
+
+          alert(`${successCount} peron güncellendi.`);
+        } catch (e) {
+          console.error(e);
+          appendLocalLog(`${actionLabel} işlemi başarısız.`, "error");
+          alert(`${actionLabel} işlemi başarısız. Konsolu kontrol et.`);
+        }
+      }
+
+      window.bulkUpdateBays = async function (targetStatus) {
+        const statusText = {
+          available: "boş",
+          maintenance: "bakım",
+          offline: "kapalı",
+        };
+
+        const label = statusText[targetStatus] || targetStatus;
+
+        if (
+          !confirm(
+            `Tüm peronların durumunu "${label}" yapmak istediğinize emin misiniz?`,
+          )
+        ) {
+          return;
+        }
+
+        await bulkPatchBays(`Tüm peronları ${label} yap`, () => {
+          if (targetStatus === "offline") {
+            return {
+              isActive: false,
+              status: "offline",
+            };
+          }
+
+          return {
+            isActive: true,
+            status: targetStatus,
+          };
+        });
+      };
+
+      window.bulkDisableBays = async function () {
+        if (
+          !confirm(
+            "Tüm peronları kapatmak istediğinize emin misiniz? Aktif seanslar etkilenebilir.",
+          )
+        ) {
+          return;
+        }
+
+        await bulkPatchBays("Tüm peronları kapat", () => ({
+          isActive: false,
+          status: "offline",
+        }));
+      };
+
+      window.bulkEnableBays = async function () {
+        if (
+          !confirm(
+            "Tüm peronları aktif edip boş duruma almak istediğinize emin misiniz?",
+          )
+        ) {
+          return;
+        }
+
+        await bulkPatchBays("Tüm peronları aktif et", () => ({
+          isActive: true,
+          status: "available",
+        }));
+      };
       // ── SAAT ──
       function updateClock() {
         const now = new Date();
