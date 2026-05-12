@@ -8,7 +8,6 @@ import { onAuthStateChanged, signOut } from "firebase/auth";
 import {
   doc,
   serverTimestamp as firestoreServerTimestamp,
-  getDoc,
   onSnapshot,
   setDoc,
 } from "firebase/firestore";
