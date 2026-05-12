@@ -403,18 +403,6 @@ export function useKullaniciIslemleri() {
     });
   }, [baylarData]);
 
-  const paketGetir = async (packageId) => {
-    const snap = await getDoc(doc(db, "packages", packageId));
-    if (!snap.exists()) return null;
-    const d = snap.data();
-    return {
-      packageId,
-      title: String(d?.title ?? packageId),
-      durationSec: Number(d?.durationSec ?? 0),
-      tokensCost: Number(d?.tokensCost ?? 0),
-    };
-  };
-
  const sessionBaslat = async (islemBayId, packageId) => {
     if (!uid) return router.replace("/login");
     const bay = baylarData[islemBayId];
@@ -429,13 +417,9 @@ export function useKullaniciIslemleri() {
     setIslemdekiBaylar((prev) => ({ ...prev, [islemBayId]: true }));
 
     try {
-      const paket = await paketGetir(packageId);
-      if (!paket) {
-        Alert.alert("Hata", "Paket bilgisi bulunamadı.");
-        return;
-      }
+      // 🔥 1. TEMİZLİK: Artık "paketGetir" fonksiyonuna ve beklemesine gerek kalmadı!
+      // Çünkü Backend fiyatı ve süreyi kendisi bulacak.
 
-      // 🔥 YENİ: Firebase'den anlık güvenlik token'ını alıyoruz
       const token = await auth.currentUser?.getIdToken();
 
       const API_URL = "https://qwash-8q4y.onrender.com/api/start-session";
@@ -443,14 +427,13 @@ export function useKullaniciIslemleri() {
         method: "POST",
         headers: { 
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}` // 🔥 YENİ: Güvenlik görevlisine kimliği gösteriyoruz
+          "Authorization": `Bearer ${token}` 
         },
         body: JSON.stringify({
           uid: uid,
           bayId: islemBayId,
           packageId: packageId,
-          tokensCost: paket.tokensCost,
-          durationSec: paket.durationSec,
+          // 🔥 2. TEMİZLİK: durationSec ve tokensCost verilerini göndermeyi bıraktık.
         }),
       });
 
