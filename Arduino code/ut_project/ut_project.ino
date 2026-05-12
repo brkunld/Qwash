@@ -3,6 +3,7 @@
 #include <TFT_eSPI.h>
 #include <qrcode.h>      
 #include <ArduinoJson.h> 
+#include "secrets.h"
 
 TFT_eSPI tft = TFT_eSPI(); 
 
@@ -184,15 +185,15 @@ void setup() {
   tft.setCursor(20, 100); tft.setTextSize(2); tft.setTextColor(TFT_WHITE);
   tft.println("WiFi Baglaniyor...");
 
-  WiFi.begin("1", "12121214");
+WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   while (WiFi.status() != WL_CONNECTED) { delay(500); Serial.print("."); }
   Serial.println("\nWiFi Baglandi!");
   
-  config.api_key = "AIzaSyDXXgyY_NW6_D1Ecr0ZQljYUvQSTypgJaU";
-  auth.user.email = "brkunld1@yandex.com";
-  auth.user.password = "123456";
-  config.database_url = "https://ut-project-1c283-default-rtdb.europe-west1.firebasedatabase.app/";
-  
+  config.api_key = API_KEY;
+  auth.user.email = USER_EMAIL;
+  auth.user.password = USER_PASSWORD;
+  config.database_url = DATABASE_URL;
+
   Firebase.begin(&config, &auth);
   Firebase.reconnectWiFi(true);
 
