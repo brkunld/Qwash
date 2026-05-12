@@ -315,6 +315,18 @@ app.post("/api/topup", async (req, res) => {
   if (!kartNo || kartNo.length < 12)
     return res.status(400).json({ error: "Geçersiz Kart Numarası" });
 
+  // 🔥 1. GÜVENLİK: Gelen verileri kesinlikle sayıya (integer/number) çeviriyoruz 🔥
+  const eklenecekJeton = parseInt(tokens, 10);
+  const eklenecekTutar = Number(amountTRY);
+
+  // 🔥 2. GÜVENLİK: Sayı değilse (NaN) veya 0'dan küçükse/eşitse hileyi engelle 🔥
+  if (isNaN(eklenecekJeton) || eklenecekJeton <= 0) {
+    return res.status(400).json({ error: "Geçersiz jeton miktarı! Sistem manipülasyonu engellendi." });
+  }
+  if (isNaN(eklenecekTutar) || eklenecekTutar <= 0) {
+    return res.status(400).json({ error: "Geçersiz ödeme tutarı!" });
+  }
+
   try {
     const userRef = db.collection("users").doc(uid);
     const txRef = db.collection("transactions").doc();
@@ -331,16 +343,17 @@ app.post("/api/topup", async (req, res) => {
       const mevcutBakiye = Number(userDoc.data().walletTokens || 0);
 
       t.update(userRef, {
-        walletTokens: mevcutBakiye + tokens,
+        // Artık iki değerin de kesinlikle "Sayı" olduğundan eminiz. (Örn: 50 + 100 = 150)
+        walletTokens: mevcutBakiye + eklenecekJeton, 
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       });
 
       t.set(txRef, {
         type: "topup",
         status: "success",
-        tokens: tokens,
-        unitPriceTRY: amountTRY / tokens,
-        amountTRY: amountTRY,
+        tokens: eklenecekJeton, // Güvenli değişkeni kullandık
+        unitPriceTRY: eklenecekTutar / eklenecekJeton, // Güvenli matematiksel işlem
+        amountTRY: eklenecekTutar, // Güvenli değişkeni kullandık
         userId: uid,
         adminId: null,
         bayId: null,
@@ -350,7 +363,7 @@ app.post("/api/topup", async (req, res) => {
       });
     });
 
-    safeLog(`✅ MÜŞTERİ ÖDEMESİ BAŞARILI: ${uid} -> ${tokens} jeton eklendi.`);
+    safeLog(`✅ MÜŞTERİ ÖDEMESİ BAŞARILI: ${uid} -> ${eklenecekJeton} jeton eklendi.`);
     return res
       .status(200)
       .json({ success: true, message: "Bakiye başarıyla yüklendi." });
