@@ -8,3 +8,5 @@ Arduino code/
 Admin/node_modules/
 Admin/.expo/
 .env
+secrets.js
+reset-project.js
