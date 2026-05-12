@@ -7,3 +7,4 @@ Arduino code/
 **/node_modules/
 Admin/node_modules/
 Admin/.expo/
+.env
