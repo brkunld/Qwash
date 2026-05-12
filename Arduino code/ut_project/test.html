@@ -729,6 +729,8 @@
       </div>
     </div>
 
+    <script src="./secrets.js"></script>
+
     <script type="module">
       import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
       import {
@@ -744,10 +746,11 @@
         serverTimestamp,
       } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-database.js";
 
+      const defaultSecrets = window.SECRETS || {};
+
       const firebaseConfig = {
-        apiKey: "AIzaSyDXXgyY_NW6_D1Ecr0ZQljYUvQSTypgJaU",
-        databaseURL:
-          "https://ut-project-1c283-default-rtdb.europe-west1.firebasedatabase.app/",
+        apiKey: defaultSecrets.API_KEY || "",
+        databaseURL: defaultSecrets.DATABASE_URL || "",
       };
 
       const app = initializeApp(firebaseConfig);
@@ -1113,6 +1116,21 @@
       window.selectPackage = selectPackage;
       window.physicalFoamButton = physicalFoamButton;
 
+      function fillInputsFromSecrets() {
+        if (!window.SECRETS) return;
+
+        if (window.SECRETS.USER_EMAIL)
+          document.getElementById("email").value = window.SECRETS.USER_EMAIL;
+
+        if (window.SECRETS.USER_PASSWORD)
+          document.getElementById("password").value =
+            window.SECRETS.USER_PASSWORD;
+
+        if (window.SECRETS.BAY_ID)
+          document.getElementById("bayId").value = window.SECRETS.BAY_ID;
+      }
+
+      fillInputsFromSecrets();
       showBaslangic();
       setInterval(tick, 120);
     </script>
