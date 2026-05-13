@@ -1,9 +1,22 @@
 #include <WiFi.h>
 #include <Firebase_ESP_Client.h>
 #include <TFT_eSPI.h>
-#include <qrcode.h>
 #include <ArduinoJson.h>
+#include <pgmspace.h>
 #include "secrets.h"
+
+// ================= OPTIMIZASYON AYARLARI =================
+// Uretimde 0 kalsin. Debug gerekirse 1 yap.
+#define DEBUG_LOG 0
+
+#if DEBUG_LOG
+  #define LOG_PRINT(x) Serial.print(x)
+  #define LOG_PRINTLN(x) Serial.println(x)
+#else
+  #define LOG_PRINT(x)
+  #define LOG_PRINTLN(x)
+#endif
+
 
 TFT_eSPI tft = TFT_eSPI();
 
@@ -17,7 +30,7 @@ const int buzzerPin = 25;
 const int btnKopukPin = 32;
 
 // ================= PERON BILGILERI =================
-String bayId = "bay_42060_01_01";
+const char bayId[] = "bay_42060_01_01";
 String currentStatus = "baslangic";
 bool isBayActive = true;
 String requestedPackage = "";
@@ -28,8 +41,8 @@ const int MIN_DURATION_SEC = 10;
 const int MAX_DURATION_SEC = 3600;
 
 // ================= BAGLANTI TIMEOUTLARI =================
-const unsigned long WIFI_TIMEOUT_MS = 15000;
-const unsigned long FIREBASE_TIMEOUT_MS = 15000;
+const unsigned long WIFI_TIMEOUT_MS = 7000;
+const unsigned long FIREBASE_TIMEOUT_MS = 10000;
 const unsigned long WIFI_RETRY_INTERVAL_MS = 10000;
 
 // ================= BEKLEME SERIDI =================
@@ -65,10 +78,95 @@ int sayacSonEkranSaniye = -1;
 unsigned long sayacSonYarimSaniyeMs = 0;
 bool sayacIslemBittiCalindi = false;
 
+// ================= MODERN STATIK 320x240 UI =================
+// Animasyon yok. Hafif, temiz, 320x240 yatay ekrana gore.
+#define UI_BG       0x0841   // koyu lacivert
+#define UI_PANEL    0x18E3
+#define UI_PANEL2   0x2104
+#define UI_TEXT     TFT_WHITE
+#define UI_MUTED    0x8410
+#define UI_BLUE     0x04BF
+#define UI_CYAN     0x07FF
+#define UI_GREEN    0x07E0
+#define UI_RED      0xF800
+#define UI_ORANGE   0xFD20
+#define UI_YELLOW   TFT_YELLOW
+
+void uiClear() {
+  tft.fillScreen(UI_BG);
+}
+
+void uiHeader(const __FlashStringHelper *title, uint16_t accent) {
+  uiClear();
+  tft.fillRect(0, 0, 320, 32, UI_PANEL);
+  tft.fillRect(0, 30, 320, 2, accent);
+
+  tft.setTextSize(2);
+  tft.setTextColor(UI_TEXT, UI_PANEL);
+  tft.setCursor(12, 8);
+  tft.print(title);
+}
+
+void uiCard(int x, int y, int w, int h, uint16_t fill, uint16_t border) {
+  tft.fillRoundRect(x, y, w, h, 16, fill);
+  tft.drawRoundRect(x, y, w, h, 16, border);
+  tft.drawRoundRect(x + 2, y + 2, w - 4, h - 4, 14, border);
+}
+
+void uiProgress(int x, int y, int w, int value, uint16_t color) {
+  tft.fillRoundRect(x, y, w, 9, 4, UI_PANEL2);
+  if (value > 0) tft.fillRoundRect(x, y, value, 9, 4, color);
+}
+
+void uiStatusDots(int y, uint16_t color) {
+  tft.fillCircle(138, y, 4, color);
+  tft.fillCircle(160, y, 4, color);
+  tft.fillCircle(182, y, 4, color);
+}
+
+void ekranaOdemeModern() {
+  uiHeader(F("ODEME"), UI_GREEN);
+  tft.setTextSize(2);
+  tft.setTextColor(UI_TEXT, UI_BG);
+  tft.setCursor(52, 96);
+  tft.print(F("ODEME BEKLENIYOR"));
+  uiStatusDots(150, UI_GREEN);
+}
+
+void ekranaIstekModern() {
+  uiHeader(F("ISTEK"), UI_YELLOW);
+  tft.setTextSize(2);
+  tft.setTextColor(UI_YELLOW, UI_BG);
+  tft.setCursor(58, 104);
+  tft.print(F("GONDERILIYOR"));
+  uiStatusDots(150, UI_YELLOW);
+}
+
+void ekranaBusyModern() {
+  bool kopuk = (requestedPackage == "foam");
+  uint16_t renk = kopuk ? UI_CYAN : UI_BLUE;
+
+  uiHeader(kopuk ? F("KOPUK") : F("SU"), renk);
+
+  tft.drawRoundRect(36, 78, 248, 88, 18, UI_PANEL2);
+  tft.drawRoundRect(38, 80, 244, 84, 16, renk);
+
+  tft.setTextSize(1);
+  tft.setTextColor(UI_MUTED, UI_BG);
+  tft.setCursor(126, 176);
+  tft.print(F("KALAN SURE"));
+
+  uiProgress(20, 200, 280, 280, renk);
+}
+
 // ================= YARDIMCI FONKSIYONLAR =================
 
-String bayPath() {
-  return "/bays/" + bayId;
+void makeBayPath(char *out, size_t outSize, const char *child) {
+  if (child == nullptr || child[0] == '\0') {
+    snprintf(out, outSize, "/bays/%s", bayId);
+  } else {
+    snprintf(out, outSize, "/bays/%s/%s", bayId, child);
+  }
 }
 
 void resetSayacDurumu() {
@@ -79,10 +177,10 @@ void resetSayacDurumu() {
 
 int guvenliDurationOku(int gelenSure) {
   if (gelenSure < MIN_DURATION_SEC || gelenSure > MAX_DURATION_SEC) {
-    Serial.print("Gecersiz durationSec geldi: ");
-    Serial.println(gelenSure);
-    Serial.print("Mevcut sure korunuyor: ");
-    Serial.println(durationSec);
+    LOG_PRINT(F("Gecersiz durationSec: "));
+    LOG_PRINTLN(gelenSure);
+    LOG_PRINT(F("Sure korunuyor: "));
+    LOG_PRINTLN(durationSec);
     return durationSec;
   }
 
@@ -98,23 +196,20 @@ void ekranaMesajYaz(uint16_t arkaPlan, uint16_t yaziRengi, int textSize, int x, 
 }
 
 void ekranaKapaliYaz() {
-  tft.fillScreen(TFT_BLACK);
-  tft.setTextColor(TFT_RED);
-  tft.setTextSize(3);
-  tft.setCursor(50, 80);
-  tft.println("BU PERON");
-  tft.setCursor(40, 120);
-  tft.println("KAPALIDIR");
+  uiHeader(F("KAPALI"), UI_RED);
+  tft.setTextSize(4);
+  tft.setTextColor(UI_RED, UI_BG);
+  tft.setCursor(78, 100);
+  tft.print(F("KAPALI"));
 }
 
 void ekranaBaglantiHatasiYaz() {
-  tft.fillScreen(TFT_BLACK);
-  tft.setTextColor(TFT_RED);
-  tft.setTextSize(2);
-  tft.setCursor(25, 90);
-  tft.println("Baglanti Hatasi");
-  tft.setCursor(25, 120);
-  tft.println("Tekrar deneniyor...");
+  uiHeader(F("BAGLANTI"), UI_ORANGE);
+  tft.setTextSize(3);
+  tft.setTextColor(UI_ORANGE, UI_BG);
+  tft.setCursor(58, 96);
+  tft.print(F("BAGLANTI"));
+  uiStatusDots(150, UI_ORANGE);
 }
 
 void ekranaWaitingCiz() {
@@ -124,65 +219,77 @@ void ekranaWaitingCiz() {
   beklemeBaslangicMs = millis();
   sonSeritGenisligi = -1;
 
-  tft.fillScreen(TFT_BLACK);
-  tft.setTextColor(TFT_WHITE);
+  uiHeader(F("SECIM"), UI_BLUE);
+
+  // SU solda. Yeri degismedi.
+  uiCard(18, 58, 134, 118, 0x0277, UI_BLUE);
+  tft.fillEllipse(67, 90, 5, 9, UI_CYAN);
+  tft.fillEllipse(94, 104, 4, 7, UI_CYAN);
+  tft.fillEllipse(113, 90, 5, 9, UI_CYAN);
+  tft.setTextSize(4);
+  tft.setTextColor(TFT_WHITE, 0x0277);
+  tft.setCursor(58, 123);
+  tft.print(F("SU"));
+
+  // KOPUK sagda. Yeri degismedi.
+  uiCard(168, 58, 134, 118, 0x05D6, UI_CYAN);
+  tft.drawCircle(226, 90, 10, TFT_WHITE);
+  tft.drawCircle(247, 100, 8, TFT_WHITE);
+  tft.drawCircle(215, 108, 7, TFT_WHITE);
+  tft.drawCircle(238, 116, 5, TFT_WHITE);
   tft.setTextSize(2);
-  tft.setCursor(30, 20);
-  tft.println("Lutfen Paket Seciniz");
+  tft.setTextColor(TFT_BLACK, 0x05D6);
+  tft.setCursor(185, 128);
+  tft.print(F("KOPUK"));
 
-  // SU Butonu
-  tft.fillRoundRect(20, 80, 130, 90, 10, TFT_BLUE);
-  tft.setCursor(65, 115);
-  tft.setTextColor(TFT_WHITE, TFT_BLUE);
-  tft.setTextSize(3);
-  tft.println("SU");
-
-  // KOPUK Butonu
-  tft.fillRoundRect(170, 80, 130, 90, 10, TFT_CYAN);
-  tft.setCursor(185, 115);
-  tft.setTextColor(TFT_BLACK, TFT_CYAN);
-  tft.println("KOPUK");
+  uiProgress(20, 198, 280, 280, UI_GREEN);
 }
 
-// ================= QR CIZIMI =================
 
-void drawQR_to_TFT(esp_qrcode_handle_t qrcode) {
-  int size = esp_qrcode_get_size(qrcode);
+// ================= SABIT QR BITMAP =================
+// QR metni: bay_42060_01_01
+// qrcode.h ve esp_qrcode_generate kaldirildi.
+// Sabit QR PROGMEM'den cizilir; sketch boyutu ve calisma yuku azalir.
+#define FIXED_QR_SIZE 33
+#define FIXED_QR_BYTES_PER_ROW 5
 
-  if (size <= 0) {
-    return;
-  }
+const uint8_t fixedQrBitmap[] PROGMEM = {
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0F, 0xE1, 0x4B, 0xF8,
+  0x00, 0x08, 0x2E, 0xBA, 0x08, 0x00, 0x0B, 0xA6, 0xEA, 0xE8, 0x00, 0x0B,
+  0xA7, 0xF2, 0xE8, 0x00, 0x0B, 0xA9, 0xA2, 0xE8, 0x00, 0x08, 0x27, 0xC2,
+  0x08, 0x00, 0x0F, 0xEA, 0xAB, 0xF8, 0x00, 0x00, 0x04, 0xE8, 0x00, 0x00,
+  0x0A, 0xA1, 0xB8, 0x90, 0x00, 0x03, 0x48, 0xB0, 0x68, 0x00, 0x06, 0xE6,
+  0x44, 0xF8, 0x00, 0x05, 0xD6, 0x13, 0x00, 0x00, 0x08, 0x7A, 0x83, 0x68,
+  0x00, 0x03, 0xC1, 0xC3, 0x38, 0x00, 0x0A, 0x65, 0xAA, 0x58, 0x00, 0x05,
+  0x5A, 0xF4, 0x58, 0x00, 0x09, 0xF7, 0x2F, 0xC8, 0x00, 0x00, 0x0F, 0x28,
+  0x98, 0x00, 0x0F, 0xE2, 0x5A, 0xB8, 0x00, 0x08, 0x21, 0x18, 0xC8, 0x00,
+  0x0B, 0xAC, 0x8F, 0xD0, 0x00, 0x0B, 0xA1, 0xCC, 0xD0, 0x00, 0x0B, 0xAD,
+  0xB4, 0x88, 0x00, 0x08, 0x20, 0xE5, 0x50, 0x00, 0x0F, 0xEB, 0x3E, 0xD8,
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+};
 
-  int pixelSize = tft.height() / size;
-  if (pixelSize < 1) {
-    pixelSize = 1;
-  }
+void drawFixedQR(int ox, int oy, int scale) {
+  int qrPx = FIXED_QR_SIZE * scale;
+  tft.fillRect(ox - 8, oy - 8, qrPx + 16, qrPx + 16, TFT_WHITE);
 
-  int offsetX = (tft.width() - (size * pixelSize)) / 2;
-  int offsetY = (tft.height() - (size * pixelSize)) / 2;
+  for (int y = 0; y < FIXED_QR_SIZE; y++) {
+    for (int x = 0; x < FIXED_QR_SIZE; x++) {
+      int index = y * FIXED_QR_BYTES_PER_ROW + (x / 8);
+      uint8_t b = pgm_read_byte(&fixedQrBitmap[index]);
 
-  for (int y = 0; y < size; y++) {
-    for (int x = 0; x < size; x++) {
-      if (esp_qrcode_get_module(qrcode, x, y)) {
-        tft.fillRect(
-          offsetX + (x * pixelSize),
-          offsetY + (y * pixelSize),
-          pixelSize,
-          pixelSize,
-          TFT_BLACK
-        );
+      if (b & (0x80 >> (x % 8))) {
+        tft.fillRect(ox + x * scale, oy + y * scale, scale, scale, TFT_BLACK);
       }
     }
   }
 }
 
-void ekranaQRCiz(String metin) {
+void ekranaQRCiz(const char *metin) {
+  (void)metin;
   tft.fillScreen(TFT_WHITE);
-
-  esp_qrcode_config_t cfg = ESP_QRCODE_CONFIG_DEFAULT();
-  cfg.display_func = drawQR_to_TFT;
-
-  esp_qrcode_generate(&cfg, metin.c_str());
+  drawFixedQR(54, 14, 7);
 }
 
 // ================= WIFI / FIREBASE =================
@@ -192,7 +299,7 @@ bool wifiBaglan(unsigned long timeoutMs) {
     return true;
   }
 
-  Serial.println("WiFi baglantisi baslatiliyor...");
+  LOG_PRINTLN(F("WiFi baslatiliyor..."));
   WiFi.mode(WIFI_STA);
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
 
@@ -200,18 +307,18 @@ bool wifiBaglan(unsigned long timeoutMs) {
 
   while (WiFi.status() != WL_CONNECTED && millis() - baslangic < timeoutMs) {
     delay(500);
-    Serial.print(".");
+    LOG_PRINT(F("."));
   }
 
-  Serial.println();
+  LOG_PRINTLN(F(""));
 
   if (WiFi.status() == WL_CONNECTED) {
-    Serial.print("WiFi baglandi. IP: ");
-    Serial.println(WiFi.localIP());
+    LOG_PRINT(F("IP: "));
+    LOG_PRINTLN(WiFi.localIP());
     return true;
   }
 
-  Serial.println("WiFi baglanamadi.");
+  LOG_PRINTLN(F("WiFi yok."));
   return false;
 }
 
@@ -220,38 +327,39 @@ bool firebaseHazirBekle(unsigned long timeoutMs) {
 
   while (!Firebase.ready() && millis() - baslangic < timeoutMs) {
     delay(300);
-    Serial.print(".");
+    LOG_PRINT(F("."));
   }
 
-  Serial.println();
+  LOG_PRINTLN(F(""));
 
   if (Firebase.ready()) {
-    Serial.println("Firebase hazir.");
+    LOG_PRINTLN(F("Firebase hazir."));
     return true;
   }
 
-  Serial.println("Firebase hazir olmadi.");
+  LOG_PRINTLN(F("Firebase yok."));
   return false;
 }
 
 bool streamBaslat() {
   if (!Firebase.ready()) {
-    Serial.println("Stream baslatilamadi: Firebase hazir degil.");
+    LOG_PRINTLN(F("Stream yok: Firebase hazir degil."));
     return false;
   }
 
-  String path = bayPath();
+  char path[80];
+  makeBayPath(path, sizeof(path), nullptr);
 
-  if (!Firebase.RTDB.beginStream(&streamFbdo, path.c_str())) {
-    Serial.print("Stream baslatilamadi: ");
+  if (!Firebase.RTDB.beginStream(&streamFbdo, path)) {
+    LOG_PRINT(F("Stream hata: "));
     Serial.println(streamFbdo.errorReason());
     return false;
   }
 
   Firebase.RTDB.setStreamCallback(&streamFbdo, streamCallback, streamTimeoutCallback);
 
-  Serial.print("Stream baslatildi: ");
-  Serial.println(path);
+  LOG_PRINT(F("Stream: "));
+  LOG_PRINTLN(path);
 
   return true;
 }
@@ -272,23 +380,24 @@ void firebaseKurulumYap() {
 
 void nabizGonder() {
   if (WiFi.status() != WL_CONNECTED) {
-    Serial.println("Nabiz atlandi: WiFi bagli degil.");
+    LOG_PRINTLN(F("Nabiz yok: WiFi"));
     return;
   }
 
   if (!Firebase.ready()) {
-    Serial.println("Nabiz atlandi: Firebase hazir degil.");
+    LOG_PRINTLN(F("Nabiz yok: Firebase"));
     return;
   }
 
-  String path = bayPath() + "/lastSeen";
+  char path[96];
+  makeBayPath(path, sizeof(path), "lastSeen");
 
-  if (Firebase.RTDB.setTimestamp(&fbdo, path.c_str())) {
-    Serial.print("Nabiz gonderildi: ");
+  if (Firebase.RTDB.setTimestamp(&fbdo, path)) {
+    LOG_PRINT(F("Nabiz: "));
     Serial.println(bayId);
   } else {
-    Serial.println("Nabiz gonderilemedi.");
-    Serial.print("Hata sebebi: ");
+    LOG_PRINTLN(F("Nabiz hata."));
+    LOG_PRINT(F("Hata: "));
     Serial.println(fbdo.errorReason());
   }
 }
@@ -319,10 +428,17 @@ void ekrandaSayaciGuncelle() {
 
     // Ekran guncelleme
     if (toplamSaniye != sayacSonEkranSaniye) {
-      tft.setTextColor(TFT_YELLOW, TFT_BLACK);
+      bool kopuk = (requestedPackage == "foam");
+      uint16_t renk = kopuk ? UI_CYAN : UI_BLUE;
+
+      tft.fillRect(56, 96, 210, 56, UI_BG);
+      tft.setTextColor((toplamSaniye <= 10) ? UI_RED : TFT_WHITE, UI_BG);
       tft.setTextSize(5);
-      tft.setCursor(80, 120);
-      tft.printf("%02d:%02d   ", dakika, saniye);
+      tft.setCursor(68, 108);
+      tft.printf("%02d:%02d", dakika, saniye);
+
+      int barW = map(gecenMs, 0, islemSuresiMs, 280, 0);
+      uiProgress(20, 200, 280, barW, renk);
 
       sayacSonEkranSaniye = toplamSaniye;
     }
@@ -331,11 +447,11 @@ void ekrandaSayaciGuncelle() {
   } else if (!sayacIslemBittiCalindi) {
     tone(buzzerPin, 1000, 3000);
 
-    tft.fillScreen(TFT_BLACK);
-    tft.setTextColor(TFT_RED);
-    tft.setTextSize(3);
-    tft.setCursor(40, 110);
-    tft.println("ISLEM BITTI");
+    uiHeader(F("BITTI"), UI_GREEN);
+    tft.setTextColor(UI_GREEN, UI_BG);
+    tft.setTextSize(4);
+    tft.setCursor(62, 100);
+    tft.print(F("BITTI"));
 
     sayacIslemBittiCalindi = true;
   }
@@ -355,13 +471,13 @@ void streamCallback(FirebaseStream data) {
   bool durumFarkli = false;
 
   if (data.dataType() == "json") {
-    // 2. Static yerine Dynamic bellek kullanıyoruz (1024 byte). Veri büyüdükçe kilitlenmeyi önler.
-    DynamicJsonDocument doc(1024);
+    // Heap kullanmamak icin StaticJsonDocument kullaniyoruz.
+    StaticJsonDocument<768> doc;
 
     DeserializationError err = deserializeJson(doc, data.jsonString());
     if (err) {
-      Serial.print("JSON parse hatasi: ");
-      Serial.println(err.c_str());
+      LOG_PRINT(F("JSON hata: "));
+      LOG_PRINTLN(err.c_str());
       return;
     }
 
@@ -419,7 +535,7 @@ void streamCallback(FirebaseStream data) {
 
 void streamTimeoutCallback(bool timeout) {
   if (timeout) {
-    Serial.println("Stream timeout. Firebase otomatik yeniden baglanmayi deneyecek.");
+    LOG_PRINTLN(F("Stream timeout."));
   }
 }
 
@@ -427,6 +543,9 @@ void streamTimeoutCallback(bool timeout) {
 
 void setup() {
   Serial.begin(115200);
+
+  currentStatus.reserve(16);
+  requestedPackage.reserve(16);
 
   pinMode(buzzerPin, OUTPUT);
   digitalWrite(buzzerPin, LOW);
@@ -440,10 +559,11 @@ void setup() {
   uint16_t calData[5] = { 275, 3620, 264, 3532, 1 };
   tft.setTouch(calData);
 
-  tft.setCursor(20, 100);
+  uiHeader(F("BAGLAN"), UI_BLUE);
+  tft.setTextColor(UI_TEXT, UI_BG);
   tft.setTextSize(2);
-  tft.setTextColor(TFT_WHITE);
-  tft.println("WiFi Baglaniyor...");
+  tft.setCursor(82, 104);
+  tft.print(F("BAGLANIYOR"));
 
   bool wifiOk = wifiBaglan(WIFI_TIMEOUT_MS);
 
@@ -457,7 +577,7 @@ void setup() {
 
   firebaseKurulumYap();
 
-  Serial.print("Firebase baglantisi bekleniyor");
+  LOG_PRINT(F("Firebase bekleniyor"));
   bool firebaseOk = firebaseHazirBekle(FIREBASE_TIMEOUT_MS);
 
   if (!firebaseOk) {
@@ -476,7 +596,7 @@ void setup() {
     return;
   }
 
-  Serial.println("Sistem hazir.");
+  LOG_PRINTLN(F("Hazir."));
 
   nabizGonder();
   sonNabizZamani = millis();
@@ -539,7 +659,7 @@ void loop() {
   // Odeme bekleme timeout.
   if (odemeBekleniyor && currentStatus == "waiting") {
     if (millis() - odemeBeklemeBaslangicMs >= ODEME_BEKLEME_TIMEOUT_MS) {
-      Serial.println("Odeme bekleme timeout. Secim ekrani tekrar aciliyor.");
+      LOG_PRINTLN(F("Odeme timeout."));
 
       odemeBekleniyor = false;
       dokunmatikKilit = false;
@@ -547,8 +667,9 @@ void loop() {
 
       // Backend destekliyorsa eski secimi temizlemek iyi olur.
       if (Firebase.ready()) {
-        String path = bayPath() + "/hardwareSelection";
-        Firebase.RTDB.setString(&fbdo, path.c_str(), "");
+        char path[96];
+        makeBayPath(path, sizeof(path), "hardwareSelection");
+        Firebase.RTDB.setString(&fbdo, path, "");
       }
     }
   }
@@ -559,7 +680,7 @@ void loop() {
       durumDegisti = false;
       eskiDurum = currentStatus;
       ekranaKapaliYaz();
-      Serial.println("DURUM: PERON KAPALI");
+      LOG_PRINTLN(F("KAPALI"));
     }
 
     return;
@@ -569,7 +690,7 @@ void loop() {
   if (durumDegisti) {
     durumDegisti = false;
 
-    Serial.print("YENI DURUM: ");
+    LOG_PRINT(F("DURUM: "));
     Serial.println(currentStatus);
 
     if (currentStatus == "available") {
@@ -580,27 +701,18 @@ void loop() {
       dokunmatikKilit = false;
       odemeBekleniyor = false;
 
-      tft.fillScreen(TFT_BLACK);
-      tft.setTextColor(TFT_ORANGE);
-      tft.setTextSize(3);
-      tft.setCursor(40, 100);
-      tft.println("BAKIM MODU");
+      uiHeader(F("BAKIM"), UI_ORANGE);
+      tft.setTextColor(UI_ORANGE, UI_BG);
+      tft.setTextSize(4);
+      tft.setCursor(58, 100);
+      tft.print(F("BAKIM"));
     } else if (currentStatus == "waiting") {
       ekranaWaitingCiz();
     } else if (currentStatus == "busy") {
       dokunmatikKilit = true;
       odemeBekleniyor = false;
 
-      tft.fillScreen(TFT_BLACK);
-      tft.setTextSize(3);
-      tft.setTextColor(TFT_GREEN);
-      tft.setCursor(30, 40);
-
-      if (requestedPackage == "foam") {
-        tft.println("KOPUK MODU");
-      } else {
-        tft.println("SU MODU");
-      }
+      ekranaBusyModern();
 
       // Busy durumuna ilk kez girildiginde sureyi baslat.
       if (eskiDurum != "busy") {
@@ -608,14 +720,14 @@ void loop() {
         resetSayacDurumu();
       }
     } else {
-      Serial.print("Bilinmeyen durum: ");
+      LOG_PRINT(F("Bilinmeyen: "));
       Serial.println(currentStatus);
 
-      tft.fillScreen(TFT_BLACK);
-      tft.setTextColor(TFT_RED);
-      tft.setTextSize(2);
-      tft.setCursor(20, 100);
-      tft.println("Bilinmeyen Durum");
+      uiHeader(F("HATA"), UI_RED);
+      tft.setTextColor(UI_RED, UI_BG);
+      tft.setTextSize(3);
+      tft.setCursor(76, 100);
+      tft.print(F("DURUM"));
     }
 
     eskiDurum = currentStatus;
@@ -639,18 +751,7 @@ void loop() {
       );
 
       if (guncelGenislik != sonSeritGenisligi) {
-        tft.fillRect(20, 185, guncelGenislik, 8, TFT_GREEN);
-
-        if (maxGenislik > guncelGenislik) {
-          tft.fillRect(
-            20 + guncelGenislik,
-            185,
-            maxGenislik - guncelGenislik,
-            8,
-            TFT_BLACK
-          );
-        }
-
+        uiProgress(20, 198, maxGenislik, guncelGenislik, UI_GREEN);
         sonSeritGenisligi = guncelGenislik;
       }
     }
@@ -683,43 +784,31 @@ void loop() {
     if (secilenPaket != "") {
       dokunmatikKilit = true;
 
-      tft.fillScreen(TFT_BLACK);
-      tft.setCursor(20, 110);
-      tft.setTextSize(2);
-      tft.setTextColor(TFT_YELLOW);
-      tft.println("Istek iletiliyor...");
+      ekranaIstekModern();
 
-      delay(200);
+      delay(120);
 
       if (!Firebase.ready()) {
-        tft.fillScreen(TFT_BLACK);
-        tft.setCursor(30, 110);
-        tft.setTextColor(TFT_RED);
-        tft.println("Baglanti Hatasi!");
+        ekranaBaglantiHatasiYaz();
 
         hataEkraniGosteriliyor = true;
         hataEkraniBaslangicMs = millis();
         return;
       }
 
-      String path = bayPath() + "/hardwareSelection";
+      char path[96];
+      makeBayPath(path, sizeof(path), "hardwareSelection");
 
-      if (Firebase.RTDB.setString(&fbdo, path.c_str(), secilenPaket)) {
-        tft.fillScreen(TFT_BLACK);
-        tft.setCursor(20, 110);
-        tft.setTextColor(TFT_WHITE);
-        tft.println("Odeme bekleniyor...");
+      if (Firebase.RTDB.setString(&fbdo, path, secilenPaket)) {
+        ekranaOdemeModern();
 
         odemeBekleniyor = true;
         odemeBeklemeBaslangicMs = millis();
       } else {
-        Serial.print("Secim gonderilemedi: ");
+        LOG_PRINT(F("Secim hata: "));
         Serial.println(fbdo.errorReason());
 
-        tft.fillScreen(TFT_BLACK);
-        tft.setCursor(30, 110);
-        tft.setTextColor(TFT_RED);
-        tft.println("Baglanti Hatasi!");
+        ekranaBaglantiHatasiYaz();
 
         hataEkraniGosteriliyor = true;
         hataEkraniBaslangicMs = millis();
