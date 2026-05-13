@@ -7,9 +7,11 @@ import {
   Pressable,
   Text,
   TextInput,
+  View,
   KeyboardAvoidingView,
   ScrollView,
-  Platform
+  Platform,
+  StyleSheet,
 } from "react-native";
 import { auth } from "../firebase";
 
@@ -36,7 +38,7 @@ export default function ForgotPassword() {
             text: "Tamam",
             onPress: () => router.replace("/login"),
           },
-        ]
+        ],
       );
     } catch (error) {
       let mesaj = "Bir hata oluştu.";
@@ -53,67 +55,200 @@ export default function ForgotPassword() {
 
   return (
     <KeyboardAvoidingView
-      style={{ flex: 1, backgroundColor: "#fff" }}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      style={{ flex: 1 }}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
     >
       <ScrollView
-        contentContainerStyle={{
-          flexGrow: 1,
-          padding: 20,
-          justifyContent: "center",
-        }}
+        contentContainerStyle={styles.container}
         keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+        bounces={false}
       >
-        <Text style={{ fontSize: 28, fontWeight: "700", marginBottom: 16 }}>
-          Şifremi Unuttum
-        </Text>
+        {/* Tepe Dekorasyonu */}
+        <View style={styles.topDecor}>
+          <View style={styles.decorCircleLarge} />
+          <View style={styles.decorCircleSmall} />
+        </View>
 
-        <Text style={{ marginBottom: 6 }}>Email</Text>
-        <TextInput
-          value={email}
-          onChangeText={setEmail}
-          placeholder="ornek@mail.com"
-          autoCapitalize="none"
-          keyboardType="email-address"
-          editable={!yukleniyor}
-          style={{
-            borderWidth: 1,
-            borderColor: "#ddd",
-            padding: 12,
-            borderRadius: 12,
-            marginBottom: 16,
-            opacity: yukleniyor ? 0.7 : 1,
-          }}
-        />
-
-        <Pressable
-          onPress={sifreSifirla}
-          disabled={yukleniyor}
-          style={{
-            padding: 14,
-            borderRadius: 12,
-            alignItems: "center",
-            backgroundColor: yukleniyor ? "#444" : "#111",
-            flexDirection: "row",
-            justifyContent: "center",
-            gap: 10,
-          }}
-        >
-          {yukleniyor && <ActivityIndicator color="white" />}
-          <Text style={{ color: "white", fontSize: 16, fontWeight: "600" }}>
-            {yukleniyor ? "Gönderiliyor..." : "Sıfırlama Linki Gönder"}
+        {/* Başlık Alanı (Logo yok) */}
+        <View style={styles.brandArea}>
+          <Text style={styles.brandTitle}>Şifremi Unuttum</Text>
+          <Text style={styles.brandSubtitle}>
+            Sıfırlama linki için kayıtlı e-posta adresinizi girin
           </Text>
-        </Pressable>
+        </View>
 
-        <Pressable
-          onPress={() => router.replace("/login")}
-          style={{ marginTop: 15, alignItems: "center" }}
-        >
-          <Text style={{ textDecorationLine: "underline" }}>
-            Giriş ekranına dön
-          </Text>
-        </Pressable>
+        {/* Form Kartı */}
+        <View style={styles.formCard}>
+          <View style={styles.fieldGroup}>
+            <Text style={styles.fieldLabel}>E-posta</Text>
+            <View style={styles.inputWrapper}>
+              <Text style={styles.inputIcon}>✉️</Text>
+              <TextInput
+                value={email}
+                onChangeText={setEmail}
+                placeholder="ornek@mail.com"
+                placeholderTextColor="#9ca3af"
+                autoCapitalize="none"
+                keyboardType="email-address"
+                editable={!yukleniyor}
+                style={styles.input}
+                returnKeyType="done"
+                onSubmitEditing={sifreSifirla}
+              />
+            </View>
+          </View>
+
+          <Pressable
+            onPress={sifreSifirla}
+            disabled={yukleniyor}
+            style={({ pressed }) => [
+              styles.actionBtn,
+              pressed && { opacity: 0.88 },
+              yukleniyor && { opacity: 0.8 },
+            ]}
+          >
+            {yukleniyor ? (
+              <ActivityIndicator color="#fff" size="small" />
+            ) : (
+              <Text style={styles.actionBtnText}>Sıfırlama Linki Gönder →</Text>
+            )}
+          </Pressable>
+        </View>
+
+        <View style={styles.backRow}>
+          <Pressable
+            onPress={() => router.replace("/login")}
+            disabled={yukleniyor}
+          >
+            <Text style={styles.backLink}>← Giriş ekranına dön</Text>
+          </Pressable>
+        </View>
       </ScrollView>
     </KeyboardAvoidingView>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flexGrow: 1,
+    backgroundColor: "#f8f9fb",
+    paddingHorizontal: 24,
+    paddingBottom: 40,
+  },
+  topDecor: {
+    position: "absolute",
+    top: 0,
+    right: 0,
+    width: 200,
+    height: 200,
+    overflow: "hidden",
+  },
+  decorCircleLarge: {
+    position: "absolute",
+    top: -60,
+    right: -60,
+    width: 180,
+    height: 180,
+    borderRadius: 90,
+    backgroundColor: "#111827",
+    opacity: 0.06,
+  },
+  decorCircleSmall: {
+    position: "absolute",
+    top: -20,
+    right: 20,
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: "#111827",
+    opacity: 0.04,
+  },
+  brandArea: {
+    alignItems: "center",
+    paddingTop: 100,
+    paddingBottom: 32,
+    gap: 8,
+  },
+  brandTitle: {
+    fontSize: 26,
+    fontWeight: "900",
+    color: "#111827",
+    letterSpacing: -0.5,
+  },
+  brandSubtitle: {
+    fontSize: 14,
+    color: "#9ca3af",
+    fontWeight: "500",
+    textAlign: "center",
+  },
+  formCard: {
+    backgroundColor: "#fff",
+    borderRadius: 20,
+    padding: 20,
+    gap: 16,
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    elevation: 3,
+  },
+  fieldGroup: { gap: 6 },
+  fieldLabel: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#374151",
+    marginLeft: 2,
+  },
+  inputWrapper: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 1.5,
+    borderColor: "#e5e7eb",
+    borderRadius: 12,
+    backgroundColor: "#fafafa",
+    paddingHorizontal: 12,
+    gap: 8,
+  },
+  inputIcon: { fontSize: 15 },
+  input: {
+    flex: 1,
+    paddingVertical: 13,
+    fontSize: 15,
+    color: "#111827",
+    fontWeight: "500",
+  },
+  actionBtn: {
+    backgroundColor: "#111827",
+    borderRadius: 14,
+    paddingVertical: 15,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 8,
+    minHeight: 52,
+    shadowColor: "#111827",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    elevation: 6,
+  },
+  actionBtnText: {
+    color: "#fff",
+    fontWeight: "900",
+    fontSize: 16,
+    letterSpacing: 0.2,
+  },
+  backRow: {
+    flexDirection: "row",
+    justifyContent: "center",
+    marginTop: 24,
+  },
+  backLink: {
+    fontSize: 14,
+    color: "#111827",
+    fontWeight: "700",
+    textDecorationLine: "underline",
+  },
+});
