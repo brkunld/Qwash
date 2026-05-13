@@ -1,14 +1,7 @@
 import { router } from "expo-router";
 import { doc, serverTimestamp, setDoc } from "firebase/firestore";
 import { useState } from "react";
-import {
-    ActivityIndicator,
-    Alert,
-    Pressable,
-    Text,
-    TextInput,
-    View,
-} from "react-native";
+import { ActivityIndicator, Alert, Pressable, Text, TextInput, KeyboardAvoidingView, ScrollView, Platform } from "react-native";
 import { auth, db } from "../firebase";
 
 export default function ProfilTamamla() {
@@ -66,76 +59,84 @@ export default function ProfilTamamla() {
   };
 
   return (
-    <View style={{ flex: 1, padding: 20, justifyContent: "center" }}>
-      <Text style={{ fontSize: 24, fontWeight: "700", marginBottom: 16 }}>
-        Profili Tamamla
-      </Text>
-
-      <Text style={{ marginBottom: 6 }}>Ad</Text>
-      <TextInput
-        value={ad}
-        onChangeText={setAd}
-        placeholder="Adın"
-        editable={!yukleniyor}
-        style={{
-          borderWidth: 1,
-          borderColor: "#ddd",
-          padding: 12,
-          borderRadius: 12,
-          marginBottom: 12,
-        }}
-      />
-
-      <Text style={{ marginBottom: 6 }}>Soyad</Text>
-      <TextInput
-        value={soyad}
-        onChangeText={setSoyad}
-        placeholder="Soyadın"
-        editable={!yukleniyor}
-        style={{
-          borderWidth: 1,
-          borderColor: "#ddd",
-          padding: 12,
-          borderRadius: 12,
-          marginBottom: 16,
-        }}
-      />
-
-      <Text style={{ marginBottom: 6 }}>Telefon</Text>
-      <TextInput
-        keyboardType="number-pad"
-        maxLength={10}
-        value={telefon}
-        onChangeText={(t) => setTelefon(t.replace(/[^0-9]/g, ""))} // sadece rakam
-        placeholder="Telefon numaran (5XXXXXXXXX)"
-        editable={!yukleniyor}
-        style={{
-          borderWidth: 1,
-          borderColor: "#ddd",
-          padding: 12,
-          borderRadius: 12,
-          marginBottom: 16,
-        }}
-      />
-
-      <Pressable
-        onPress={kaydet}
-        disabled={yukleniyor}
-        style={{
-          padding: 14,
-          borderRadius: 12,
-          alignItems: "center",
-          backgroundColor: yukleniyor ? "#444" : "#111",
-          flexDirection: "row",
-          justifyContent: "center",
-          gap: 10,
-        }}
+    <KeyboardAvoidingView 
+      style={{ flex: 1, backgroundColor: '#fff' }} 
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+    >
+      <ScrollView 
+        contentContainerStyle={{ flexGrow: 1, padding: 20, justifyContent: "center" }}
+        keyboardShouldPersistTaps="handled" // Klavye dışına tıklayınca kapanmasını sağlar
       >
-        {yukleniyor ? <ActivityIndicator color="white" /> : null}
-        <Text style={{ color: "white", fontSize: 16, fontWeight: "600" }}>
-          {yukleniyor ? "Kaydediliyor..." : "Kaydet"}
+        <Text style={{ fontSize: 24, fontWeight: "700", marginBottom: 16 }}>
+          Profili Tamamla
         </Text>
-      </Pressable>
-    </View>
+
+        <Text style={{ marginBottom: 6 }}>Ad</Text>
+        <TextInput
+          value={ad}
+          onChangeText={setAd}
+          placeholder="Adın"
+          editable={!yukleniyor}
+          style={{
+            borderWidth: 1,
+            borderColor: "#ddd",
+            padding: 12,
+            borderRadius: 12,
+            marginBottom: 12,
+          }}
+        />
+
+        <Text style={{ marginBottom: 6 }}>Soyad</Text>
+        <TextInput
+          value={soyad}
+          onChangeText={setSoyad}
+          placeholder="Soyadın"
+          editable={!yukleniyor}
+          style={{
+            borderWidth: 1,
+            borderColor: "#ddd",
+            padding: 12,
+            borderRadius: 12,
+            marginBottom: 16,
+          }}
+        />
+
+        <Text style={{ marginBottom: 6 }}>Telefon</Text>
+        <TextInput
+          keyboardType="number-pad"
+          maxLength={10}
+          value={telefon}
+          onChangeText={(t) => setTelefon(t.replace(/[^0-9]/g, ""))} 
+          placeholder="Telefon numaran (5XXXXXXXXX)"
+          editable={!yukleniyor}
+          style={{
+            borderWidth: 1,
+            borderColor: "#ddd",
+            padding: 12,
+            borderRadius: 12,
+            marginBottom: 16,
+          }}
+        />
+
+        <Pressable
+          onPress={kaydet}
+          disabled={yukleniyor}
+          style={{
+            padding: 14,
+            borderRadius: 12,
+            alignItems: "center",
+            backgroundColor: yukleniyor ? "#444" : "#111",
+            flexDirection: "row",
+            justifyContent: "center",
+            gap: 10,
+          }}
+        >
+          {yukleniyor ? <ActivityIndicator color="white" /> : null}
+          <Text style={{ color: "white", fontSize: 16, fontWeight: "600" }}>
+            {yukleniyor ? "Kaydediliyor..." : "Kaydet"}
+          </Text>
+        </Pressable>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }

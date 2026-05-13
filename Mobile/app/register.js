@@ -84,12 +84,13 @@ export default function Register() {
 
   return (
     <KeyboardAvoidingView
-      style={{ flex: 1 }}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      style={{ flex: 1, backgroundColor: "#f8f9fb" }}
+      behavior={Platform.OS === "ios" ? "padding" : "height"} // Android için "height" eklendi
     >
       <ScrollView
         contentContainerStyle={styles.container}
         keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
         bounces={false}
       >
         {/* Tepe Dekorasyonu */}

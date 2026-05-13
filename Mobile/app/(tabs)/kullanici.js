@@ -6,7 +6,9 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  View
+  View,
+  KeyboardAvoidingView, // EKLENDİ
+  Platform              // EKLENDİ
 } from "react-native";
 import { useKullaniciIslemleri } from "../../src/kullaniciIslemleri";
 
@@ -250,163 +252,181 @@ export default function KullaniciEkrani() {
         )}
       </ScrollView>
 
-      {/* ── Bakiye Yükle Modal ── */}
+{/* ── Bakiye Yükle Modal ── */}
       <Modal visible={yuklemeAcik} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalBox}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>💳 Bakiye Yükle</Text>
-            </View>
+        <KeyboardAvoidingView
+          style={styles.modalOverlay}
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+        >
+          <View style={[styles.modalBox, { maxHeight: "85%" }]}>
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+            >
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>💳 Bakiye Yükle</Text>
+              </View>
 
-            <Text style={styles.inputLabel}>Kaç Jeton? (1–100)</Text>
-            <TextInput
-              value={jetonAdet}
-              onChangeText={(t) =>
-                setJetonAdet(String(t).replace(/[^0-9]/g, ""))
-              }
-              keyboardType="number-pad"
-              style={styles.input}
-              placeholderTextColor={GRAY_TEXT}
-              placeholder="Örn: 10"
-            />
-
-            <View style={styles.fiyatBox}>
-              {fiyatYukleniyor ? (
-                <ActivityIndicator color={YELLOW} />
-              ) : jetonFiyat ? (
-                <>
-                  <Text style={styles.fiyatMeta}>
-                    Birim: {jetonFiyat} ₺ / jeton
-                  </Text>
-                  <Text style={styles.fiyatTotal}>Toplam: {toplamText} ₺</Text>
-                </>
-              ) : (
-                <Text style={styles.fiyatErr}>Fiyat bilgisi alınamadı.</Text>
-              )}
-            </View>
-
-            <Text style={styles.inputLabel}>Kart Numarası</Text>
-            <TextInput
-              value={kartNo}
-              onChangeText={setKartNo}
-              placeholder="•••• •••• •••• ••••"
-              style={styles.input}
-              placeholderTextColor={GRAY_TEXT}
-            />
-
-            <View style={styles.row}>
+              <Text style={styles.inputLabel}>Kaç Jeton? (1–100)</Text>
               <TextInput
-                value={sonKullanma}
-                onChangeText={setSonKullanma}
-                placeholder="AA/YY"
-                style={[styles.input, { flex: 1, marginRight: 8 }]}
+                value={jetonAdet}
+                onChangeText={(t) =>
+                  setJetonAdet(String(t).replace(/[^0-9]/g, ""))
+                }
+                keyboardType="number-pad"
+                style={styles.input}
+                placeholderTextColor={GRAY_TEXT}
+                placeholder="Örn: 10"
+              />
+
+              <View style={styles.fiyatBox}>
+                {fiyatYukleniyor ? (
+                  <ActivityIndicator color={YELLOW} />
+                ) : jetonFiyat ? (
+                  <>
+                    <Text style={styles.fiyatMeta}>
+                      Birim: {jetonFiyat} ₺ / jeton
+                    </Text>
+                    <Text style={styles.fiyatTotal}>Toplam: {toplamText} ₺</Text>
+                  </>
+                ) : (
+                  <Text style={styles.fiyatErr}>Fiyat bilgisi alınamadı.</Text>
+                )}
+              </View>
+
+              <Text style={styles.inputLabel}>Kart Numarası</Text>
+              <TextInput
+                value={kartNo}
+                onChangeText={setKartNo}
+                placeholder="•••• •••• •••• ••••"
+                style={styles.input}
                 placeholderTextColor={GRAY_TEXT}
               />
-              <TextInput
-                value={cvv}
-                onChangeText={(t) => setCvv(t.replace(/[^0-9]/g, ""))}
-                placeholder="CVV"
-                secureTextEntry
-                style={[styles.input, { flex: 1 }]}
-                placeholderTextColor={GRAY_TEXT}
-              />
-            </View>
 
-            <Pressable
-              onPress={() => bakiyeYukle(adetNum, toplamTRY)}
-              disabled={yuklemeIslemde || fiyatYukleniyor || !jetonFiyat}
-              style={[
-                styles.yellowBtn,
-                (yuklemeIslemde || fiyatYukleniyor || !jetonFiyat) &&
-                  styles.btnDisabled,
-              ]}
-            >
-              {yuklemeIslemde ? (
-                <ActivityIndicator color={DARK} />
-              ) : (
-                <Text style={styles.yellowBtnText}>Öde ve Yükle</Text>
-              )}
-            </Pressable>
+              <View style={styles.row}>
+                <TextInput
+                  value={sonKullanma}
+                  onChangeText={setSonKullanma}
+                  placeholder="AA/YY"
+                  style={[styles.input, { flex: 1, marginRight: 8 }]}
+                  placeholderTextColor={GRAY_TEXT}
+                />
+                <TextInput
+                  value={cvv}
+                  onChangeText={(t) => setCvv(t.replace(/[^0-9]/g, ""))}
+                  placeholder="CVV"
+                  secureTextEntry
+                  style={[styles.input, { flex: 1 }]}
+                  placeholderTextColor={GRAY_TEXT}
+                />
+              </View>
 
-            <Pressable
-              onPress={() => setYuklemeAcik(false)}
-              style={styles.vazgecBtn}
-            >
-              <Text style={styles.vazgecText}>Vazgeç</Text>
-            </Pressable>
+              <Pressable
+                onPress={() => bakiyeYukle(adetNum, toplamTRY)}
+                disabled={yuklemeIslemde || fiyatYukleniyor || !jetonFiyat}
+                style={[
+                  styles.yellowBtn,
+                  (yuklemeIslemde || fiyatYukleniyor || !jetonFiyat) &&
+                    styles.btnDisabled,
+                ]}
+              >
+                {yuklemeIslemde ? (
+                  <ActivityIndicator color={DARK} />
+                ) : (
+                  <Text style={styles.yellowBtnText}>Öde ve Yükle</Text>
+                )}
+              </Pressable>
+
+              <Pressable
+                onPress={() => setYuklemeAcik(false)}
+                style={styles.vazgecBtn}
+              >
+                <Text style={styles.vazgecText}>Vazgeç</Text>
+              </Pressable>
+            </ScrollView>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* ── Profil Modal ── */}
       <Modal visible={profilAcik} transparent animationType="slide">
-        <Pressable
+        <KeyboardAvoidingView
           style={styles.modalOverlay}
-          onPress={() => setProfilAcik(false)}
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
         >
           <Pressable
-            style={styles.modalBox}
-            onPress={(e) => e.stopPropagation()}
+            style={{ flex: 1, justifyContent: "flex-end" }}
+            onPress={() => setProfilAcik(false)}
           >
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>👤 Profil</Text>
-            </View>
+            <Pressable
+              style={[styles.modalBox, { maxHeight: "85%" }]}
+              onPress={(e) => e.stopPropagation()}
+            >
+              <ScrollView
+                showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
+              >
+                <View style={styles.modalHeader}>
+                  <Text style={styles.modalTitle}>👤 Profil</Text>
+                </View>
 
-            {profilYukleniyor ? (
-              <ActivityIndicator color={YELLOW} />
-            ) : (
-              <>
-                <Text style={styles.inputLabel}>Ad</Text>
-                <TextInput
-                  value={ad}
-                  onChangeText={setAd}
-                  placeholder="Ad"
-                  style={styles.input}
-                  placeholderTextColor={GRAY_TEXT}
-                />
-                <Text style={styles.inputLabel}>Soyad</Text>
-                <TextInput
-                  value={soyad}
-                  onChangeText={setSoyad}
-                  placeholder="Soyad"
-                  style={styles.input}
-                  placeholderTextColor={GRAY_TEXT}
-                />
-                <Text style={styles.inputLabel}>Telefon</Text>
-                <TextInput
-                  value={telefon}
-                  onChangeText={setTelefon}
-                  placeholder="5XXXXXXXXX"
-                  keyboardType="number-pad"
-                  style={styles.input}
-                  placeholderTextColor={GRAY_TEXT}
-                />
+                {profilYukleniyor ? (
+                  <ActivityIndicator color={YELLOW} />
+                ) : (
+                  <>
+                    <Text style={styles.inputLabel}>Ad</Text>
+                    <TextInput
+                      value={ad}
+                      onChangeText={setAd}
+                      placeholder="Ad"
+                      style={styles.input}
+                      placeholderTextColor={GRAY_TEXT}
+                    />
+                    <Text style={styles.inputLabel}>Soyad</Text>
+                    <TextInput
+                      value={soyad}
+                      onChangeText={setSoyad}
+                      placeholder="Soyad"
+                      style={styles.input}
+                      placeholderTextColor={GRAY_TEXT}
+                    />
+                    <Text style={styles.inputLabel}>Telefon</Text>
+                    <TextInput
+                      value={telefon}
+                      onChangeText={setTelefon}
+                      placeholder="5XXXXXXXXX"
+                      keyboardType="number-pad"
+                      style={styles.input}
+                      placeholderTextColor={GRAY_TEXT}
+                    />
 
-                <Pressable
-                  onPress={profilKaydet}
-                  disabled={profilKaydediyor}
-                  style={[
-                    styles.yellowBtn,
-                    profilKaydediyor && styles.btnDisabled,
-                  ]}
-                >
-                  {profilKaydediyor ? (
-                    <ActivityIndicator color={DARK} />
-                  ) : (
-                    <Text style={styles.yellowBtnText}>Kaydet</Text>
-                  )}
-                </Pressable>
+                    <Pressable
+                      onPress={profilKaydet}
+                      disabled={profilKaydediyor}
+                      style={[
+                        styles.yellowBtn,
+                        profilKaydediyor && styles.btnDisabled,
+                      ]}
+                    >
+                      {profilKaydediyor ? (
+                        <ActivityIndicator color={DARK} />
+                      ) : (
+                        <Text style={styles.yellowBtnText}>Kaydet</Text>
+                      )}
+                    </Pressable>
 
-                <Pressable
-                  onPress={() => setProfilAcik(false)}
-                  style={styles.vazgecBtn}
-                >
-                  <Text style={styles.vazgecText}>Kapat</Text>
-                </Pressable>
-              </>
-            )}
+                    <Pressable
+                      onPress={() => setProfilAcik(false)}
+                      style={styles.vazgecBtn}
+                    >
+                      <Text style={styles.vazgecText}>Kapat</Text>
+                    </Pressable>
+                  </>
+                )}
+              </ScrollView>
+            </Pressable>
           </Pressable>
-        </Pressable>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );
