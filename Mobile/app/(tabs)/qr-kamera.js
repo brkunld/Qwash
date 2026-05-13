@@ -1,6 +1,6 @@
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { router, useFocusEffect } from "expo-router"; // 🔥 useFocusEffect eklendi
-import { get, ref, serverTimestamp, update } from "firebase/database";
+import { ref, runTransaction } from "firebase/database";
 import { useCallback, useState } from "react"; // 🔥 useCallback eklendi
 import {
   ActivityIndicator,
@@ -63,9 +63,9 @@ export default function QrKamera() {
     );
   }
 
-  const okundu = async ({ data }) => {
+const okundu = async ({ data }) => {
     if (kilit) return;
-    setKilit(true); // 🔥 Kamera kilitlendi, işlem bitene/sayfa değişene kadar başka okuma yapamaz
+    setKilit(true);
     setYukleniyor(true);
 
     const raw = String(data ?? "").trim();
@@ -84,56 +84,44 @@ export default function QrKamera() {
     const re = /^bay_\d{5}_\d{2}_\d{2}$/i;
     if (!re.test(bayId)) {
       setYukleniyor(false);
-      Alert.alert(
-        "Geçersiz QR",
-        `Okunan: "${raw}"\nBeklenen örnek: bay_42060_01_01`,
-      );
-      // Hatalı okumada sürekli alert spamlamaması için kilidi 2 saniye sonra açıyoruz
+      Alert.alert("Geçersiz QR", `Okunan: "${raw}"\nBeklenen: bay_42060_01_01`);
       setTimeout(() => setKilit(false), 2000);
       return;
     }
 
     try {
       const bayRef = ref(rtdb, `bays/${bayId}`);
-      const snapshot = await get(bayRef);
 
-      if (snapshot.exists()) {
-        const mevcutDurum = snapshot.val().status;
-
-        if (mevcutDurum !== "available") {
-          setYukleniyor(false);
-          Alert.alert(
-            "Peron Meşgul",
-            "Bu peron şu anda başka bir işlem için rezerve edilmiş veya kullanımda.",
-          );
-          setTimeout(() => setKilit(false), 2500); // 2.5 saniye sonra tekrar deneyebilir
-          return;
+      // 🔥 RACE CONDITION ÇÖZÜMÜ: runTransaction Kullanımı
+      const { committed, snapshot } = await runTransaction(bayRef, (currentData) => {
+        if (currentData === null) {
+          return currentData; // Peron yoksa işlemi iptal et
         }
-      } else {
+        if (currentData.status === "available") {
+          currentData.status = "waiting";
+          currentData.updatedAt = Date.now(); // Transaction içinde Date.now() kullanmak daha güvenlidir
+          return currentData; // Başarıyla kendine rezerve et
+        }
+        return; // Müsait değilse işlemi (transaction) iptal et
+      });
+
+      if (!committed) {
         setYukleniyor(false);
-        Alert.alert("Hata", "Okutulan peron sistemde bulunamadı.");
+        if (!snapshot.exists()) {
+          Alert.alert("Hata", "Okutulan peron sistemde bulunamadı.");
+        } else {
+          Alert.alert("Peron Meşgul", "Bu peron şu anda rezerve edilmiş veya kullanımda.");
+        }
         setTimeout(() => setKilit(false), 2500);
         return;
       }
 
-      await update(bayRef, {
-        status: "waiting",
-        updatedAt: serverTimestamp(),
-      });
-
       setYukleniyor(false);
+      router.navigate({ pathname: "/kullanici", params: { bayId } });
 
-      // 🔥 DİKKAT: Burada 'setKilit(false)' SİLİNDİ!
-      // Sayfadan ayrılırken kamerayı kapalı bırakıyoruz ki geçiş esnasında arkadan tekrar okumasın.
-      // Geri dönüldüğünde zaten yukarıdaki useFocusEffect onu otomatik açacak.
-
-      router.navigate({ pathname: "/(tabs)/kullanici", params: { bayId } });
     } catch (error) {
       console.error("RTDB Güncelleme Hatası:", error);
-      Alert.alert(
-        "Hata",
-        "Peron durumu güncellenemedi. Lütfen tekrar deneyin.",
-      );
+      Alert.alert("Hata", "Peron durumu güncellenemedi.");
       setYukleniyor(false);
       setTimeout(() => setKilit(false), 2000);
     }
