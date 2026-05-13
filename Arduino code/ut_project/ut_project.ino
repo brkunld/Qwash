@@ -346,18 +346,19 @@ void ekrandaSayaciGuncelle() {
 void streamCallback(FirebaseStream data) {
   String path = data.dataPath();
 
-  // Kendi gonderdigimiz veya ekrani ilgilendirmeyen alanlar sayaci sifirlamasin.
-  if (path == "/lastSeen" || path == "/updatedAt") {
+  // 1. Kendi gönderdiğimiz veya arayüzü doğrudan değiştirmeyen verileri filtrele
+  // /hardwareSelection buraya EKLENMELİ, aksi halde kendi seçimimiz ekranı sıfırlar!
+  if (path == "/lastSeen" || path == "/updatedAt" || path == "/hardwareSelection") {
     return;
   }
 
-  durumDegisti = true;
+  bool durumFarkli = false;
 
   if (data.dataType() == "json") {
-    StaticJsonDocument<512> doc;
+    // 2. Static yerine Dynamic bellek kullanıyoruz (1024 byte). Veri büyüdükçe kilitlenmeyi önler.
+    DynamicJsonDocument doc(1024);
 
     DeserializationError err = deserializeJson(doc, data.jsonString());
-
     if (err) {
       Serial.print("JSON parse hatasi: ");
       Serial.println(err.c_str());
@@ -365,11 +366,19 @@ void streamCallback(FirebaseStream data) {
     }
 
     if (doc.containsKey("status")) {
-      currentStatus = doc["status"].as<String>();
+      String yeniDurum = doc["status"].as<String>();
+      if (currentStatus != yeniDurum) {
+        currentStatus = yeniDurum;
+        durumFarkli = true; // Sadece status gerçekten değiştiyse ekranı güncelle
+      }
     }
 
     if (doc.containsKey("isActive")) {
-      isBayActive = doc["isActive"].as<bool>();
+      bool yeniAktiflik = doc["isActive"].as<bool>();
+      if (isBayActive != yeniAktiflik) {
+        isBayActive = yeniAktiflik;
+        durumFarkli = true;
+      }
     }
 
     if (doc.containsKey("requestedPackage")) {
@@ -381,16 +390,30 @@ void streamCallback(FirebaseStream data) {
       durationSec = guvenliDurationOku(gelenSure);
     }
   } else {
+    // Tekil alan güncellemeleri
     if (path == "/status") {
-      currentStatus = data.stringData();
+      String yeniDurum = data.stringData();
+      if (currentStatus != yeniDurum) {
+        currentStatus = yeniDurum;
+        durumFarkli = true;
+      }
     } else if (path == "/isActive") {
-      isBayActive = data.boolData();
+      bool yeniAktiflik = data.boolData();
+      if (isBayActive != yeniAktiflik) {
+        isBayActive = yeniAktiflik;
+        durumFarkli = true;
+      }
     } else if (path == "/requestedPackage") {
       requestedPackage = data.stringData();
     } else if (path == "/durationSec") {
       int gelenSure = data.intData();
       durationSec = guvenliDurationOku(gelenSure);
     }
+  }
+
+  // 3. Sadece kritik bir durum (status veya isActive) değiştiyse ana döngüye haber ver
+  if (durumFarkli) {
+    durumDegisti = true;
   }
 }
 
@@ -649,11 +672,9 @@ void loop() {
       if (tft.getTouch(&x, &y)) {
         if (y > 80 && y < 170) {
           if (x > 20 && x < 150) {
-            // SOL BUTON: SU
-            secilenPaket = "wash";
-          } else if (x > 170 && x < 300) {
-            // SAG BUTON: KOPUK
             secilenPaket = "foam";
+          } else if (x > 170 && x < 300) {
+            secilenPaket = "wash";
           }
         }
       }
