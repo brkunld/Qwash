@@ -78,87 +78,6 @@ int sayacSonEkranSaniye = -1;
 unsigned long sayacSonYarimSaniyeMs = 0;
 bool sayacIslemBittiCalindi = false;
 
-// ================= MODERN STATIK 320x240 UI =================
-// Animasyon yok. Hafif, temiz, 320x240 yatay ekrana gore.
-#define UI_BG       0x0841   // koyu lacivert
-#define UI_PANEL    0x18E3
-#define UI_PANEL2   0x2104
-#define UI_TEXT     TFT_WHITE
-#define UI_MUTED    0x8410
-#define UI_BLUE     0x04BF
-#define UI_CYAN     0x07FF
-#define UI_GREEN    0x07E0
-#define UI_RED      0xF800
-#define UI_ORANGE   0xFD20
-#define UI_YELLOW   TFT_YELLOW
-
-void uiClear() {
-  tft.fillScreen(UI_BG);
-}
-
-void uiHeader(const __FlashStringHelper *title, uint16_t accent) {
-  uiClear();
-  tft.fillRect(0, 0, 320, 32, UI_PANEL);
-  tft.fillRect(0, 30, 320, 2, accent);
-
-  tft.setTextSize(2);
-  tft.setTextColor(UI_TEXT, UI_PANEL);
-  tft.setCursor(12, 8);
-  tft.print(title);
-}
-
-void uiCard(int x, int y, int w, int h, uint16_t fill, uint16_t border) {
-  tft.fillRoundRect(x, y, w, h, 16, fill);
-  tft.drawRoundRect(x, y, w, h, 16, border);
-  tft.drawRoundRect(x + 2, y + 2, w - 4, h - 4, 14, border);
-}
-
-void uiProgress(int x, int y, int w, int value, uint16_t color) {
-  tft.fillRoundRect(x, y, w, 9, 4, UI_PANEL2);
-  if (value > 0) tft.fillRoundRect(x, y, value, 9, 4, color);
-}
-
-void uiStatusDots(int y, uint16_t color) {
-  tft.fillCircle(138, y, 4, color);
-  tft.fillCircle(160, y, 4, color);
-  tft.fillCircle(182, y, 4, color);
-}
-
-void ekranaOdemeModern() {
-  uiHeader(F("ODEME"), UI_GREEN);
-  tft.setTextSize(2);
-  tft.setTextColor(UI_TEXT, UI_BG);
-  tft.setCursor(52, 96);
-  tft.print(F("ODEME BEKLENIYOR"));
-  uiStatusDots(150, UI_GREEN);
-}
-
-void ekranaIstekModern() {
-  uiHeader(F("ISTEK"), UI_YELLOW);
-  tft.setTextSize(2);
-  tft.setTextColor(UI_YELLOW, UI_BG);
-  tft.setCursor(58, 104);
-  tft.print(F("GONDERILIYOR"));
-  uiStatusDots(150, UI_YELLOW);
-}
-
-void ekranaBusyModern() {
-  bool kopuk = (requestedPackage == "foam");
-  uint16_t renk = kopuk ? UI_CYAN : UI_BLUE;
-
-  uiHeader(kopuk ? F("KOPUK") : F("SU"), renk);
-
-  tft.drawRoundRect(36, 78, 248, 88, 18, UI_PANEL2);
-  tft.drawRoundRect(38, 80, 244, 84, 16, renk);
-
-  tft.setTextSize(1);
-  tft.setTextColor(UI_MUTED, UI_BG);
-  tft.setCursor(126, 176);
-  tft.print(F("KALAN SURE"));
-
-  uiProgress(20, 200, 280, 280, renk);
-}
-
 // ================= YARDIMCI FONKSIYONLAR =================
 
 void makeBayPath(char *out, size_t outSize, const char *child) {
@@ -196,20 +115,23 @@ void ekranaMesajYaz(uint16_t arkaPlan, uint16_t yaziRengi, int textSize, int x, 
 }
 
 void ekranaKapaliYaz() {
-  uiHeader(F("KAPALI"), UI_RED);
-  tft.setTextSize(4);
-  tft.setTextColor(UI_RED, UI_BG);
-  tft.setCursor(78, 100);
-  tft.print(F("KAPALI"));
+  tft.fillScreen(TFT_BLACK);
+  tft.setTextColor(TFT_RED);
+  tft.setTextSize(3);
+  tft.setCursor(50, 80);
+  tft.println("BU PERON");
+  tft.setCursor(40, 120);
+  tft.println("KAPALIDIR");
 }
 
 void ekranaBaglantiHatasiYaz() {
-  uiHeader(F("BAGLANTI"), UI_ORANGE);
-  tft.setTextSize(3);
-  tft.setTextColor(UI_ORANGE, UI_BG);
-  tft.setCursor(58, 96);
-  tft.print(F("BAGLANTI"));
-  uiStatusDots(150, UI_ORANGE);
+  tft.fillScreen(TFT_BLACK);
+  tft.setTextColor(TFT_RED);
+  tft.setTextSize(2);
+  tft.setCursor(25, 90);
+  tft.println("Baglanti Hatasi");
+  tft.setCursor(25, 120);
+  tft.println("Tekrar deneniyor...");
 }
 
 void ekranaWaitingCiz() {
@@ -219,30 +141,24 @@ void ekranaWaitingCiz() {
   beklemeBaslangicMs = millis();
   sonSeritGenisligi = -1;
 
-  uiHeader(F("SECIM"), UI_BLUE);
-
-  // SU solda. Yeri degismedi.
-  uiCard(18, 58, 134, 118, 0x0277, UI_BLUE);
-  tft.fillEllipse(67, 90, 5, 9, UI_CYAN);
-  tft.fillEllipse(94, 104, 4, 7, UI_CYAN);
-  tft.fillEllipse(113, 90, 5, 9, UI_CYAN);
-  tft.setTextSize(4);
-  tft.setTextColor(TFT_WHITE, 0x0277);
-  tft.setCursor(58, 123);
-  tft.print(F("SU"));
-
-  // KOPUK sagda. Yeri degismedi.
-  uiCard(168, 58, 134, 118, 0x05D6, UI_CYAN);
-  tft.drawCircle(226, 90, 10, TFT_WHITE);
-  tft.drawCircle(247, 100, 8, TFT_WHITE);
-  tft.drawCircle(215, 108, 7, TFT_WHITE);
-  tft.drawCircle(238, 116, 5, TFT_WHITE);
+  tft.fillScreen(TFT_BLACK);
+  tft.setTextColor(TFT_WHITE);
   tft.setTextSize(2);
-  tft.setTextColor(TFT_BLACK, 0x05D6);
-  tft.setCursor(185, 128);
-  tft.print(F("KOPUK"));
+  tft.setCursor(30, 20);
+  tft.println("Lutfen Paket Seciniz");
 
-  uiProgress(20, 198, 280, 280, UI_GREEN);
+  // SU Butonu
+  tft.fillRoundRect(20, 80, 130, 90, 10, TFT_BLUE);
+  tft.setCursor(65, 115);
+  tft.setTextColor(TFT_WHITE, TFT_BLUE);
+  tft.setTextSize(3);
+  tft.println("SU");
+
+  // KOPUK Butonu
+  tft.fillRoundRect(170, 80, 130, 90, 10, TFT_CYAN);
+  tft.setCursor(185, 115);
+  tft.setTextColor(TFT_BLACK, TFT_CYAN);
+  tft.println("KOPUK");
 }
 
 
@@ -428,17 +344,10 @@ void ekrandaSayaciGuncelle() {
 
     // Ekran guncelleme
     if (toplamSaniye != sayacSonEkranSaniye) {
-      bool kopuk = (requestedPackage == "foam");
-      uint16_t renk = kopuk ? UI_CYAN : UI_BLUE;
-
-      tft.fillRect(56, 96, 210, 56, UI_BG);
-      tft.setTextColor((toplamSaniye <= 10) ? UI_RED : TFT_WHITE, UI_BG);
+      tft.setTextColor(TFT_YELLOW, TFT_BLACK);
       tft.setTextSize(5);
-      tft.setCursor(68, 108);
-      tft.printf("%02d:%02d", dakika, saniye);
-
-      int barW = map(gecenMs, 0, islemSuresiMs, 280, 0);
-      uiProgress(20, 200, 280, barW, renk);
+      tft.setCursor(80, 120);
+      tft.printf("%02d:%02d   ", dakika, saniye);
 
       sayacSonEkranSaniye = toplamSaniye;
     }
@@ -447,11 +356,11 @@ void ekrandaSayaciGuncelle() {
   } else if (!sayacIslemBittiCalindi) {
     tone(buzzerPin, 1000, 3000);
 
-    uiHeader(F("BITTI"), UI_GREEN);
-    tft.setTextColor(UI_GREEN, UI_BG);
-    tft.setTextSize(4);
-    tft.setCursor(62, 100);
-    tft.print(F("BITTI"));
+    tft.fillScreen(TFT_BLACK);
+    tft.setTextColor(TFT_RED);
+    tft.setTextSize(3);
+    tft.setCursor(40, 110);
+    tft.println("ISLEM BITTI");
 
     sayacIslemBittiCalindi = true;
   }
@@ -559,11 +468,10 @@ void setup() {
   uint16_t calData[5] = { 275, 3620, 264, 3532, 1 };
   tft.setTouch(calData);
 
-  uiHeader(F("BAGLAN"), UI_BLUE);
-  tft.setTextColor(UI_TEXT, UI_BG);
+  tft.setCursor(20, 100);
   tft.setTextSize(2);
-  tft.setCursor(82, 104);
-  tft.print(F("BAGLANIYOR"));
+  tft.setTextColor(TFT_WHITE);
+  tft.println("WiFi Baglaniyor...");
 
   bool wifiOk = wifiBaglan(WIFI_TIMEOUT_MS);
 
@@ -701,18 +609,27 @@ void loop() {
       dokunmatikKilit = false;
       odemeBekleniyor = false;
 
-      uiHeader(F("BAKIM"), UI_ORANGE);
-      tft.setTextColor(UI_ORANGE, UI_BG);
-      tft.setTextSize(4);
-      tft.setCursor(58, 100);
-      tft.print(F("BAKIM"));
+      tft.fillScreen(TFT_BLACK);
+      tft.setTextColor(TFT_ORANGE);
+      tft.setTextSize(3);
+      tft.setCursor(40, 100);
+      tft.println("BAKIM MODU");
     } else if (currentStatus == "waiting") {
       ekranaWaitingCiz();
     } else if (currentStatus == "busy") {
       dokunmatikKilit = true;
       odemeBekleniyor = false;
 
-      ekranaBusyModern();
+      tft.fillScreen(TFT_BLACK);
+      tft.setTextSize(3);
+      tft.setTextColor(TFT_GREEN);
+      tft.setCursor(30, 40);
+
+      if (requestedPackage == "foam") {
+        tft.println("KOPUK MODU");
+      } else {
+        tft.println("SU MODU");
+      }
 
       // Busy durumuna ilk kez girildiginde sureyi baslat.
       if (eskiDurum != "busy") {
@@ -723,11 +640,11 @@ void loop() {
       LOG_PRINT(F("Bilinmeyen: "));
       Serial.println(currentStatus);
 
-      uiHeader(F("HATA"), UI_RED);
-      tft.setTextColor(UI_RED, UI_BG);
-      tft.setTextSize(3);
-      tft.setCursor(76, 100);
-      tft.print(F("DURUM"));
+      tft.fillScreen(TFT_BLACK);
+      tft.setTextColor(TFT_RED);
+      tft.setTextSize(2);
+      tft.setCursor(20, 100);
+      tft.println("Bilinmeyen Durum");
     }
 
     eskiDurum = currentStatus;
@@ -751,7 +668,18 @@ void loop() {
       );
 
       if (guncelGenislik != sonSeritGenisligi) {
-        uiProgress(20, 198, maxGenislik, guncelGenislik, UI_GREEN);
+        tft.fillRect(20, 185, guncelGenislik, 8, TFT_GREEN);
+
+        if (maxGenislik > guncelGenislik) {
+          tft.fillRect(
+            20 + guncelGenislik,
+            185,
+            maxGenislik - guncelGenislik,
+            8,
+            TFT_BLACK
+          );
+        }
+
         sonSeritGenisligi = guncelGenislik;
       }
     }
@@ -784,12 +712,19 @@ void loop() {
     if (secilenPaket != "") {
       dokunmatikKilit = true;
 
-      ekranaIstekModern();
+      tft.fillScreen(TFT_BLACK);
+      tft.setCursor(20, 110);
+      tft.setTextSize(2);
+      tft.setTextColor(TFT_YELLOW);
+      tft.println("Istek iletiliyor...");
 
-      delay(120);
+      delay(200);
 
       if (!Firebase.ready()) {
-        ekranaBaglantiHatasiYaz();
+        tft.fillScreen(TFT_BLACK);
+        tft.setCursor(30, 110);
+        tft.setTextColor(TFT_RED);
+        tft.println("Baglanti Hatasi!");
 
         hataEkraniGosteriliyor = true;
         hataEkraniBaslangicMs = millis();
@@ -800,7 +735,10 @@ void loop() {
       makeBayPath(path, sizeof(path), "hardwareSelection");
 
       if (Firebase.RTDB.setString(&fbdo, path, secilenPaket)) {
-        ekranaOdemeModern();
+        tft.fillScreen(TFT_BLACK);
+        tft.setCursor(20, 110);
+        tft.setTextColor(TFT_WHITE);
+        tft.println("Odeme bekleniyor...");
 
         odemeBekleniyor = true;
         odemeBeklemeBaslangicMs = millis();
@@ -808,7 +746,10 @@ void loop() {
         LOG_PRINT(F("Secim hata: "));
         Serial.println(fbdo.errorReason());
 
-        ekranaBaglantiHatasiYaz();
+        tft.fillScreen(TFT_BLACK);
+        tft.setCursor(30, 110);
+        tft.setTextColor(TFT_RED);
+        tft.println("Baglanti Hatasi!");
 
         hataEkraniGosteriliyor = true;
         hataEkraniBaslangicMs = millis();
