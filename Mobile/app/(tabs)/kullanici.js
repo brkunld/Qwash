@@ -1,3 +1,5 @@
+import { useEffect } from "react";
+import { useRouter } from "expo-router";
 import {
   ActivityIndicator,
   Modal,
@@ -21,6 +23,8 @@ const GRAY_TEXT = "#6b7280";
 const DARK_TEXT = "#111827";
 
 export default function KullaniciEkrani() {
+  const router = useRouter();
+
   const {
     authYukleniyor,
     uid,
@@ -67,6 +71,22 @@ export default function KullaniciEkrani() {
     profilKaydet,
     cikisYap,
   } = useKullaniciIslemleri();
+
+  useEffect(() => {
+    // Yükleme bittiğinde uid yoksa (oturum kapalıysa) login'e at
+    if (!authYukleniyor && !uid) {
+      router.replace("/login");
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authYukleniyor, uid]);
+
+  if (authYukleniyor || !uid) {
+    return (
+      <View style={styles.centered}>
+        <ActivityIndicator size="large" color={YELLOW} />
+      </View>
+    );
+  }
 
   if (authYukleniyor || !uid) {
     return (

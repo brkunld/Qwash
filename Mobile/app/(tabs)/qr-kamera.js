@@ -127,7 +127,7 @@ export default function QrKamera() {
       // Sayfadan ayrılırken kamerayı kapalı bırakıyoruz ki geçiş esnasında arkadan tekrar okumasın.
       // Geri dönüldüğünde zaten yukarıdaki useFocusEffect onu otomatik açacak.
 
-      router.navigate({ pathname: "/kullanici", params: { bayId } });
+      router.navigate({ pathname: "/(tabs)/kullanici", params: { bayId } });
     } catch (error) {
       console.error("RTDB Güncelleme Hatası:", error);
       Alert.alert(
