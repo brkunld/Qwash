@@ -85,10 +85,12 @@ export default function ProfilTamamla() {
           <View style={styles.decorCircleSmall} />
         </View>
 
-        {/* Başlık Alanı (Logo SİLİNDİ) */}
+        {/* Başlık Alanı (Dikeyde Ortalandı) */}
         <View style={styles.brandArea}>
           <Text style={styles.brandTitle}>Profili Tamamla</Text>
-          <Text style={styles.brandSubtitle}>Kullanmaya başlamak için bilgilerinizi girin</Text>
+          <Text style={styles.brandSubtitle}>
+            Kullanmaya başlamak için bilgilerinizi girin
+          </Text>
         </View>
 
         {/* Form Kartı */}
@@ -160,6 +162,19 @@ export default function ProfilTamamla() {
             )}
           </Pressable>
         </View>
+
+        {/* Geri Dön Butonu */}
+        <Pressable
+          onPress={() => router.replace("/login")}
+          disabled={yukleniyor}
+          style={({ pressed }) => [
+            styles.backBtn,
+            pressed && { opacity: 0.7 },
+          ]}
+        >
+          <Text style={styles.backBtnIcon}>←</Text>
+          <Text style={styles.backBtnText}>Giriş Ekranına Dön</Text>
+        </Pressable>
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -170,7 +185,8 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     backgroundColor: "#f8f9fb",
     paddingHorizontal: 24,
-    paddingBottom: 40,
+    justifyContent: "center", // Dikeyde mükemmel ortalama
+    paddingBottom: 20,
   },
   topDecor: {
     position: "absolute",
@@ -202,8 +218,7 @@ const styles = StyleSheet.create({
   },
   brandArea: {
     alignItems: "center",
-    paddingTop: 100, // Logo olmadığı için üst boşluk artırıldı
-    paddingBottom: 32,
+    marginBottom: 32,
     gap: 8,
   },
   brandTitle: {
@@ -275,5 +290,27 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     fontSize: 16,
     letterSpacing: 0.2,
+  },
+  backBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    alignSelf: "center",
+    marginTop: 24,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    backgroundColor: "#e5e7eb",
+    borderRadius: 100,
+    gap: 6,
+  },
+  backBtnIcon: {
+    fontSize: 16,
+    color: "#374151",
+    fontWeight: "800",
+  },
+  backBtnText: {
+    fontSize: 14,
+    color: "#374151",
+    fontWeight: "800",
   },
 });
