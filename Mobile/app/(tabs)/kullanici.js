@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useRouter } from "expo-router";
 import {
   ActivityIndicator,
@@ -9,8 +9,8 @@ import {
   Text,
   TextInput,
   View,
-  KeyboardAvoidingView, // EKLENDİ
-  Platform              // EKLENDİ
+  KeyboardAvoidingView,
+  Platform
 } from "react-native";
 import { useKullaniciIslemleri } from "../../src/kullaniciIslemleri";
 
@@ -22,6 +22,61 @@ const GRAY_BORDER = "#e2e6ea";
 const GRAY_TEXT = "#6b7280";
 const DARK_TEXT = "#111827";
 
+// 🔥 YENİ: KENDİ İÇİNDE ÇALIŞAN PERFORMANS DOSTU SAYAÇ BİLEŞENİ
+const PeronSayaci = ({ session, bayId, sessionBitir }) => {
+  const [kalan, setKalan] = useState(null);
+  const bitirildiRef = useRef(false);
+
+  useEffect(() => {
+    if (!session || session.status !== "running") {
+      setKalan(null);
+      bitirildiRef.current = false;
+      return;
+    }
+
+    const startedMs = session.startedAt?.toMillis
+      ? session.startedAt.toMillis()
+      : session.startedAt?.seconds
+      ? session.startedAt.seconds * 1000
+      : Date.now();
+
+    const durSec = Number(session.durationSec ?? 0);
+    if (durSec <= 0) return;
+
+    const tick = () => {
+      const now = Date.now();
+      const biterMs = startedMs + durSec * 1000;
+      const k = Math.ceil((biterMs - now) / 1000);
+
+      if (k <= 0) {
+        setKalan(0);
+        if (!bitirildiRef.current) {
+          bitirildiRef.current = true;
+          sessionBitir(bayId, session.id, "timeout").catch(() => {});
+        }
+      } else {
+        setKalan(k);
+      }
+    };
+
+    tick();
+    const iv = setInterval(tick, 1000);
+
+    return () => clearInterval(iv);
+  }, [session, bayId, sessionBitir]);
+
+  if (kalan === null) return null;
+
+  const dk = Math.floor(kalan / 60);
+  const sn = String(kalan % 60).padStart(2, "0");
+
+  return (
+    <Text style={styles.sayac}>
+      ⏱ {dk}:{sn}
+    </Text>
+  );
+};
+
 export default function KullaniciEkrani() {
   const router = useRouter();
 
@@ -32,8 +87,7 @@ export default function KullaniciEkrani() {
     aktifBayIdListesi,
     baylarData,
     sessionsData,
-    kalanSureler,
-    islemdekiBaylar,
+    islemdekiBaylar, // kalanSureler BURADAN SİLİNDİ
 
     bakiye,
     bakiyeYukleniyor,
@@ -73,20 +127,11 @@ export default function KullaniciEkrani() {
   } = useKullaniciIslemleri();
 
   useEffect(() => {
-    // Yükleme bittiğinde uid yoksa (oturum kapalıysa) login'e at
     if (!authYukleniyor && !uid) {
       router.replace("/login");
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authYukleniyor, uid]);
-
-  if (authYukleniyor || !uid) {
-    return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" color={YELLOW} />
-      </View>
-    );
-  }
 
   if (authYukleniyor || !uid) {
     return (
@@ -151,7 +196,6 @@ export default function KullaniciEkrani() {
             const bay = baylarData[bayId];
             const session = sessionsData[bayId];
             const islemde = islemdekiBaylar[bayId];
-            const kalan = kalanSureler[bayId];
 
             const sessionVarMi =
               !!bay?.currentSessionId || session?.status === "running";
@@ -208,13 +252,14 @@ export default function KullaniciEkrani() {
                               ? "Köpük"
                               : session?.type}
                         </Text>
-                        {kalan != null ? (
-                          <Text style={styles.sayac}>
-                            ⏱ {Math.floor(kalan / 60)}:
-                            {String(kalan % 60).padStart(2, "0")}
-                          </Text>
-                        ) : null}
-                        {/* GÜNCELLEME: session.id parametresi eklendi */}
+                        
+                        {/* Ayrı Bileşen Olan Performanslı Sayaç */}
+                        <PeronSayaci
+                          session={session}
+                          bayId={bayId}
+                          sessionBitir={sessionBitir}
+                        />
+
                         <Pressable
                           onPress={() =>
                             sessionBitir(bayId, session?.id, "user_stop")
@@ -272,7 +317,7 @@ export default function KullaniciEkrani() {
         )}
       </ScrollView>
 
-{/* ── Bakiye Yükle Modal ── */}
+      {/* ── Bakiye Yükle Modal ── */}
       <Modal visible={yuklemeAcik} transparent animationType="slide">
         <KeyboardAvoidingView
           style={styles.modalOverlay}

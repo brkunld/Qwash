@@ -33,7 +33,6 @@ export function useKullaniciIslemleri() {
   const [aktifBayIdListesi, setAktifBayIdListesi] = useState([]);
   const [baylarData, setBaylarData] = useState({});
   const [sessionsData, setSessionsData] = useState({});
-  const [kalanSureler, setKalanSureler] = useState({});
   const [islemdekiBaylar, setIslemdekiBaylar] = useState({});
 
   const [bakiye, setBakiye] = useState(0);
@@ -57,7 +56,6 @@ export function useKullaniciIslemleri() {
   const [cvv, setCvv] = useState("");
 
   const kasitliCikisRef = useRef({}); // Kullanıcı kendi çıkarsa uyarı vermemek için
-  const timeoutKapattiRef = useRef({}); // Süre bitince 1 kere istek atmak için
 
   const adetNum = useMemo(() => {
     const n = parseInt(String(jetonAdet || "0"), 10);
@@ -248,8 +246,6 @@ export function useKullaniciIslemleri() {
 
   // BAY (PERON) DİNLEME VE OTOMATİK KOPARMA MANTIĞI
   // ========================================================
-  // BAY (PERON) DİNLEME VE OTOMATİK KOPARMA MANTIĞI
-  // ========================================================
   useEffect(() => {
     const unsubs = aktifBayIdListesi.map((bayId) => {
       const bayRef = ref(rtdb, `bays/${bayId}`);
@@ -259,7 +255,7 @@ export function useKullaniciIslemleri() {
           const bayData = snapshot.val();
           setBaylarData((prev) => ({ ...prev, [bayId]: bayData }));
 
-          // YENİ EKLENEN: Otomatik Bağlantı Kesme Uyarısı
+          // Otomatik Bağlantı Kesme Uyarısı
           if (bayData.status === "available") {
             // 1. Önce sadece kendi listemizden (State) peronu siliyoruz
             setAktifBayIdListesi((prev) => {
@@ -278,7 +274,7 @@ export function useKullaniciIslemleri() {
             }
             delete kasitliCikisRef.current[bayId];
 
-            // 3. React render çakışmasını engellemek için Router işlemini 10ms erteliyoruz (Render Phase Dışına İtiyoruz)
+            // 3. React render çakışmasını engellemek için Router işlemini 10ms erteliyoruz
             setTimeout(() => {
               router.setParams({ bayId: "" });
             }, 10);
@@ -303,7 +299,7 @@ export function useKullaniciIslemleri() {
       const sId = data?.currentSessionId;
       const lokalSession = sessionsData[bayId];
 
-      // YENİ EKLENEN: ZOMBİ SESSION TEMİZLİĞİ
+      // ZOMBİ SESSION TEMİZLİĞİ
       if (!sId && lokalSession?.status === "running") {
         const sRef = doc(db, "sessions", lokalSession.id);
         setDoc(
@@ -343,47 +339,11 @@ export function useKullaniciIslemleri() {
           }
           return prev;
         });
-        // Session bittiyse timeout kilidini kaldır
-        timeoutKapattiRef.current[bayId] = false;
       }
     });
 
     return () => unsubs.forEach((u) => u());
-  }, [baylarData]); // Sadece baylarData değiştiğinde çalışır
-
-  // YENİ EKLENEN: SÜRE BİTİMİNDE OTOMATİK API TETİKLEYİCİSİ
-  useEffect(() => {
-    const tick = () => {
-      const now = Date.now();
-      const yeniSureler = {};
-
-      Object.entries(sessionsData).forEach(([bayId, session]) => {
-        if (session?.status === "running") {
-          const startedMs = session.startedAt?.toMillis?.();
-          const durSec = Number(session.durationSec ?? 0);
-
-          if (startedMs && durSec > 0) {
-            const biterMs = startedMs + durSec * 1000;
-            const kalan = Math.ceil((biterMs - now) / 1000);
-            yeniSureler[bayId] = Math.max(0, kalan);
-
-            // Süre 0 olduysa ve henüz durdurma komutu atılmadıysa
-            if (kalan <= 0 && !timeoutKapattiRef.current[bayId]) {
-              timeoutKapattiRef.current[bayId] = true;
-              sessionBitir(bayId, session.id, "timeout").catch(() => {});
-            }
-          }
-        } else {
-          timeoutKapattiRef.current[bayId] = false;
-        }
-      });
-      setKalanSureler(yeniSureler);
-    };
-
-    tick();
-    const iv = setInterval(tick, 1000);
-    return () => clearInterval(iv);
-  }, [sessionsData]);
+  }, [baylarData]);
 
   // ESP32 FİZİKSEL DOKUNMATİK EKRAN SİNYALİ DİNLEME
   useEffect(() => {
@@ -402,7 +362,7 @@ export function useKullaniciIslemleri() {
     });
   }, [baylarData]);
 
- const sessionBaslat = async (islemBayId, packageId) => {
+  const sessionBaslat = async (islemBayId, packageId) => {
     if (!uid) return router.replace("/login");
     const bay = baylarData[islemBayId];
 
@@ -416,9 +376,6 @@ export function useKullaniciIslemleri() {
     setIslemdekiBaylar((prev) => ({ ...prev, [islemBayId]: true }));
 
     try {
-      // 🔥 1. TEMİZLİK: Artık "paketGetir" fonksiyonuna ve beklemesine gerek kalmadı!
-      // Çünkü Backend fiyatı ve süreyi kendisi bulacak.
-
       const token = await auth.currentUser?.getIdToken();
 
       const API_URL = "https://qwash-8q4y.onrender.com/api/start-session";
@@ -432,7 +389,6 @@ export function useKullaniciIslemleri() {
           uid: uid,
           bayId: islemBayId,
           packageId: packageId,
-          // 🔥 2. TEMİZLİK: durationSec ve tokensCost verilerini göndermeyi bıraktık.
         }),
       });
 
@@ -447,7 +403,6 @@ export function useKullaniciIslemleri() {
     }
   };
 
-  // DİKKAT: Artık sessionId'yi dışarıdan alıyoruz ki dependency problemi yaratmasın
   const sessionBitir = useCallback(
     async (islemBayId, currentSessionId, reason = "user_stop") => {
       if (!uid) return router.replace("/login");
@@ -455,7 +410,6 @@ export function useKullaniciIslemleri() {
 
       setIslemdekiBaylar((prev) => ({ ...prev, [islemBayId]: true }));
       try {
-        // 🔥 YENİ: Firebase'den anlık güvenlik token'ını alıyoruz
         const token = await auth.currentUser?.getIdToken();
 
         const API_URL = "https://qwash-8q4y.onrender.com/api/stop-session";
@@ -463,12 +417,12 @@ export function useKullaniciIslemleri() {
           method: "POST",
           headers: { 
             "Content-Type": "application/json",
-            "Authorization": `Bearer ${token}` // 🔥 YENİ: Güvenlik görevlisine kimliği gösteriyoruz
+            "Authorization": `Bearer ${token}`
           },
           body: JSON.stringify({
             uid: uid,
             bayId: islemBayId,
-            sessionId: currentSessionId, // Dışarıdan gelen ID
+            sessionId: currentSessionId, 
           }),
         });
 
@@ -498,7 +452,6 @@ export function useKullaniciIslemleri() {
     }
 
     try {
-      // YENİ EKLENEN: Kasıtlı çıkış olduğunu belirtiyoruz ki Zaman Aşımı Alert'i çıkmasın
       kasitliCikisRef.current[islemBayId] = true;
 
       const bayRef = ref(rtdb, `bays/${islemBayId}`);
@@ -533,7 +486,6 @@ export function useKullaniciIslemleri() {
       typeof amountTRYParam === "number" ? amountTRYParam : tokens * jetonFiyat;
 
     try {
-      // 🔥 YENİ: Firebase'den anlık güvenlik token'ını alıyoruz
       const token = await auth.currentUser?.getIdToken();
 
       const API_URL = "https://qwash-8q4y.onrender.com/api/topup";
@@ -541,7 +493,7 @@ export function useKullaniciIslemleri() {
         method: "POST",
         headers: { 
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}` // 🔥 YENİ: Güvenlik görevlisine kimliği gösteriyoruz
+          "Authorization": `Bearer ${token}`
         },
         body: JSON.stringify({
           uid: uid,
@@ -623,7 +575,6 @@ export function useKullaniciIslemleri() {
     aktifBayIdListesi,
     baylarData,
     sessionsData,
-    kalanSureler,
     islemdekiBaylar,
 
     bakiye,
