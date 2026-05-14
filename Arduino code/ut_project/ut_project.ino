@@ -5,6 +5,10 @@
 #include <pgmspace.h>
 #include "secrets.h"
 
+// ================= YENİ EKLENEN KÜTÜPHANELER =================
+#include <time.h>
+#include <Preferences.h>
+
 // ================= OPTIMIZASYON AYARLARI =================
 // Uretimde 0 kalsin. Debug gerekirse 1 yap.
 #define DEBUG_LOG 0
@@ -17,13 +21,16 @@
   #define LOG_PRINTLN(x)
 #endif
 
-
 TFT_eSPI tft = TFT_eSPI();
 
 FirebaseData streamFbdo;
 FirebaseData fbdo;
 FirebaseAuth auth;
 FirebaseConfig config;
+
+// ================= YENİ GLOBAL DEĞİŞKENLER =================
+Preferences preferences;
+time_t islemBitisZamani = 0;
 
 // ================= PIN TANIMLARI =================
 const int buzzerPin = 25;
@@ -55,7 +62,6 @@ unsigned long hataEkraniBaslangicMs = 0;
 bool hataEkraniGosteriliyor = false;
 
 // ================= ISLEM VE KILITLER =================
-unsigned long islemBaslangicMs = 0;
 bool durumDegisti = true;
 bool dokunmatikKilit = false;
 
@@ -168,11 +174,7 @@ void ekranaWaitingCiz() {
   tft.println("IPTAL");
 }
 
-
 // ================= SABIT QR BITMAP =================
-// QR metni: bay_42060_01_01
-// qrcode.h ve esp_qrcode_generate kaldirildi.
-// Sabit QR PROGMEM'den cizilir; sketch boyutu ve calisma yuku azalir.
 #define FIXED_QR_SIZE 33
 #define FIXED_QR_BYTES_PER_ROW 5
 
@@ -325,21 +327,22 @@ void nabizGonder() {
   }
 }
 
-// ================= EKRAN SAYACI VE SES =================
+// ================= EKRAN SAYACI VE SES (GERÇEK ZAMANLI) =================
 
 void ekrandaSayaciGuncelle() {
-  unsigned long islemSuresiMs = (unsigned long)durationSec * 1000UL;
-  unsigned long gecenMs = millis() - islemBaslangicMs;
+  time_t suAn;
+  time(&suAn);
 
-  if (gecenMs < islemSuresiMs) {
-    unsigned long kalanMs = islemSuresiMs - gecenMs;
-    int toplamSaniye = kalanMs / 1000;
-    int saniye = toplamSaniye % 60;
-    int dakika = toplamSaniye / 60;
+  // İşlem bitiş zamanı henüz gelmediyse
+  if (islemBitisZamani > suAn) {
+    unsigned long kalanSaniye = islemBitisZamani - suAn;
+
+    int saniye = kalanSaniye % 60;
+    int dakika = kalanSaniye / 60;
 
     // Ses mantigi
-    if (toplamSaniye >= 10) {
-      if (toplamSaniye != sayacSonEkranSaniye) {
+    if (kalanSaniye >= 10) {
+      if (kalanSaniye != sayacSonEkranSaniye) {
         tone(buzzerPin, 2000, 100);
       }
     } else {
@@ -350,13 +353,13 @@ void ekrandaSayaciGuncelle() {
     }
 
     // Ekran guncelleme
-    if (toplamSaniye != sayacSonEkranSaniye) {
+    if (kalanSaniye != sayacSonEkranSaniye) {
       tft.setTextColor(TFT_YELLOW, TFT_BLACK);
       tft.setTextSize(5);
       tft.setCursor(80, 120);
       tft.printf("%02d:%02d   ", dakika, saniye);
 
-      sayacSonEkranSaniye = toplamSaniye;
+      sayacSonEkranSaniye = kalanSaniye;
     }
 
     sayacIslemBittiCalindi = false;
@@ -370,6 +373,9 @@ void ekrandaSayaciGuncelle() {
     tft.println("ISLEM BITTI");
 
     sayacIslemBittiCalindi = true;
+    
+    // İşlem tamamen bittiğinde hafızadaki süreyi sıfırla
+    preferences.putULong("endTime", 0);
   }
 }
 
@@ -378,8 +384,6 @@ void ekrandaSayaciGuncelle() {
 void streamCallback(FirebaseStream data) {
   String path = data.dataPath();
 
-  // 1. Kendi gönderdiğimiz veya arayüzü doğrudan değiştirmeyen verileri filtrele
-  // /hardwareSelection buraya EKLENMELİ, aksi halde kendi seçimimiz ekranı sıfırlar!
   if (path == "/lastSeen" || path == "/updatedAt" || path == "/hardwareSelection") {
     return;
   }
@@ -387,7 +391,6 @@ void streamCallback(FirebaseStream data) {
   bool durumFarkli = false;
 
   if (data.dataType() == "json") {
-    // Heap kullanmamak icin StaticJsonDocument kullaniyoruz.
     StaticJsonDocument<768> doc;
 
     DeserializationError err = deserializeJson(doc, data.jsonString());
@@ -401,7 +404,7 @@ void streamCallback(FirebaseStream data) {
       String yeniDurum = doc["status"].as<String>();
       if (currentStatus != yeniDurum) {
         currentStatus = yeniDurum;
-        durumFarkli = true; // Sadece status gerçekten değiştiyse ekranı güncelle
+        durumFarkli = true; 
       }
     }
 
@@ -422,7 +425,6 @@ void streamCallback(FirebaseStream data) {
       durationSec = guvenliDurationOku(gelenSure);
     }
   } else {
-    // Tekil alan güncellemeleri
     if (path == "/status") {
       String yeniDurum = data.stringData();
       if (currentStatus != yeniDurum) {
@@ -443,7 +445,6 @@ void streamCallback(FirebaseStream data) {
     }
   }
 
-  // 3. Sadece kritik bir durum (status veya isActive) değiştiyse ana döngüye haber ver
   if (durumFarkli) {
     durumDegisti = true;
   }
@@ -490,6 +491,25 @@ void setup() {
     return;
   }
 
+  // ================= YENİ: HAFIZA VE NTP AYARLARI =================
+  preferences.begin("qwash", false);
+  configTime(3 * 3600, 0, "pool.ntp.org", "time.nist.gov"); // Türkiye saati (UTC+3)
+
+  tft.fillScreen(TFT_BLACK);
+  tft.setCursor(20, 100);
+  tft.println("Saat Guncelleniyor...");
+
+  LOG_PRINT(F("NTP Bekleniyor..."));
+  time_t suAn;
+  time(&suAn);
+  while (suAn < 100000) {
+    delay(500);
+    LOG_PRINT(F("."));
+    time(&suAn);
+  }
+  LOG_PRINTLN(F(" Saat Guncellendi."));
+  // ================================================================
+
   firebaseKurulumYap();
 
   LOG_PRINT(F("Firebase bekleniyor"));
@@ -522,7 +542,6 @@ void setup() {
 void loop() {
   static String eskiDurum = "";
 
-  // WiFi koparsa periyodik yeniden baglanma denemesi yap.
   if (WiFi.status() != WL_CONNECTED) {
     if (millis() - sonWifiDenemeMs >= WIFI_RETRY_INTERVAL_MS) {
       sonWifiDenemeMs = millis();
@@ -545,33 +564,27 @@ void loop() {
         }
       }
     }
-
     return;
   }
 
-  // Firebase hazir degilse stream veya nabiz islerine girme.
   if (firebaseBaslatildi && Firebase.ready() && !streamBaslatildi) {
     streamBaslatildi = streamBaslat();
   }
 
-  // 30 saniyede bir nabiz gonder.
   if (millis() - sonNabizZamani >= nabizAraligi) {
     sonNabizZamani = millis();
     nabizGonder();
   }
 
-  // Hata ekrani asenkron bekleme.
   if (hataEkraniGosteriliyor) {
     if (millis() - hataEkraniBaslangicMs >= 2000) {
       hataEkraniGosteriliyor = false;
       dokunmatikKilit = false;
       durumDegisti = true;
     }
-
     return;
   }
 
-  // Odeme bekleme timeout.
   if (odemeBekleniyor && currentStatus == "waiting") {
     if (millis() - odemeBeklemeBaslangicMs >= ODEME_BEKLEME_TIMEOUT_MS) {
       LOG_PRINTLN(F("Odeme timeout."));
@@ -580,7 +593,6 @@ void loop() {
       dokunmatikKilit = false;
       durumDegisti = true;
 
-      // Backend destekliyorsa eski secimi temizlemek iyi olur.
       if (Firebase.ready()) {
         char path[96];
         makeBayPath(path, sizeof(path), "hardwareSelection");
@@ -589,7 +601,6 @@ void loop() {
     }
   }
 
-  // 1. Oncelik: aktiflik ve kapali durum.
   if (!isBayActive || currentStatus == "offline") {
     if (durumDegisti) {
       durumDegisti = false;
@@ -597,11 +608,9 @@ void loop() {
       ekranaKapaliYaz();
       LOG_PRINTLN(F("KAPALI"));
     }
-
     return;
   }
 
-  // 2. Durum degisiklikleri.
   if (durumDegisti) {
     durumDegisti = false;
 
@@ -638,11 +647,29 @@ void loop() {
         tft.println("SU MODU");
       }
 
+      // ================= YENİ: SÜRE BAŞLATMA VE HAFIZA =================
       // Busy durumuna ilk kez girildiginde sureyi baslat.
       if (eskiDurum != "busy") {
-        islemBaslangicMs = millis();
+        time_t suAn;
+        time(&suAn);
+
+        // Hafızadan önceki bitiş zamanını oku
+        time_t kayitliBitis = preferences.getULong("endTime", 0);
+
+        // Eğer kayıtlı bitiş zamanı gelecekteyse (elektrik kesilip geldiyse)
+        if (kayitliBitis > suAn) {
+          islemBitisZamani = kayitliBitis;
+          LOG_PRINTLN(F("Kalan sure hafizadan yuklendi."));
+        } else {
+          // Normal yeni başlama
+          islemBitisZamani = suAn + durationSec;
+          preferences.putULong("endTime", (unsigned long)islemBitisZamani); // Hafızaya yaz
+          LOG_PRINTLN(F("Yeni sure baslatildi."));
+        }
+
         resetSayacDurumu();
       }
+      // =================================================================
     } else {
       LOG_PRINT(F("Bilinmeyen: "));
       Serial.println(currentStatus);
@@ -657,7 +684,6 @@ void loop() {
     eskiDurum = currentStatus;
   }
 
-  // 3. Surekli gorevler.
   if (currentStatus == "busy") {
     ekrandaSayaciGuncelle();
   } else if (currentStatus == "waiting" && !dokunmatikKilit) {
@@ -665,26 +691,13 @@ void loop() {
 
     if (gecenZaman <= BEKLEME_SURESI_MS) {
       int maxGenislik = 280;
-
-      int guncelGenislik = map(
-        gecenZaman,
-        0,
-        BEKLEME_SURESI_MS,
-        maxGenislik,
-        0
-      );
+      int guncelGenislik = map(gecenZaman, 0, BEKLEME_SURESI_MS, maxGenislik, 0);
 
       if (guncelGenislik != sonSeritGenisligi) {
         tft.fillRect(20, 185, guncelGenislik, 8, TFT_GREEN);
 
         if (maxGenislik > guncelGenislik) {
-          tft.fillRect(
-            20 + guncelGenislik,
-            185,
-            maxGenislik - guncelGenislik,
-            8,
-            TFT_BLACK
-          );
+          tft.fillRect(20 + guncelGenislik, 185, maxGenislik - guncelGenislik, 8, TFT_BLACK);
         }
 
         sonSeritGenisligi = guncelGenislik;
@@ -692,28 +705,22 @@ void loop() {
     }
   }
 
-  // 4. Dokunmatik ve fiziksel buton kontrolu.
   if (currentStatus == "waiting" && !dokunmatikKilit && !hataEkraniGosteriliyor) {
     String secilenPaket = "";
 
-    // Fiziksel buton sadece KOPUK icin.
     if (digitalRead(btnKopukPin) == LOW) {
       secilenPaket = "foam";
     }
 
-    // Dokunmatik secim.
     if (secilenPaket == "") {
       uint16_t x, y;
       if (tft.getTouch(&x, &y)) {
-        
-        // Iptal Butonu touch check (y 190 ile 240 arası, x 90 ile 230 arası)
         if (y >= 190 && y <= 240 && x >= 90 && x <= 230) {
           secilenPaket = "cancel";
         }
-        // SU ve KOPUK button touch check
         else if (y > 80 && y < 170) {
           if (x > 20 && x < 150) {
-            secilenPaket = "foam"; // Su yerine foam veya isteğinize göre değiştirin
+            secilenPaket = "foam"; 
           } else if (x > 170 && x < 300) {
             secilenPaket = "wash"; 
           }
@@ -725,7 +732,6 @@ void loop() {
       dokunmatikKilit = true;
       tft.fillScreen(TFT_BLACK);
 
-      // Ekrana yazılacak metni İptal mi yoksa Seçim mi olduğuna göre ayarla
       if (secilenPaket == "cancel") {
         tft.setCursor(30, 110);
         tft.setTextSize(2);
@@ -751,20 +757,15 @@ void loop() {
         return;
       }
 
-      // ================= YENİ İPTAL VE SEÇİM MANTIĞI =================
-
       if (secilenPaket == "cancel") {
-        // İptal edildiyse direkt Firebase status'unu 'available' yap
         char statusPath[96];
         makeBayPath(statusPath, sizeof(statusPath), "status");
         
         if (Firebase.RTDB.setString(&fbdo, statusPath, "available")) {
-          // Temizlik amaçlı varsa hardwareSelection'ı da boşaltalım
           char hwPath[96];
           makeBayPath(hwPath, sizeof(hwPath), "hardwareSelection");
           Firebase.RTDB.setString(&fbdo, hwPath, "");
 
-          // Makineyi lokalde QR ekranına geri döndür
           currentStatus = "available";
           durumDegisti = true;
           dokunmatikKilit = false;
@@ -782,7 +783,6 @@ void loop() {
         }
       } 
       else {
-        // İptal DEĞİLSE (Su veya Köpük ise) Mobil uygulamanın görmesi için hardwareSelection'a yaz
         char path[96];
         makeBayPath(path, sizeof(path), "hardwareSelection");
 
