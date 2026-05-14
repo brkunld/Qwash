@@ -1,7 +1,7 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 import { useEffect, useState, useRef } from "react";
 import { useRouter } from "expo-router";
-import Svg, { Path } from "react-native-svg";
+import Svg, { Path, Circle } from "react-native-svg";
 import {
   ActivityIndicator,
   Modal,
@@ -14,13 +14,80 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from "react-native";
-import { Ionicons, MaterialCommunityIcons, MaterialIcons } from "@expo/vector-icons";
+import { Ionicons } from "@expo/vector-icons";
 import { useKullaniciIslemleri } from "../../src/kullaniciIslemleri";
 
-const BubbleIconOutlined = ({ size = 24, color = "#ffffff", style }) => (
-  <Svg width={size} height={size} viewBox="0 0 24 24" fill={color} style={style}>
-    <Path d="M7 8.5c1.93 0 3.5 1.57 3.5 3.5s-1.57 3.5-3.5 3.5-3.5-1.57-3.5-3.5 1.57-3.5 3.5-3.5m0-2C3.96 6.5 1.5 8.96 1.5 12s2.46 5.5 5.5 5.5 5.5-2.46 5.5-5.5S10.04 6.5 7 6.5zM14.5 16c1.38 0 2.5 1.12 2.5 2.5s-1.12 2.5-2.5 2.5-2.5-1.12-2.5-2.5 1.12-2.5 2.5-2.5m0-2c-2.48 0-4.5 2.02-4.5 4.5s2.02 4.5 4.5 4.5 4.5-2.02 4.5-4.5-2.02-4.5-4.5-4.5zM16 3.5c2.48 0 4.5 2.02 4.5 4.5s-2.02 4.5-4.5 4.5-4.5-2.02-4.5-4.5 2.02-4.5 4.5-4.5m0-2c-3.59 0-6.5 2.91-6.5 6.5s2.91 6.5 6.5 6.5 6.5-2.91 6.5-6.5-2.91-6.5-6.5-6.5z" />
-  </S
+const BubbleIconOutlined = ({ size = 24, color = "#ffffff", style }) => {
+  return (
+    <Svg
+      width={size}
+      height={size}
+      viewBox="0 0 512 512"
+      fill="none"
+      style={style}
+    >
+      <Circle
+        cx={139}
+        cy={374}
+        r={128}
+        fill="none"
+        stroke={color}
+        strokeWidth={21}
+      />
+
+      <Path
+        d="M224 385 A86 86 0 0 1 139 459"
+        fill="none"
+        stroke={color}
+        strokeWidth={21}
+        strokeLinecap="round"
+      />
+
+      <Circle
+        cx={416}
+        cy={267}
+        r={85}
+        fill="none"
+        stroke={color}
+        strokeWidth={21}
+      />
+
+      <Path
+        d="M416 214 A53 53 0 0 1 469 267"
+        fill="none"
+        stroke={color}
+        strokeWidth={21}
+        strokeLinecap="round"
+      />
+
+      <Circle
+        cx={256}
+        cy={75}
+        r={64}
+        fill="none"
+        stroke={color}
+        strokeWidth={21}
+      />
+
+      <Path
+        d="M256 43 A32 32 0 0 0 224 75"
+        fill="none"
+        stroke={color}
+        strokeWidth={21}
+        strokeLinecap="round"
+      />
+
+      <Circle
+        cx={85}
+        cy={139}
+        r={43}
+        fill="none"
+        stroke={color}
+        strokeWidth={21}
+      />
+    </Svg>
+  );
+};
 
 const DARK = "#1a1a2e";
 const YELLOW = "#f5a623";
@@ -150,10 +217,12 @@ export default function KullaniciEkrani() {
         <View style={styles.headerBadge}>
           <Text style={styles.headerBadgeText}> Ana Sayfa </Text>
         </View>
+
         <View style={styles.headerRight}>
           <Pressable onPress={() => setProfilAcik(true)} style={styles.headerBtn}>
             <Ionicons name="person-outline" size={16} color={WHITE} />
           </Pressable>
+
           <Pressable onPress={cikisYap} style={styles.headerBtn}>
             <Ionicons name="log-out-outline" size={16} color={WHITE} />
           </Pressable>
@@ -168,6 +237,7 @@ export default function KullaniciEkrani() {
         {/* Bakiye Kartı */}
         <View style={styles.card}>
           <Text style={styles.cardLabel}>🪙 Jeton Bakiyesi</Text>
+
           {bakiyeYukleniyor ? (
             <ActivityIndicator color={YELLOW} style={{ marginTop: 6 }} />
           ) : (
@@ -175,6 +245,7 @@ export default function KullaniciEkrani() {
               {bakiye} <Text style={styles.bakiyeUnit}>Jeton</Text>
             </Text>
           )}
+
           <Pressable onPress={() => setYuklemeAcik(true)} style={styles.yellowBtn}>
             <Text style={styles.yellowBtnText}>+ Bakiye Yükle</Text>
           </Pressable>
@@ -203,7 +274,8 @@ export default function KullaniciEkrani() {
                         {bayId.split("_").pop()}
                       </Text>
                     </View>
-                    {/* Aktif modun ikonu (su/köpük) */}
+
+                    {/* Aktif modun ikonu */}
                     {sessionVarMi && session?.type === "wash" && (
                       <Ionicons
                         name="water-outline"
@@ -212,9 +284,9 @@ export default function KullaniciEkrani() {
                         style={{ marginLeft: 8 }}
                       />
                     )}
+
                     {sessionVarMi && session?.type === "foam" && (
-                      <MaterialCommunityIcons
-                        name="bubbles"
+                      <BubbleIconOutlined
                         size={16}
                         color="#10b981"
                         style={{ marginLeft: 8 }}
@@ -222,7 +294,7 @@ export default function KullaniciEkrani() {
                     )}
                   </View>
 
-                  {/* Ayrıl — sadece ikon */}
+                  {/* Ayrıl */}
                   <Pressable
                     onPress={() => perondanCik(bayId)}
                     disabled={sessionVarMi}
@@ -247,12 +319,10 @@ export default function KullaniciEkrani() {
                           sessionBitir={sessionBitir}
                         />
 
-                        {/* İlerleme çubuğu */}
                         {session?.durationSec > 0 && (
                           <ProgressBar session={session} />
                         )}
 
-                        {/* Durdur — ikon + kısa etiket */}
                         <Pressable
                           onPress={() =>
                             sessionBitir(bayId, session?.id, "user_stop")
@@ -297,7 +367,7 @@ export default function KullaniciEkrani() {
                           (islemde || bakiyeYukleniyor) && styles.btnDisabled,
                         ]}
                       >
-                        <MaterialCommunityIcons name="chart-bubble" size={28} color={WHITE} />
+                        <BubbleIconOutlined size={28} color={WHITE} />
                         <Text style={styles.startBtnText}>Köpük</Text>
                       </Pressable>
                     </View>
@@ -309,7 +379,7 @@ export default function KullaniciEkrani() {
         )}
       </ScrollView>
 
-      {/* ── Bakiye Yükle Modal ── */}
+      {/* Bakiye Yükle Modal */}
       <Modal visible={yuklemeAcik} transparent animationType="slide">
         <KeyboardAvoidingView
           style={styles.modalOverlay}
@@ -370,6 +440,7 @@ export default function KullaniciEkrani() {
                   style={[styles.input, { flex: 1, marginRight: 8 }]}
                   placeholderTextColor={GRAY_TEXT}
                 />
+
                 <TextInput
                   value={cvv}
                   onChangeText={(t) => setCvv(t.replace(/[^0-9]/g, ""))}
@@ -407,7 +478,7 @@ export default function KullaniciEkrani() {
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* ── Profil Modal ── */}
+      {/* Profil Modal */}
       <Modal visible={profilAcik} transparent animationType="slide">
         <KeyboardAvoidingView
           style={styles.modalOverlay}
@@ -441,6 +512,7 @@ export default function KullaniciEkrani() {
                       style={styles.input}
                       placeholderTextColor={GRAY_TEXT}
                     />
+
                     <Text style={styles.inputLabel}>Soyad</Text>
                     <TextInput
                       value={soyad}
@@ -449,6 +521,7 @@ export default function KullaniciEkrani() {
                       style={styles.input}
                       placeholderTextColor={GRAY_TEXT}
                     />
+
                     <Text style={styles.inputLabel}>Telefon</Text>
                     <TextInput
                       value={telefon}
@@ -491,7 +564,6 @@ export default function KullaniciEkrani() {
   );
 }
 
-// İlerleme çubuğu bileşeni
 function ProgressBar({ session }) {
   const [pct, setPct] = useState(0);
 
@@ -501,13 +573,21 @@ function ProgressBar({ session }) {
       : session.startedAt?.seconds
         ? session.startedAt.seconds * 1000
         : Date.now();
+
     const durMs = Number(session.durationSec ?? 0) * 1000;
+
+    if (durMs <= 0) {
+      setPct(0);
+      return;
+    }
 
     const tick = () => {
       const elapsed = Date.now() - startedMs;
       setPct(Math.min((elapsed / durMs) * 100, 100));
     };
+
     tick();
+
     const iv = setInterval(tick, 1000);
     return () => clearInterval(iv);
   }, [session]);
@@ -521,13 +601,19 @@ function ProgressBar({ session }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: GRAY_BG },
+
   centered: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
     backgroundColor: GRAY_BG,
   },
-  scroll: { flex: 1, paddingHorizontal: 12, paddingTop: 10 },
+
+  scroll: {
+    flex: 1,
+    paddingHorizontal: 12,
+    paddingTop: 10,
+  },
 
   header: {
     backgroundColor: DARK,
@@ -538,19 +624,26 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
   },
+
   headerBadge: {
     backgroundColor: "#f59e0b",
     borderRadius: 6,
     paddingHorizontal: 7,
     paddingVertical: 3,
   },
+
   headerBadgeText: {
     fontSize: 15,
     fontWeight: "900",
     color: "#111827",
     letterSpacing: 0.5,
   },
-  headerRight: { flexDirection: "row", gap: 6 },
+
+  headerRight: {
+    flexDirection: "row",
+    gap: 6,
+  },
+
   headerBtn: {
     backgroundColor: "rgba(255,255,255,0.12)",
     borderRadius: 8,
@@ -564,6 +657,7 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
     borderRadius: 6,
   },
+
   bayIdText: {
     fontSize: 15,
     fontWeight: "900",
@@ -588,12 +682,14 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     elevation: 2,
   },
+
   cardHeaderRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     marginBottom: 6,
   },
+
   cardLabel: {
     fontSize: 12,
     color: GRAY_TEXT,
@@ -607,6 +703,7 @@ const styles = StyleSheet.create({
     borderTopColor: GRAY_BORDER,
     paddingTop: 10,
   },
+
   sayac: {
     fontSize: 30,
     fontWeight: "900",
@@ -624,6 +721,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
     marginBottom: 10,
   },
+
   progressFill: {
     height: "100%",
     backgroundColor: YELLOW,
@@ -644,7 +742,12 @@ const styles = StyleSheet.create({
     color: DARK_TEXT,
     marginTop: 4,
   },
-  bakiyeUnit: { fontSize: 20, fontWeight: "600", color: GRAY_TEXT },
+
+  bakiyeUnit: {
+    fontSize: 20,
+    fontWeight: "600",
+    color: GRAY_TEXT,
+  },
 
   yellowBtn: {
     marginTop: 12,
@@ -653,8 +756,16 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: "center",
   },
-  yellowBtnText: { color: DARK, fontWeight: "800", fontSize: 14 },
-  btnDisabled: { backgroundColor: "#c4c4c4" },
+
+  yellowBtnText: {
+    color: DARK,
+    fontWeight: "800",
+    fontSize: 14,
+  },
+
+  btnDisabled: {
+    backgroundColor: "#c4c4c4",
+  },
 
   startSection: {
     marginTop: 10,
@@ -662,7 +773,13 @@ const styles = StyleSheet.create({
     borderTopColor: GRAY_BORDER,
     paddingTop: 10,
   },
-  row: { flexDirection: "row", gap: 10, marginBottom: 10 },
+
+  row: {
+    flexDirection: "row",
+    gap: 10,
+    marginBottom: 10,
+  },
+
   startBtn: {
     flex: 1,
     backgroundColor: DARK,
@@ -671,13 +788,19 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 6,
   },
-  startBtnText: { color: WHITE, fontWeight: "700", fontSize: 14 },
+
+  startBtnText: {
+    color: WHITE,
+    fontWeight: "700",
+    fontSize: 14,
+  },
 
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.4)",
     justifyContent: "flex-end",
   },
+
   modalBox: {
     backgroundColor: WHITE,
     borderTopLeftRadius: 24,
@@ -685,13 +808,19 @@ const styles = StyleSheet.create({
     padding: 20,
     paddingBottom: 36,
   },
+
   modalHeader: {
     borderBottomWidth: 1,
     borderBottomColor: GRAY_BORDER,
     paddingBottom: 10,
     marginBottom: 14,
   },
-  modalTitle: { fontSize: 17, fontWeight: "800", color: DARK_TEXT },
+
+  modalTitle: {
+    fontSize: 17,
+    fontWeight: "800",
+    color: DARK_TEXT,
+  },
 
   inputLabel: {
     fontSize: 11,
@@ -701,6 +830,7 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
+
   input: {
     borderWidth: 1.5,
     borderColor: GRAY_BORDER,
@@ -720,16 +850,29 @@ const styles = StyleSheet.create({
     padding: 10,
     marginBottom: 12,
   },
-  fiyatMeta: { color: GRAY_TEXT, fontSize: 13 },
+
+  fiyatMeta: {
+    color: GRAY_TEXT,
+    fontSize: 13,
+  },
+
   fiyatTotal: {
     fontSize: 17,
     fontWeight: "800",
     color: DARK_TEXT,
     marginTop: 3,
   },
-  fiyatErr: { color: "#b91c1c", fontWeight: "700" },
 
-  vazgecBtn: { marginTop: 10, alignItems: "center" },
+  fiyatErr: {
+    color: "#b91c1c",
+    fontWeight: "700",
+  },
+
+  vazgecBtn: {
+    marginTop: 10,
+    alignItems: "center",
+  },
+
   vazgecText: {
     color: GRAY_TEXT,
     textDecorationLine: "underline",
