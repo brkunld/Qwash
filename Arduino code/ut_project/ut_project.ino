@@ -159,6 +159,13 @@ void ekranaWaitingCiz() {
   tft.setCursor(185, 115);
   tft.setTextColor(TFT_BLACK, TFT_CYAN);
   tft.println("KOPUK");
+
+  // IPTAL Butonu (QR'a dönmek için)
+  tft.fillRoundRect(100, 200, 120, 35, 8, TFT_RED);
+  tft.setCursor(125, 210);
+  tft.setTextColor(TFT_WHITE, TFT_RED);
+  tft.setTextSize(2);
+  tft.println("IPTAL");
 }
 
 
@@ -697,13 +704,18 @@ void loop() {
     // Dokunmatik secim.
     if (secilenPaket == "") {
       uint16_t x, y;
-
       if (tft.getTouch(&x, &y)) {
-        if (y > 80 && y < 170) {
+        
+        // Iptal Butonu touch check (y 190 ile 240 arası, x 90 ile 230 arası)
+        if (y >= 190 && y <= 240 && x >= 90 && x <= 230) {
+          secilenPaket = "cancel";
+        }
+        // SU ve KOPUK button touch check
+        else if (y > 80 && y < 170) {
           if (x > 20 && x < 150) {
-            secilenPaket = "foam";
+            secilenPaket = "foam"; // Su yerine foam veya isteğinize göre değiştirin
           } else if (x > 170 && x < 300) {
-            secilenPaket = "wash";
+            secilenPaket = "wash"; 
           }
         }
       }
@@ -711,12 +723,20 @@ void loop() {
 
     if (secilenPaket != "") {
       dokunmatikKilit = true;
-
       tft.fillScreen(TFT_BLACK);
-      tft.setCursor(20, 110);
-      tft.setTextSize(2);
-      tft.setTextColor(TFT_YELLOW);
-      tft.println("Istek iletiliyor...");
+
+      // Ekrana yazılacak metni İptal mi yoksa Seçim mi olduğuna göre ayarla
+      if (secilenPaket == "cancel") {
+        tft.setCursor(30, 110);
+        tft.setTextSize(2);
+        tft.setTextColor(TFT_RED);
+        tft.println("Iptal ediliyor...");
+      } else {
+        tft.setCursor(20, 110);
+        tft.setTextSize(2);
+        tft.setTextColor(TFT_YELLOW);
+        tft.println("Istek iletiliyor...");
+      }
 
       delay(200);
 
@@ -731,28 +751,61 @@ void loop() {
         return;
       }
 
-      char path[96];
-      makeBayPath(path, sizeof(path), "hardwareSelection");
+      // ================= YENİ İPTAL VE SEÇİM MANTIĞI =================
 
-      if (Firebase.RTDB.setString(&fbdo, path, secilenPaket)) {
-        tft.fillScreen(TFT_BLACK);
-        tft.setCursor(20, 110);
-        tft.setTextColor(TFT_WHITE);
-        tft.println("Odeme bekleniyor...");
+      if (secilenPaket == "cancel") {
+        // İptal edildiyse direkt Firebase status'unu 'available' yap
+        char statusPath[96];
+        makeBayPath(statusPath, sizeof(statusPath), "status");
+        
+        if (Firebase.RTDB.setString(&fbdo, statusPath, "available")) {
+          // Temizlik amaçlı varsa hardwareSelection'ı da boşaltalım
+          char hwPath[96];
+          makeBayPath(hwPath, sizeof(hwPath), "hardwareSelection");
+          Firebase.RTDB.setString(&fbdo, hwPath, "");
 
-        odemeBekleniyor = true;
-        odemeBeklemeBaslangicMs = millis();
-      } else {
-        LOG_PRINT(F("Secim hata: "));
-        Serial.println(fbdo.errorReason());
+          // Makineyi lokalde QR ekranına geri döndür
+          currentStatus = "available";
+          durumDegisti = true;
+          dokunmatikKilit = false;
+        } else {
+          LOG_PRINT(F("Iptal hata: "));
+          Serial.println(fbdo.errorReason());
 
-        tft.fillScreen(TFT_BLACK);
-        tft.setCursor(30, 110);
-        tft.setTextColor(TFT_RED);
-        tft.println("Baglanti Hatasi!");
+          tft.fillScreen(TFT_BLACK);
+          tft.setCursor(30, 110);
+          tft.setTextColor(TFT_RED);
+          tft.println("Baglanti Hatasi!");
 
-        hataEkraniGosteriliyor = true;
-        hataEkraniBaslangicMs = millis();
+          hataEkraniGosteriliyor = true;
+          hataEkraniBaslangicMs = millis();
+        }
+      } 
+      else {
+        // İptal DEĞİLSE (Su veya Köpük ise) Mobil uygulamanın görmesi için hardwareSelection'a yaz
+        char path[96];
+        makeBayPath(path, sizeof(path), "hardwareSelection");
+
+        if (Firebase.RTDB.setString(&fbdo, path, secilenPaket)) {
+          tft.fillScreen(TFT_BLACK);
+          tft.setCursor(20, 110);
+          tft.setTextColor(TFT_WHITE);
+          tft.println("Odeme bekleniyor...");
+
+          odemeBekleniyor = true;
+          odemeBeklemeBaslangicMs = millis();
+        } else {
+          LOG_PRINT(F("Secim hata: "));
+          Serial.println(fbdo.errorReason());
+
+          tft.fillScreen(TFT_BLACK);
+          tft.setCursor(30, 110);
+          tft.setTextColor(TFT_RED);
+          tft.println("Baglanti Hatasi!");
+
+          hataEkraniGosteriliyor = true;
+          hataEkraniBaslangicMs = millis();
+        }
       }
     }
   }
