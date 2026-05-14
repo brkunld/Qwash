@@ -1,5 +1,7 @@
+/* eslint-disable react-hooks/exhaustive-deps */
 import { useEffect, useState, useRef } from "react";
 import { useRouter } from "expo-router";
+import Svg, { Path } from "react-native-svg";
 import {
   ActivityIndicator,
   Modal,
@@ -10,9 +12,15 @@ import {
   TextInput,
   View,
   KeyboardAvoidingView,
-  Platform
+  Platform,
 } from "react-native";
+import { Ionicons, MaterialCommunityIcons, MaterialIcons } from "@expo/vector-icons";
 import { useKullaniciIslemleri } from "../../src/kullaniciIslemleri";
+
+const BubbleIconOutlined = ({ size = 24, color = "#ffffff", style }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill={color} style={style}>
+    <Path d="M7 8.5c1.93 0 3.5 1.57 3.5 3.5s-1.57 3.5-3.5 3.5-3.5-1.57-3.5-3.5 1.57-3.5 3.5-3.5m0-2C3.96 6.5 1.5 8.96 1.5 12s2.46 5.5 5.5 5.5 5.5-2.46 5.5-5.5S10.04 6.5 7 6.5zM14.5 16c1.38 0 2.5 1.12 2.5 2.5s-1.12 2.5-2.5 2.5-2.5-1.12-2.5-2.5 1.12-2.5 2.5-2.5m0-2c-2.48 0-4.5 2.02-4.5 4.5s2.02 4.5 4.5 4.5 4.5-2.02 4.5-4.5-2.02-4.5-4.5-4.5zM16 3.5c2.48 0 4.5 2.02 4.5 4.5s-2.02 4.5-4.5 4.5-4.5-2.02-4.5-4.5 2.02-4.5 4.5-4.5m0-2c-3.59 0-6.5 2.91-6.5 6.5s2.91 6.5 6.5 6.5 6.5-2.91 6.5-6.5-2.91-6.5-6.5-6.5z" />
+  </S
 
 const DARK = "#1a1a2e";
 const YELLOW = "#f5a623";
@@ -22,7 +30,6 @@ const GRAY_BORDER = "#e2e6ea";
 const GRAY_TEXT = "#6b7280";
 const DARK_TEXT = "#111827";
 
-// 🔥 YENİ: KENDİ İÇİNDE ÇALIŞAN PERFORMANS DOSTU SAYAÇ BİLEŞENİ
 const PeronSayaci = ({ session, bayId, sessionBitir }) => {
   const [kalan, setKalan] = useState(null);
   const bitirildiRef = useRef(false);
@@ -37,8 +44,8 @@ const PeronSayaci = ({ session, bayId, sessionBitir }) => {
     const startedMs = session.startedAt?.toMillis
       ? session.startedAt.toMillis()
       : session.startedAt?.seconds
-      ? session.startedAt.seconds * 1000
-      : Date.now();
+        ? session.startedAt.seconds * 1000
+        : Date.now();
 
     const durSec = Number(session.durationSec ?? 0);
     if (durSec <= 0) return;
@@ -61,7 +68,6 @@ const PeronSayaci = ({ session, bayId, sessionBitir }) => {
 
     tick();
     const iv = setInterval(tick, 1000);
-
     return () => clearInterval(iv);
   }, [session, bayId, sessionBitir]);
 
@@ -72,7 +78,7 @@ const PeronSayaci = ({ session, bayId, sessionBitir }) => {
 
   return (
     <Text style={styles.sayac}>
-      ⏱ {dk}:{sn}
+      {dk}:{sn}
     </Text>
   );
 };
@@ -83,12 +89,10 @@ export default function KullaniciEkrani() {
   const {
     authYukleniyor,
     uid,
-
     aktifBayIdListesi,
     baylarData,
     sessionsData,
-    islemdekiBaylar, // kalanSureler BURADAN SİLİNDİ
-
+    islemdekiBaylar,
     bakiye,
     bakiyeYukleniyor,
     jetonAdet,
@@ -117,7 +121,6 @@ export default function KullaniciEkrani() {
     setSonKullanma,
     cvv,
     setCvv,
-
     sessionBaslat,
     sessionBitir,
     perondanCik,
@@ -130,7 +133,6 @@ export default function KullaniciEkrani() {
     if (!authYukleniyor && !uid) {
       router.replace("/login");
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authYukleniyor, uid]);
 
   if (authYukleniyor || !uid) {
@@ -149,14 +151,11 @@ export default function KullaniciEkrani() {
           <Text style={styles.headerBadgeText}> Ana Sayfa </Text>
         </View>
         <View style={styles.headerRight}>
-          <Pressable
-            onPress={() => setProfilAcik(true)}
-            style={styles.headerBtn}
-          >
-            <Text style={styles.headerBtnText}>👤 Profil</Text>
+          <Pressable onPress={() => setProfilAcik(true)} style={styles.headerBtn}>
+            <Ionicons name="person-outline" size={16} color={WHITE} />
           </Pressable>
           <Pressable onPress={cikisYap} style={styles.headerBtn}>
-            <Text style={styles.headerBtnText}>⇥ Çıkış</Text>
+            <Ionicons name="log-out-outline" size={16} color={WHITE} />
           </Pressable>
         </View>
       </View>
@@ -176,19 +175,14 @@ export default function KullaniciEkrani() {
               {bakiye} <Text style={styles.bakiyeUnit}>Jeton</Text>
             </Text>
           )}
-          <Pressable
-            onPress={() => setYuklemeAcik(true)}
-            style={styles.yellowBtn}
-          >
+          <Pressable onPress={() => setYuklemeAcik(true)} style={styles.yellowBtn}>
             <Text style={styles.yellowBtnText}>+ Bakiye Yükle</Text>
           </Pressable>
         </View>
 
-        {/* Çoklu Makine (Bay) Listesi */}
+        {/* Bay Listesi */}
         {aktifBayIdListesi.length === 0 ? (
-          <Text
-            style={{ textAlign: "center", color: GRAY_TEXT, marginTop: 20 }}
-          >
+          <Text style={{ textAlign: "center", color: GRAY_TEXT, marginTop: 20 }}>
             Henüz bağlanmış bir peron yok. Cihazınızı NFC etiketine okutunuz.
           </Text>
         ) : (
@@ -203,39 +197,42 @@ export default function KullaniciEkrani() {
             return (
               <View key={bayId} style={styles.card}>
                 <View style={styles.cardHeaderRow}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.cardLabel}> Seçili Bay ⤵</Text>
-                    <Text style={styles.bayId}>{bayId}</Text>
-                    {bay && (
-                      <Text style={styles.bayMeta}>
-                        Durum: {String(bay.status)}
+                  <View style={{ flexDirection: "row", alignItems: "center" }}>
+                    <View style={styles.bayBadge}>
+                      <Text style={styles.bayIdText}>
+                        {bayId.split("_").pop()}
                       </Text>
+                    </View>
+                    {/* Aktif modun ikonu (su/köpük) */}
+                    {sessionVarMi && session?.type === "wash" && (
+                      <Ionicons
+                        name="water-outline"
+                        size={16}
+                        color="#378ADD"
+                        style={{ marginLeft: 8 }}
+                      />
+                    )}
+                    {sessionVarMi && session?.type === "foam" && (
+                      <MaterialCommunityIcons
+                        name="bubbles"
+                        size={16}
+                        color="#10b981"
+                        style={{ marginLeft: 8 }}
+                      />
                     )}
                   </View>
 
-                  <View style={{ alignItems: "flex-end", gap: 8 }}>
-                    {bay?.isActive && (
-                      <View style={styles.badgeGreen}>
-                        <Text style={styles.badgeText}>AKTİF</Text>
-                      </View>
-                    )}
-
-                    <Pressable
-                      onPress={() => perondanCik(bayId)}
-                      disabled={sessionVarMi}
-                      style={[
-                        styles.qrBtn,
-                        {
-                          backgroundColor: sessionVarMi ? "#a3a3a3" : "#FF3B30",
-                          marginTop: 4,
-                        },
-                      ]}
-                    >
-                      <Text style={[styles.qrBtnText, { color: "white" }]}>
-                        🚪 Terket
-                      </Text>
-                    </Pressable>
-                  </View>
+                  {/* Ayrıl — sadece ikon */}
+                  <Pressable
+                    onPress={() => perondanCik(bayId)}
+                    disabled={sessionVarMi}
+                    style={[
+                      styles.leaveBtn,
+                      { backgroundColor: sessionVarMi ? "#a3a3a3" : "#FF3B30" },
+                    ]}
+                  >
+                    <Ionicons name="exit-outline" size={18} color={WHITE} />
+                  </Pressable>
                 </View>
 
                 {sessionVarMi ? (
@@ -244,22 +241,18 @@ export default function KullaniciEkrani() {
                       <ActivityIndicator color={YELLOW} />
                     ) : (
                       <>
-                        <Text style={styles.sessionTur}>
-                          Tür:{" "}
-                          {session?.type === "wash"
-                            ? "Su"
-                            : session?.type === "foam"
-                              ? "Köpük"
-                              : session?.type}
-                        </Text>
-                        
-                        {/* Ayrı Bileşen Olan Performanslı Sayaç */}
                         <PeronSayaci
                           session={session}
                           bayId={bayId}
                           sessionBitir={sessionBitir}
                         />
 
+                        {/* İlerleme çubuğu */}
+                        {session?.durationSec > 0 && (
+                          <ProgressBar session={session} />
+                        )}
+
+                        {/* Durdur — ikon + kısa etiket */}
                         <Pressable
                           onPress={() =>
                             sessionBitir(bayId, session?.id, "user_stop")
@@ -270,22 +263,19 @@ export default function KullaniciEkrani() {
                             islemde && styles.btnDisabled,
                           ]}
                         >
-                          <Text style={styles.durdurBtnText}>⏹ Durdur</Text>
+                          <Ionicons
+                            name="stop-circle-outline"
+                            size={20}
+                            color={WHITE}
+                          />
                         </Pressable>
                       </>
                     )}
                   </View>
                 ) : (
-                  <View
-                    style={{
-                      marginTop: 10,
-                      borderTopWidth: 1,
-                      borderTopColor: GRAY_BORDER,
-                      paddingTop: 10,
-                    }}
-                  >
-                    <Text style={styles.sectionTitle}>Oturum Başlat</Text>
+                  <View style={styles.startSection}>
                     <View style={styles.row}>
+                      {/* Su */}
                       <Pressable
                         onPress={() => sessionBaslat(bayId, "wash")}
                         disabled={islemde || bakiyeYukleniyor}
@@ -294,9 +284,11 @@ export default function KullaniciEkrani() {
                           (islemde || bakiyeYukleniyor) && styles.btnDisabled,
                         ]}
                       >
-                        <Text style={styles.startBtnIcon}>💧</Text>
+                        <Ionicons name="water-outline" size={28} color={WHITE} />
                         <Text style={styles.startBtnText}>Su</Text>
                       </Pressable>
+
+                      {/* Köpük */}
                       <Pressable
                         onPress={() => sessionBaslat(bayId, "foam")}
                         disabled={islemde || bakiyeYukleniyor}
@@ -305,7 +297,7 @@ export default function KullaniciEkrani() {
                           (islemde || bakiyeYukleniyor) && styles.btnDisabled,
                         ]}
                       >
-                        <Text style={styles.startBtnIcon}>🫧</Text>
+                        <MaterialCommunityIcons name="chart-bubble" size={28} color={WHITE} />
                         <Text style={styles.startBtnText}>Köpük</Text>
                       </Pressable>
                     </View>
@@ -352,7 +344,9 @@ export default function KullaniciEkrani() {
                     <Text style={styles.fiyatMeta}>
                       Birim: {jetonFiyat} ₺ / jeton
                     </Text>
-                    <Text style={styles.fiyatTotal}>Toplam: {toplamText} ₺</Text>
+                    <Text style={styles.fiyatTotal}>
+                      Toplam: {toplamText} ₺
+                    </Text>
                   </>
                 ) : (
                   <Text style={styles.fiyatErr}>Fiyat bilgisi alınamadı.</Text>
@@ -497,6 +491,34 @@ export default function KullaniciEkrani() {
   );
 }
 
+// İlerleme çubuğu bileşeni
+function ProgressBar({ session }) {
+  const [pct, setPct] = useState(0);
+
+  useEffect(() => {
+    const startedMs = session.startedAt?.toMillis
+      ? session.startedAt.toMillis()
+      : session.startedAt?.seconds
+        ? session.startedAt.seconds * 1000
+        : Date.now();
+    const durMs = Number(session.durationSec ?? 0) * 1000;
+
+    const tick = () => {
+      const elapsed = Date.now() - startedMs;
+      setPct(Math.min((elapsed / durMs) * 100, 100));
+    };
+    tick();
+    const iv = setInterval(tick, 1000);
+    return () => clearInterval(iv);
+  }, [session]);
+
+  return (
+    <View style={styles.progressBg}>
+      <View style={[styles.progressFill, { width: `${pct}%` }]} />
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: GRAY_BG },
   centered: {
@@ -507,7 +529,6 @@ const styles = StyleSheet.create({
   },
   scroll: { flex: 1, paddingHorizontal: 12, paddingTop: 10 },
 
-  /* Header */
   header: {
     backgroundColor: DARK,
     paddingTop: 48,
@@ -534,14 +555,28 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255,255,255,0.12)",
     borderRadius: 8,
     paddingHorizontal: 10,
-    paddingVertical: 6,
+    paddingVertical: 8,
   },
-  headerBtnText: { color: WHITE, fontWeight: "600", fontSize: 12 },
 
-  qrBtn: { borderRadius: 10, paddingHorizontal: 12, paddingVertical: 7 },
-  qrBtnText: { color: WHITE, fontWeight: "700", fontSize: 12 },
+  bayBadge: {
+    backgroundColor: YELLOW,
+    paddingHorizontal: 10,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  bayIdText: {
+    fontSize: 15,
+    fontWeight: "900",
+    color: "#000000",
+  },
 
-  /* Cards */
+  leaveBtn: {
+    borderRadius: 10,
+    padding: 9,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
   card: {
     backgroundColor: WHITE,
     borderRadius: 14,
@@ -565,16 +600,6 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     marginBottom: 3,
   },
-  badgeGreen: {
-    backgroundColor: "#d1fae5",
-    borderRadius: 20,
-    paddingHorizontal: 10,
-    paddingVertical: 3,
-  },
-  badgeText: { color: "#065f46", fontSize: 11, fontWeight: "700" },
-
-  bayId: { fontSize: 16, fontWeight: "800", color: DARK_TEXT, marginTop: 2 },
-  bayMeta: { fontSize: 12, color: GRAY_TEXT, marginTop: 3 },
 
   sessionBox: {
     marginTop: 10,
@@ -582,16 +607,36 @@ const styles = StyleSheet.create({
     borderTopColor: GRAY_BORDER,
     paddingTop: 10,
   },
-  sessionTur: { fontSize: 13, color: GRAY_TEXT },
-  sayac: { fontSize: 26, fontWeight: "900", color: DARK_TEXT, marginTop: 3 },
-  durdurBtn: {
+  sayac: {
+    fontSize: 30,
+    fontWeight: "900",
+    color: DARK_TEXT,
+    marginTop: 3,
+    fontVariant: ["tabular-nums"],
+    letterSpacing: 1,
+  },
+
+  progressBg: {
+    height: 4,
+    backgroundColor: GRAY_BORDER,
+    borderRadius: 2,
+    overflow: "hidden",
     marginTop: 8,
+    marginBottom: 10,
+  },
+  progressFill: {
+    height: "100%",
+    backgroundColor: YELLOW,
+    borderRadius: 2,
+  },
+
+  durdurBtn: {
     backgroundColor: DARK,
-    padding: 12,
+    padding: 13,
     borderRadius: 12,
     alignItems: "center",
+    justifyContent: "center",
   },
-  durdurBtnText: { color: WHITE, fontWeight: "700", fontSize: 14 },
 
   bakiyeNum: {
     fontSize: 34,
@@ -601,7 +646,6 @@ const styles = StyleSheet.create({
   },
   bakiyeUnit: { fontSize: 20, fontWeight: "600", color: GRAY_TEXT },
 
-  /* Buttons */
   yellowBtn: {
     marginTop: 12,
     backgroundColor: YELLOW,
@@ -612,27 +656,23 @@ const styles = StyleSheet.create({
   yellowBtnText: { color: DARK, fontWeight: "800", fontSize: 14 },
   btnDisabled: { backgroundColor: "#c4c4c4" },
 
-  /* Start Buttons */
-  sectionTitle: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: DARK_TEXT,
-    marginBottom: 8,
-    marginTop: 2,
+  startSection: {
+    marginTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: GRAY_BORDER,
+    paddingTop: 10,
   },
   row: { flexDirection: "row", gap: 10, marginBottom: 10 },
   startBtn: {
     flex: 1,
     backgroundColor: DARK,
     borderRadius: 14,
-    paddingVertical: 16,
+    paddingVertical: 18,
     alignItems: "center",
-    gap: 5,
+    gap: 6,
   },
-  startBtnIcon: { fontSize: 24 },
-  startBtnText: { color: WHITE, fontWeight: "700", fontSize: 15 },
+  startBtnText: { color: WHITE, fontWeight: "700", fontSize: 14 },
 
-  /* Modal */
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.4)",
