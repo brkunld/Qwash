@@ -2,105 +2,80 @@
 <html lang="tr">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width,initial-scale=1.0" />
     <title>ESP32 Peron Simülatörü</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@400;500;600;700;800;900&display=swap"
       rel="stylesheet"
     />
     <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
     <style>
       :root {
-        --bg: #0a0c10;
-        --surface: #111520;
-        --surface2: #181d2a;
-        --border: #1f2940;
-        --border2: #2a3555;
-        --accent: #3b82f6;
-        --accent2: #60a5fa;
-        --green: #10b981;
-        --yellow: #f59e0b;
-        --red: #ef4444;
-        --orange: #f97316;
-        --cyan: #22d3ee;
-        --muted: #4a5578;
-        --text: #e2e8f0;
-        --text2: #94a3b8;
+        --bg-main: #f0f2f5;
+        --bg-card: #ffffff;
+        --border: #e2e5ea;
+        --text-main: #111827;
+        --text-muted: #6b7280;
+        --accent-yellow: #f5a623;
+        --accent-dark: #111827;
+        --success: #10b981;
+        --success-dim: rgba(16, 185, 129, 0.1);
+        --warning: #f5a623;
+        --warning-dim: rgba(245, 166, 35, 0.12);
+        --danger: #ef4444;
+        --danger-dim: rgba(239, 68, 68, 0.1);
+        --info: #3b82f6;
+        --info-dim: rgba(59, 130, 246, 0.1);
+        --font-ui: "Inter", sans-serif;
         --font-mono: "Space Mono", monospace;
-        --font-ui: "Syne", sans-serif;
+        --radius-card: 18px;
+        --radius-inner: 12px;
       }
-
       * {
         box-sizing: border-box;
         margin: 0;
         padding: 0;
       }
-
       body {
         font-family: var(--font-ui);
-        background: var(--bg);
-        color: var(--text);
+        background: var(--bg-main);
+        color: var(--text-main);
         min-height: 100vh;
         display: flex;
         justify-content: center;
         align-items: flex-start;
-        padding: 32px 20px;
-        background-image:
-          radial-gradient(
-            ellipse 60% 40% at 10% 0%,
-            rgba(59, 130, 246, 0.07) 0%,
-            transparent 70%
-          ),
-          radial-gradient(
-            ellipse 40% 50% at 90% 100%,
-            rgba(16, 185, 129, 0.05) 0%,
-            transparent 70%
-          );
+        padding: 28px 20px;
       }
-
       .app {
         width: 100%;
-        max-width: 1120px;
+        max-width: 1140px;
         display: grid;
-        grid-template-columns: 420px 1fr;
+        grid-template-columns: 400px 1fr;
         gap: 20px;
         align-items: start;
       }
 
-      /* ─── DEVICE COLUMN ─────────────────────────────── */
+      /* ─── SOL SÜTUN ─── */
       .device-col {
         display: flex;
         flex-direction: column;
-        gap: 14px;
+        gap: 16px;
       }
 
-      .device-card {
-        background: var(--surface);
-        border: 1px solid var(--border2);
-        border-radius: 20px;
+      .card {
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-card);
         padding: 20px;
-        position: relative;
-        overflow: hidden;
-      }
-      .device-card::before {
-        content: "";
-        position: absolute;
-        inset: 0;
-        background: linear-gradient(
-          135deg,
-          rgba(59, 130, 246, 0.04) 0%,
-          transparent 60%
-        );
-        pointer-events: none;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
       }
 
       .device-label {
         font-family: var(--font-mono);
         font-size: 10px;
-        letter-spacing: 0.15em;
-        color: var(--muted);
+        font-weight: 700;
+        letter-spacing: 1.2px;
+        color: var(--text-muted);
         text-transform: uppercase;
         margin-bottom: 14px;
         display: flex;
@@ -109,24 +84,19 @@
       }
       .device-label::before {
         content: "";
-        width: 6px;
-        height: 6px;
-        background: var(--accent);
+        width: 7px;
+        height: 7px;
+        background: var(--accent-yellow);
         border-radius: 50%;
-        box-shadow: 0 0 8px var(--accent);
+        flex-shrink: 0;
       }
 
-      /* Screen */
       .screen-bezel {
-        background: #06080f;
+        background: #1a1f2e;
         border-radius: 14px;
         padding: 10px;
-        border: 1px solid #1a2035;
-        box-shadow:
-          inset 0 2px 8px rgba(0, 0, 0, 0.6),
-          0 0 0 1px #0d1120;
+        box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.4);
       }
-
       .screen {
         width: 100%;
         aspect-ratio: 4/3;
@@ -134,16 +104,15 @@
         border-radius: 8px;
         position: relative;
         overflow: hidden;
-        min-height: 240px;
+        min-height: 220px;
       }
-
       .screen-content {
         width: 100%;
         height: 100%;
         position: relative;
       }
 
-      /* Screen states */
+      /* Ekran İçi */
       .center {
         display: flex;
         align-items: center;
@@ -153,37 +122,32 @@
         flex-direction: column;
         gap: 10px;
       }
-
       .big-text {
         font-family: var(--font-ui);
-        font-size: 32px;
-        font-weight: 800;
+        font-size: 30px;
+        font-weight: 900;
         line-height: 1.2;
       }
       .medium-text {
         font-family: var(--font-ui);
-        font-size: 20px;
+        font-size: 18px;
         font-weight: 700;
       }
-
       .timer {
         font-family: var(--font-mono);
-        font-size: 56px;
+        font-size: 52px;
         font-weight: 700;
-        color: var(--yellow);
+        color: var(--warning);
         letter-spacing: 0.04em;
-        text-shadow: 0 0 30px rgba(245, 158, 11, 0.4);
+        text-align: center;
       }
-
       .package-title {
         font-family: var(--font-ui);
-        font-size: 26px;
-        font-weight: 800;
+        font-size: 24px;
+        font-weight: 900;
         text-align: center;
-        margin-top: 28px;
-        letter-spacing: 0.05em;
+        margin-top: 26px;
       }
-
       .qr-wrap {
         background: white;
         width: 100%;
@@ -192,117 +156,107 @@
         align-items: center;
         justify-content: center;
         flex-direction: column;
-        gap: 8px;
+        gap: 6px;
       }
-
       .select-title {
         position: absolute;
-        top: 16px;
+        top: 14px;
         width: 100%;
         text-align: center;
         font-family: var(--font-ui);
-        font-size: 15px;
-        font-weight: 700;
-        color: rgba(255, 255, 255, 0.85);
-        letter-spacing: 0.06em;
+        font-size: 14px;
+        font-weight: 800;
+        color: rgba(255, 255, 255, 0.9);
+        letter-spacing: 0.8px;
         text-transform: uppercase;
       }
-
       .touch-btn {
         position: absolute;
-        top: 70px;
-        width: 120px;
-        height: 80px;
+        top: 62px;
+        width: 116px;
+        height: 76px;
         border-radius: 10px;
         border: none;
         font-family: var(--font-ui);
-        font-size: 15px;
-        font-weight: 800;
+        font-size: 14px;
+        font-weight: 900;
         cursor: pointer;
-        letter-spacing: 0.08em;
-        transition:
-          filter 0.15s,
-          transform 0.12s;
+        letter-spacing: 0.8px;
+        transition: transform 0.12s;
         text-transform: uppercase;
       }
       .touch-btn:hover:not(:disabled) {
-        filter: brightness(1.18);
-        transform: scale(1.04);
+        transform: scale(1.05);
       }
       .touch-btn:active:not(:disabled) {
-        transform: scale(0.97);
+        transform: scale(0.95);
       }
       .touch-btn:disabled {
-        opacity: 0.4;
+        opacity: 0.5;
         cursor: not-allowed;
       }
-
       .btn-water {
-        left: 18px;
-        background: #2563eb;
+        left: 16px;
+        background: #3b82f6;
         color: white;
-        box-shadow: 0 0 16px rgba(37, 99, 235, 0.4);
       }
       .btn-foam {
-        left: 156px;
-        background: var(--cyan);
-        color: #0a0f1a;
-        box-shadow: 0 0 16px rgba(34, 211, 238, 0.35);
+        left: 148px;
+        background: #10b981;
+        color: white;
       }
-
       .progress-bg {
         position: absolute;
-        left: 18px;
-        bottom: 16px;
-        width: calc(100% - 36px);
+        left: 16px;
+        bottom: 14px;
+        width: calc(100% - 32px);
         height: 5px;
-        background: #1a1a1a;
+        background: #1f2937;
         border-radius: 999px;
         overflow: hidden;
       }
       .progress-fill {
         height: 100%;
-        background: linear-gradient(90deg, var(--accent), var(--cyan));
+        background: var(--warning);
         width: 100%;
         transition: width 0.15s linear;
         border-radius: 999px;
       }
 
-      /* Hardware row */
       .hardware-row {
         display: grid;
         grid-template-columns: 1fr 1fr;
         gap: 10px;
         margin-top: 14px;
       }
-
       .physical-btn {
-        background: var(--surface2);
-        border: 1px solid var(--border2);
-        border-radius: 12px;
-        padding: 13px 12px;
+        background: #f9fafb;
+        border: 1.5px solid var(--border);
+        border-radius: 10px;
+        padding: 12px 10px;
         font-family: var(--font-ui);
-        font-size: 13px;
-        font-weight: 700;
-        color: var(--cyan);
+        font-size: 12px;
+        font-weight: 800;
+        color: var(--text-main);
         cursor: pointer;
-        transition: all 0.15s;
-        letter-spacing: 0.04em;
+        transition: all 0.18s;
         text-transform: uppercase;
+        letter-spacing: 0.5px;
       }
       .physical-btn:hover {
-        background: rgba(34, 211, 238, 0.1);
-        border-color: var(--cyan);
+        border-color: var(--accent-dark);
+        background: #fff;
       }
 
       .buzzer {
-        background: var(--surface2);
-        border: 1px solid var(--border);
-        border-radius: 12px;
-        padding: 13px 12px;
+        background: #f9fafb;
+        border: 1.5px solid var(--border);
+        border-radius: 10px;
+        padding: 12px 10px;
         font-family: var(--font-mono);
-        font-size: 11px;
-        color: var(--muted);
+        font-size: 10px;
+        font-weight: 700;
+        color: var(--text-muted);
         text-align: center;
         display: flex;
         align-items: center;
@@ -312,82 +266,59 @@
       }
       .buzzer::before {
         content: "◉";
-        font-size: 14px;
+        font-size: 13px;
       }
       .buzzer.active {
-        background: rgba(245, 158, 11, 0.15);
-        border-color: var(--yellow);
-        color: var(--yellow);
-        animation: buzzer-pulse 0.25s infinite alternate;
+        background: var(--warning-dim);
+        border-color: var(--warning);
+        color: var(--warning);
+        animation: bpulse 0.25s infinite alternate;
       }
-      .buzzer.active::before {
-        color: var(--yellow);
-      }
-      @keyframes buzzer-pulse {
+      @keyframes bpulse {
         from {
           box-shadow: none;
         }
         to {
-          box-shadow: 0 0 14px rgba(245, 158, 11, 0.35);
+          box-shadow: 0 0 10px rgba(245, 166, 35, 0.25);
         }
       }
 
-      /* ─── PANEL COLUMN ──────────────────────────────── */
-      .panel {
-        background: var(--surface);
-        border: 1px solid var(--border2);
-        border-radius: 20px;
-        padding: 24px;
-        display: flex;
-        flex-direction: column;
-        gap: 20px;
-        position: relative;
-        overflow: hidden;
+      /* ─── SAĞ SÜTUN ─── */
+      .panel-header {
+        margin-bottom: 22px;
       }
-      .panel::before {
-        content: "";
-        position: absolute;
-        top: 0;
-        right: 0;
-        width: 200px;
-        height: 200px;
-        background: radial-gradient(
-          circle,
-          rgba(59, 130, 246, 0.06) 0%,
-          transparent 70%
-        );
-        pointer-events: none;
-      }
-
       .panel-eyebrow {
         font-family: var(--font-mono);
         font-size: 10px;
-        letter-spacing: 0.18em;
-        color: var(--accent2);
+        font-weight: 700;
+        letter-spacing: 1.2px;
+        color: var(--text-muted);
         text-transform: uppercase;
         margin-bottom: 6px;
-        display: flex;
-        align-items: center;
-        gap: 8px;
       }
-      .panel-eyebrow::after {
-        content: "";
-        flex: 1;
-        height: 1px;
-        background: linear-gradient(90deg, var(--border2), transparent);
-      }
-      .panel h1 {
+      .panel-header h1 {
         font-size: 22px;
+        font-weight: 900;
+        color: var(--text-main);
+        letter-spacing: -0.4px;
+      }
+
+      .section-label {
+        font-size: 11px;
         font-weight: 800;
-        color: var(--text);
-        letter-spacing: -0.01em;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        margin-bottom: 12px;
+        padding-bottom: 8px;
+        border-bottom: 1.5px solid var(--border);
       }
 
       .fields-grid {
         display: grid;
         grid-template-columns: 1fr 1fr;
-        gap: 10px;
-        margin-bottom: 12px;
+        gap: 12px;
+        margin-bottom: 14px;
       }
       .field-group {
         display: flex;
@@ -395,213 +326,157 @@
         gap: 5px;
       }
       .field-group label {
-        font-family: var(--font-mono);
-        font-size: 10px;
-        letter-spacing: 0.12em;
-        color: var(--muted);
+        font-size: 11px;
+        font-weight: 700;
+        color: var(--text-muted);
         text-transform: uppercase;
+        letter-spacing: 0.5px;
       }
       .field-group input,
       .field-group select {
-        background: var(--surface2);
-        border: 1px solid var(--border2);
-        border-radius: 10px;
+        background: #f9fafb;
+        border: 1.5px solid var(--border);
+        border-radius: 9px;
         padding: 10px 12px;
-        font-family: var(--font-mono);
-        font-size: 12px;
-        color: var(--text);
+        font-family: var(--font-ui);
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--text-main);
         width: 100%;
-        transition: border-color 0.15s;
+        transition: all 0.18s;
         outline: none;
+        appearance: none;
       }
       .field-group input:focus,
       .field-group select:focus {
-        border-color: var(--accent);
-        box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.15);
+        border-color: var(--accent-yellow);
+        background: #fff;
+        box-shadow: 0 0 0 3px rgba(245, 166, 35, 0.12);
       }
       .field-group input[readonly] {
-        color: var(--text2);
+        color: var(--text-muted);
+        background: var(--bg-main);
         cursor: default;
+        border-color: transparent;
       }
-      .field-group select option {
-        background: var(--surface2);
-      }
-
-      /* Buttons */
-      .btn {
-        border: none;
-        border-radius: 10px;
-        padding: 11px 16px;
-        font-family: var(--font-ui);
-        font-size: 13px;
-        font-weight: 700;
-        cursor: pointer;
-        transition: all 0.15s;
-        letter-spacing: 0.04em;
-        text-transform: uppercase;
-      }
-      .btn:hover {
-        filter: brightness(1.12);
-        transform: translateY(-1px);
-      }
-      .btn:active {
-        transform: translateY(0);
+      .field-group select {
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%236b7280' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 12px center;
+        padding-right: 32px;
       }
 
       .btn-connect {
-        background: linear-gradient(135deg, #1d4ed8, var(--accent));
-        color: white;
+        background: var(--accent-dark);
+        color: #fff;
         width: 100%;
-        padding: 13px;
-        box-shadow: 0 4px 14px rgba(59, 130, 246, 0.25);
-      }
-
-      .btn-green {
-        background: rgba(16, 185, 129, 0.15);
-        color: var(--green);
-        border: 1px solid rgba(16, 185, 129, 0.3);
-      }
-      .btn-blue {
-        background: rgba(59, 130, 246, 0.12);
-        color: var(--accent2);
-        border: 1px solid rgba(59, 130, 246, 0.3);
-      }
-      .btn-slate {
-        background: var(--surface2);
-        color: var(--text2);
-        border: 1px solid var(--border2);
-      }
-      .btn-red {
-        background: rgba(239, 68, 68, 0.12);
-        color: #f87171;
-        border: 1px solid rgba(239, 68, 68, 0.3);
-      }
-
-      .btn-green:hover {
-        background: rgba(16, 185, 129, 0.25);
-      }
-      .btn-blue:hover {
-        background: rgba(59, 130, 246, 0.22);
-      }
-      .btn-slate:hover {
-        background: rgba(255, 255, 255, 0.05);
-      }
-      .btn-red:hover {
-        background: rgba(239, 68, 68, 0.22);
-      }
-
-      /* Status / control section */
-      .section-label {
-        font-family: var(--font-mono);
-        font-size: 10px;
-        letter-spacing: 0.14em;
-        color: var(--muted);
+        border: none;
+        border-radius: 10px;
+        padding: 13px 16px;
+        font-family: var(--font-ui);
+        font-size: 13px;
+        font-weight: 800;
+        cursor: pointer;
+        transition: all 0.2s;
         text-transform: uppercase;
-        margin-bottom: 10px;
-        display: flex;
-        align-items: center;
-        gap: 8px;
+        letter-spacing: 0.8px;
+        margin-bottom: 22px;
       }
-      .section-label::after {
-        content: "";
-        flex: 1;
-        height: 1px;
-        background: var(--border);
+      .btn-connect:hover {
+        background: #1f2937;
+        transform: translateY(-1px);
+      }
+      .btn-connect:active {
+        transform: translateY(0);
       }
 
       .actions-grid {
         display: grid;
         grid-template-columns: repeat(2, 1fr);
-        gap: 8px;
+        gap: 10px;
+        margin-bottom: 20px;
       }
-
-      .divider {
-        height: 1px;
-        background: var(--border);
-      }
-
-      /* Info box */
-      .info-box {
-        background: rgba(59, 130, 246, 0.06);
-        border: 1px solid rgba(59, 130, 246, 0.2);
-        border-radius: 12px;
+      .btn-action {
+        border: none;
+        border-radius: 10px;
         padding: 12px 14px;
-        font-family: var(--font-mono);
-        font-size: 11px;
-        color: var(--text2);
+        font-family: var(--font-ui);
+        font-size: 12px;
+        font-weight: 800;
+        cursor: pointer;
+        transition: all 0.18s;
+        text-transform: uppercase;
+        letter-spacing: 0.6px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+      }
+      .btn-action:hover {
+        transform: translateY(-1px);
+        filter: brightness(0.95);
+      }
+      .btn-action:active {
+        transform: translateY(0);
+      }
+      .btn-green {
+        background: var(--success-dim);
+        color: #059669;
+      }
+      .btn-blue {
+        background: var(--info-dim);
+        color: #2563eb;
+      }
+      .btn-slate {
+        background: #f3f4f6;
+        color: #374151;
+      }
+      .btn-red {
+        background: var(--danger-dim);
+        color: #dc2626;
+      }
+
+      .info-box {
+        background: var(--info-dim);
+        border: 1px solid rgba(59, 130, 246, 0.2);
+        border-radius: 10px;
+        padding: 12px 14px;
+        font-size: 12px;
+        font-weight: 500;
+        color: var(--text-main);
         line-height: 1.6;
+        margin-bottom: 20px;
       }
       .info-box b {
-        color: var(--accent2);
-        font-weight: 400;
+        color: var(--info);
+        font-weight: 800;
       }
 
+      .log-label {
+        margin-bottom: 10px;
+      }
       .log {
         height: 160px;
         overflow-y: auto;
-        background: #05070d;
-        border: 1px solid var(--border);
-        border-radius: 12px;
-        padding: 12px;
+        background: #111827;
+        border-radius: 10px;
+        padding: 14px;
         font-family: var(--font-mono);
         font-size: 11px;
-        color: #6b7fa3;
+        color: #6ee7b7;
         white-space: pre-wrap;
         line-height: 1.7;
         scroll-behavior: smooth;
       }
       .log::-webkit-scrollbar {
-        width: 4px;
+        width: 5px;
       }
       .log::-webkit-scrollbar-track {
         background: transparent;
       }
       .log::-webkit-scrollbar-thumb {
-        background: var(--border2);
+        background: #374151;
         border-radius: 999px;
-      }
-
-      /* Connection state badge */
-      .conn-badge {
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        font-family: var(--font-mono);
-        font-size: 11px;
-        padding: 5px 10px;
-        border-radius: 999px;
-        background: var(--surface2);
-        border: 1px solid var(--border);
-        color: var(--muted);
-      }
-      .conn-badge.ok {
-        color: var(--green);
-        border-color: rgba(16, 185, 129, 0.4);
-        background: rgba(16, 185, 129, 0.08);
-      }
-      .conn-badge.err {
-        color: #f87171;
-        border-color: rgba(239, 68, 68, 0.3);
-        background: rgba(239, 68, 68, 0.07);
-      }
-      .conn-dot {
-        width: 6px;
-        height: 6px;
-        border-radius: 50%;
-        background: currentColor;
-      }
-      .conn-badge.ok .conn-dot {
-        box-shadow: 0 0 6px currentColor;
-        animation: blink 2s infinite;
-      }
-      @keyframes blink {
-        0%,
-        100% {
-          opacity: 1;
-        }
-        50% {
-          opacity: 0.3;
-        }
       }
 
       @media (max-width: 860px) {
@@ -618,10 +493,10 @@
   </head>
   <body>
     <div class="app">
-      <!-- ── DEVICE ── -->
+      <!-- SOL: CİHAZ -->
       <div class="device-col">
-        <div class="device-card">
-          <div class="device-label">ESP32 · TFT Display · 320×240</div>
+        <div class="card">
+          <div class="device-label">ESP32 · TFT Ekran · Donanım Sim.</div>
           <div class="screen-bezel">
             <div class="screen">
               <div id="screen" class="screen-content"></div>
@@ -629,27 +504,26 @@
           </div>
           <div class="hardware-row">
             <button class="physical-btn" onclick="physicalFoamButton()">
-              ⬛ Fiziksel Köpük Btn
+              🔘 Fiziksel Köpük Btn
             </button>
             <div id="buzzer" class="buzzer">BUZZER: PASİF</div>
           </div>
         </div>
       </div>
 
-      <!-- ── PANEL ── -->
-      <div class="panel">
+      <!-- SAĞ: PANEL -->
+      <div class="card" style="display: flex; flex-direction: column; gap: 0">
         <div class="panel-header">
-          <div class="panel-eyebrow">Firebase Realtime · HTML Simülatör</div>
-          <h1>ESP32 Peron Simülatörü</h1>
+          <div class="panel-eyebrow">Bağlantı & Simülasyon</div>
+          <h1>Donanım Test Paneli</h1>
         </div>
 
-        <!-- Connection -->
-        <div class="connect-section">
-          <div class="section-label">Bağlantı</div>
+        <div style="margin-bottom: 20px">
+          <div class="section-label">Yetkilendirme</div>
           <div class="fields-grid">
             <div class="field-group">
-              <label>Email</label>
-              <input id="email" type="email" placeholder="firebase@email.com" />
+              <label>Firebase Email</label>
+              <input id="email" type="email" placeholder="ornek@email.com" />
             </div>
             <div class="field-group">
               <label>Şifre</label>
@@ -660,70 +534,72 @@
               <input id="bayId" value="bay_42060_01_02" />
             </div>
             <div class="field-group">
-              <label>Durum</label>
+              <label>Sistem Durumu</label>
               <input id="connectionState" value="Bağlı değil" readonly />
             </div>
           </div>
-          <button class="btn btn-connect" onclick="connectFirebase()">
-            Firebase'e Bağlan
+          <button class="btn-connect" onclick="connectFirebase()">
+            Sisteme Bağlan
           </button>
         </div>
 
-        <div class="divider"></div>
-
-        <!-- Control -->
-        <div>
-          <div class="section-label">Kontrol</div>
+        <div style="margin-bottom: 20px">
+          <div class="section-label">Durum Enjeksiyonu</div>
           <div class="fields-grid" style="margin-bottom: 12px">
             <div class="field-group">
-              <label>Durum</label>
+              <label>Mevcut Durum</label>
               <select id="status" onchange="writeStatus(this.value)">
                 <option value="baslangic">baslangic</option>
-                <option value="available">available</option>
-                <option value="waiting">waiting</option>
-                <option value="busy">busy</option>
-                <option value="maintenance">maintenance</option>
-                <option value="offline">offline</option>
+                <option value="available">available (Boş)</option>
+                <option value="waiting">waiting (Bekliyor)</option>
+                <option value="busy">busy (Dolu)</option>
+                <option value="maintenance">maintenance (Bakım)</option>
+                <option value="offline">offline (Kapalı)</option>
               </select>
             </div>
             <div class="field-group">
-              <label>Aktif mi?</label>
+              <label>Aktiflik (Güç)</label>
               <select
                 id="isActive"
                 onchange="writeActive(this.value === 'true')"
               >
-                <option value="true">true</option>
-                <option value="false">false</option>
+                <option value="true">Açık (True)</option>
+                <option value="false">Kapalı (False)</option>
               </select>
             </div>
           </div>
           <div class="actions-grid">
-            <button class="btn btn-green" onclick="writeStatus('available')">
-              ⬛ QR Göster
+            <button
+              class="btn-action btn-green"
+              onclick="writeStatus('available')"
+            >
+              ▶ QR Göster
             </button>
-            <button class="btn btn-blue" onclick="writeStatus('waiting')">
-              ⬛ Paket Seçimi
+            <button
+              class="btn-action btn-blue"
+              onclick="writeStatus('waiting')"
+            >
+              ⋯ Paket Seçimi
             </button>
-            <button class="btn btn-slate" onclick="writeStatus('maintenance')">
-              ⬛ Bakım Modu
+            <button
+              class="btn-action btn-slate"
+              onclick="writeStatus('maintenance')"
+            >
+              ⚙ Bakım Modu
             </button>
-            <button class="btn btn-red" onclick="writeStatus('offline')">
-              ⬛ Peronu Kapat
+            <button class="btn-action btn-red" onclick="writeStatus('offline')">
+              ✕ Peronu Kapat
             </button>
           </div>
         </div>
 
-        <div class="divider"></div>
-
         <div class="info-box">
-          Gerçek Firebase Realtime Database bağlantısı · Okunan/yazılan yol:
-          <b>/bays/&lt;bayId&gt;</b> · Kimlik bilgileri yalnızca tarayıcıda
-          tutulur.
+          Gerçek veri tabanına bağlanır. Okunan/yazılan yol:
+          <b>/bays/&lt;bayId&gt;</b>
         </div>
 
-        <!-- Log -->
-        <div class="log-wrap">
-          <div class="section-label">Seri Monitör</div>
+        <div>
+          <div class="section-label log-label">Seri Monitör (Terminal)</div>
           <div id="log" class="log"></div>
         </div>
       </div>
@@ -747,12 +623,10 @@
       } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-database.js";
 
       const defaultSecrets = window.SECRETS || {};
-
       const firebaseConfig = {
         apiKey: defaultSecrets.API_KEY || "",
         databaseURL: defaultSecrets.DATABASE_URL || "",
       };
-
       const app = initializeApp(firebaseConfig);
       const auth = getAuth(app);
       const db = getDatabase(app);
@@ -783,23 +657,19 @@
       const screen = document.getElementById("screen");
       const logBox = document.getElementById("log");
       const buzzerEl = document.getElementById("buzzer");
-
       const nowMs = () => Date.now();
 
       function log(msg) {
-        const time = new Date().toLocaleTimeString("tr-TR");
-        logBox.textContent += `[${time}] ${msg}\n`;
+        const t = new Date().toLocaleTimeString("tr-TR");
+        logBox.textContent += `[${t}] ${msg}\n`;
         logBox.scrollTop = logBox.scrollHeight;
       }
-
       function setScreen(html, bg = "#000") {
         screen.style.background = bg;
         screen.innerHTML = html;
       }
-
-      function setConnectionState(text, ok = false) {
-        const el = document.getElementById("connectionState");
-        el.value = text;
+      function setConnectionState(text) {
+        document.getElementById("connectionState").value = text;
       }
 
       function beep(freq = 2000, duration = 100) {
@@ -828,23 +698,16 @@
       }
 
       function showBaslangic() {
-        setScreen(`
-          <div class="center">
-            <div class="medium-text" style="color:#4a5578">Firebase Bağlantısı</div>
-            <div class="medium-text" style="color:#4a5578">Bekleniyor...</div>
-            <div style="margin-top:12px;font-family:'Space Mono',monospace;font-size:11px;color:#2a3555">Sağ panelden giriş yap</div>
-          </div>`);
+        setScreen(
+          `<div class="center"><div class="medium-text" style="color:#6b7280">Sistem Hazır</div><div class="medium-text" style="color:#6b7280">Bekleniyor...</div><div style="margin-top:12px;font-family:'Space Mono',monospace;font-size:11px;color:#9ca3af">Sağ panelden giriş yapın</div></div>`,
+        );
       }
 
       function drawQR() {
         const bayId =
           document.getElementById("bayId").value.trim() || "bay_42060_01_02";
         setScreen(
-          `
-          <div class="qr-wrap">
-            <canvas id="qrCanvas" width="200" height="200"></canvas>
-            <div style="color:#111;font-family:'Space Mono',monospace;font-size:11px;margin-top:4px">${bayId}</div>
-          </div>`,
+          `<div class="qr-wrap"><canvas id="qrCanvas" width="190" height="190"></canvas><div style="color:#111827;font-family:'Space Mono',monospace;font-size:11px;font-weight:700;margin-top:4px">${bayId}</div></div>`,
           "white",
         );
         const canvas = document.getElementById("qrCanvas");
@@ -853,13 +716,13 @@
             canvas,
             bayId,
             {
-              width: 200,
+              width: 190,
               margin: 1,
               color: { dark: "#000000", light: "#ffffff" },
             },
             (err) => {
               if (err) {
-                log("❌ QR çizim hatası: " + err.message);
+                log("❌ QR hatası: " + err.message);
                 showQrFallback(bayId);
               } else log(`QR çizildi: ${bayId}`);
             },
@@ -871,10 +734,10 @@
 
       function showQrFallback(bayId) {
         const url =
-          "https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=" +
+          "https://api.qrserver.com/v1/create-qr-code/?size=190x190&data=" +
           encodeURIComponent(bayId);
         setScreen(
-          `<div class="qr-wrap"><img src="${url}" width="200" height="200" /><div style="color:#111;font-size:11px;font-family:monospace">${bayId}</div></div>`,
+          `<div class="qr-wrap"><img src="${url}" width="190" height="190"/><div style="color:#111;font-size:11px;font-family:monospace;font-weight:700">${bayId}</div></div>`,
           "white",
         );
       }
@@ -885,10 +748,9 @@
         );
         log("DURUM: PERON KAPALI");
       }
-
       function showMaintenance() {
         setScreen(
-          `<div class="center"><div class="big-text" style="color:#f97316">BAKIM MODU</div></div>`,
+          `<div class="center"><div class="big-text" style="color:#f5a623">BAKIM MODU</div></div>`,
         );
         log("DURUM: BAKIM MODU");
       }
@@ -898,11 +760,9 @@
         waitingTimeoutHandled = false;
         beklemeBaslangicMs = nowMs();
         BEKLEME_SURESI_MS = 60000;
-        setScreen(`
-          <div class="select-title">Lütfen Paket Seçiniz</div>
-          <button class="touch-btn btn-water" onclick="selectPackage('wash')">SU</button>
-          <button class="touch-btn btn-foam"  onclick="selectPackage('foam')">KÖPÜK</button>
-          <div class="progress-bg"><div id="progressFill" class="progress-fill"></div></div>`);
+        setScreen(
+          `<div class="select-title">Lütfen Paket Seçiniz</div><button class="touch-btn btn-water" onclick="selectPackage('wash')">SU</button><button class="touch-btn btn-foam" onclick="selectPackage('foam')">KÖPÜK</button><div class="progress-bg"><div id="progressFill" class="progress-fill"></div></div>`,
+        );
         log("DURUM: waiting / Paket seçimi bekleniyor");
       }
 
@@ -912,22 +772,22 @@
         bitisZamaniMs = nowMs() + durationSec * 1000;
         lastShownSecond = -1;
         finishPlayed = false;
-        const color = requestedPackage === "foam" ? "#22d3ee" : "#3b82f6";
+        const color = requestedPackage === "foam" ? "#10b981" : "#3b82f6";
         const title = requestedPackage === "foam" ? "KÖPÜK MODU" : "SU MODU";
-        setScreen(`
-          <div class="package-title" style="color:${color}">${title}</div>
-          <div id="timer" class="timer" style="text-align:center">00:00</div>`);
+        setScreen(
+          `<div class="package-title" style="color:${color}">${title}</div><div id="timer" class="timer">00:00</div>`,
+        );
         log(`DURUM: busy / ${requestedPackage} / ${durationSec} sn`);
       }
 
       function applyStatusChange(force = false) {
-        const shouldRender =
+        const should =
           force ||
           lastRenderedStatus !== currentStatus ||
           lastRenderedActive !== isBayActive ||
           lastRenderedPackage !== requestedPackage ||
           lastRenderedDuration !== durationSec;
-        if (!shouldRender) return;
+        if (!should) return;
         lastRenderedStatus = currentStatus;
         lastRenderedActive = isBayActive;
         lastRenderedPackage = requestedPackage;
@@ -944,8 +804,8 @@
       function syncPanelFromData(data) {
         if (!data) return;
         const oldStatus = currentStatus,
-          oldActive = isBayActive;
-        const oldPackage = requestedPackage,
+          oldActive = isBayActive,
+          oldPackage = requestedPackage,
           oldDuration = durationSec;
         if (typeof data.status === "string") currentStatus = data.status;
         if (typeof data.isActive === "boolean") isBayActive = data.isActive;
@@ -967,12 +827,9 @@
         const password = document.getElementById("password").value;
         const bayId =
           document.getElementById("bayId").value.trim() || "bay_42060_01_02";
-        if (!email || !password) {
-          log("❌ Email ve şifre gerekli.");
-          return;
-        }
+        if (!email || !password) return log("❌ Email ve şifre gerekli.");
         try {
-          setConnectionState("Bağlanıyor...", false);
+          setConnectionState("Bağlanıyor...");
           await signInWithEmailAndPassword(auth, email, password);
           connected = true;
           bayRef = ref(db, `/bays/${bayId}`);
@@ -986,25 +843,20 @@
               syncPanelFromData(liveData);
               if (liveData.__meaningfulChanged) applyStatusChange();
             },
-            (err) => {
-              log("❌ Stream hatası: " + err.message);
-            },
+            (err) => log("❌ Stream hatası: " + err.message),
           );
           await update(bayRef, { lastSeen: serverTimestamp() });
-          setConnectionState("Bağlandı", true);
+          setConnectionState("Sisteme Bağlandı");
           log("✅ Firebase bağlandı: /bays/" + bayId);
         } catch (err) {
           connected = false;
-          setConnectionState("Bağlantı hatası", false);
-          log("❌ Firebase bağlantı hatası: " + err.message);
+          setConnectionState("Bağlantı hatası");
+          log("❌ " + err.message);
         }
       }
 
       async function writeBayPatch(patch) {
-        if (!connected || !bayRef) {
-          log("❌ Önce Firebase'e bağlan.");
-          return;
-        }
+        if (!connected || !bayRef) return log("❌ Önce Firebase'e bağlan.");
         try {
           await update(bayRef, { ...patch, updatedAt: serverTimestamp() });
         } catch (err) {
@@ -1018,7 +870,6 @@
         await writeBayPatch({ status });
         applyStatusChange();
       }
-
       async function writeActive(active) {
         isBayActive = active;
         document.getElementById("isActive").value = String(active);
@@ -1031,14 +882,14 @@
         dokunmatikKilit = true;
         requestedPackage = pkg;
         setScreen(
-          `<div class="center medium-text" style="color:#f59e0b">İstek iletiliyor...</div>`,
+          `<div class="center medium-text" style="color:#f5a623">İstek iletiliyor...</div>`,
         );
         log(`hardwareSelection gönderiliyor: ${pkg}`);
         await writeBayPatch({ hardwareSelection: pkg });
         setTimeout(
           () =>
             setScreen(
-              `<div class="center medium-text" style="color:#94a3b8">Ödeme bekleniyor...</div>`,
+              `<div class="center medium-text" style="color:#9ca3af">Ödeme bekleniyor...</div>`,
             ),
           400,
         );
@@ -1095,7 +946,6 @@
         if (!connected || !bayRef) return;
         try {
           await update(bayRef, { lastSeen: serverTimestamp() });
-          log("💓 Nabız gönderildi");
         } catch (err) {
           log("❌ Nabız gönderilemedi: " + err.message);
         }
@@ -1118,14 +968,11 @@
 
       function fillInputsFromSecrets() {
         if (!window.SECRETS) return;
-
         if (window.SECRETS.USER_EMAIL)
           document.getElementById("email").value = window.SECRETS.USER_EMAIL;
-
         if (window.SECRETS.USER_PASSWORD)
           document.getElementById("password").value =
             window.SECRETS.USER_PASSWORD;
-
         if (window.SECRETS.BAY_ID)
           document.getElementById("bayId").value = window.SECRETS.BAY_ID;
       }
