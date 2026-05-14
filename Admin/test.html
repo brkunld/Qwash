@@ -50,7 +50,7 @@
         width: 100%;
         max-width: 1140px;
         display: grid;
-        grid-template-columns: 400px 1fr;
+        grid-template-columns: 400px minmax(0, 1fr);
         gap: 20px;
         align-items: start;
       }
@@ -394,7 +394,6 @@
         display: grid;
         grid-template-columns: repeat(2, 1fr);
         gap: 10px;
-        margin-bottom: 20px;
       }
       .btn-action {
         border: none;
@@ -436,49 +435,6 @@
         color: #dc2626;
       }
 
-      .info-box {
-        background: var(--info-dim);
-        border: 1px solid rgba(59, 130, 246, 0.2);
-        border-radius: 10px;
-        padding: 12px 14px;
-        font-size: 12px;
-        font-weight: 500;
-        color: var(--text-main);
-        line-height: 1.6;
-        margin-bottom: 20px;
-      }
-      .info-box b {
-        color: var(--info);
-        font-weight: 800;
-      }
-
-      .log-label {
-        margin-bottom: 10px;
-      }
-      .log {
-        height: 160px;
-        overflow-y: auto;
-        background: #111827;
-        border-radius: 10px;
-        padding: 14px;
-        font-family: var(--font-mono);
-        font-size: 11px;
-        color: #6ee7b7;
-        white-space: pre-wrap;
-        line-height: 1.7;
-        scroll-behavior: smooth;
-      }
-      .log::-webkit-scrollbar {
-        width: 5px;
-      }
-      .log::-webkit-scrollbar-track {
-        background: transparent;
-      }
-      .log::-webkit-scrollbar-thumb {
-        background: #374151;
-        border-radius: 999px;
-      }
-
       @media (max-width: 860px) {
         .app {
           grid-template-columns: 1fr;
@@ -493,7 +449,6 @@
   </head>
   <body>
     <div class="app">
-      <!-- SOL: CİHAZ -->
       <div class="device-col">
         <div class="card">
           <div class="device-label">ESP32 · TFT Ekran · Donanım Sim.</div>
@@ -511,7 +466,6 @@
         </div>
       </div>
 
-      <!-- SAĞ: PANEL -->
       <div class="card" style="display: flex; flex-direction: column; gap: 0">
         <div class="panel-header">
           <div class="panel-eyebrow">Bağlantı & Simülasyon</div>
@@ -543,7 +497,7 @@
           </button>
         </div>
 
-        <div style="margin-bottom: 20px">
+        <div>
           <div class="section-label">Durum Enjeksiyonu</div>
           <div class="fields-grid" style="margin-bottom: 12px">
             <div class="field-group">
@@ -591,16 +545,6 @@
               ✕ Peronu Kapat
             </button>
           </div>
-        </div>
-
-        <div class="info-box">
-          Gerçek veri tabanına bağlanır. Okunan/yazılan yol:
-          <b>/bays/&lt;bayId&gt;</b>
-        </div>
-
-        <div>
-          <div class="section-label log-label">Seri Monitör (Terminal)</div>
-          <div id="log" class="log"></div>
         </div>
       </div>
     </div>
@@ -655,15 +599,15 @@
         lastRenderedDuration = null;
 
       const screen = document.getElementById("screen");
-      const logBox = document.getElementById("log");
       const buzzerEl = document.getElementById("buzzer");
       const nowMs = () => Date.now();
 
+      // Eski log kutusu kaldırıldı, loglar gizli konsola gönderiliyor
       function log(msg) {
         const t = new Date().toLocaleTimeString("tr-TR");
-        logBox.textContent += `[${t}] ${msg}\n`;
-        logBox.scrollTop = logBox.scrollHeight;
+        console.log(`[${t}] ${msg}`);
       }
+
       function setScreen(html, bg = "#000") {
         screen.style.background = bg;
         screen.innerHTML = html;
