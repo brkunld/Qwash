@@ -1,5 +1,5 @@
 /* eslint-disable react-hooks/exhaustive-deps */
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "expo-router";
 import Svg, { Path, Circle } from "react-native-svg";
 import {
@@ -13,6 +13,8 @@ import {
   View,
   KeyboardAvoidingView,
   Platform,
+  Animated,
+  Easing,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useKullaniciIslemleri } from "../../src/kullaniciIslemleri";
@@ -97,7 +99,221 @@ const GRAY_BORDER = "#e2e6ea";
 const GRAY_TEXT = "#6b7280";
 const DARK_TEXT = "#111827";
 
-const PeronSayaci = ({ session, bayId, sessionBitir }) => {
+const FOAM_STOP_MS = 700;
+const WATER_STOP_MS = 1000;
+
+function createFoamBubbles() {
+  return Array.from({ length: 18 }).map((_, index) => ({
+    id: `foam-${index}`,
+    left: 5 + ((index * 17) % 88),
+    top: 34 + ((index * 23) % 58),
+    size: 12 + ((index * 7) % 24),
+    delay: (index * 170) % 1500,
+    duration: 2600 + ((index * 310) % 1600),
+    drift: index % 2 === 0 ? 12 : -10,
+    opacity: 1 + (index % 4) * 0.04,
+  }));
+}
+
+function createWaterDrops() {
+  return Array.from({ length: 22 }).map((_, index) => ({
+    id: `water-${index}`,
+    left: 4 + ((index * 13) % 92),
+    height: 18 + ((index * 5) % 24),
+    delay: (index * 110) % 1200,
+    duration: 850 + ((index * 130) % 850),
+    opacity: 0.22 + (index % 5) * 0.035,
+  }));
+}
+
+const BayBackgroundEffect = ({ type, active, stopping }) => {
+  if (!type || (!active && !stopping)) return null;
+
+  return (
+    <View pointerEvents="none" style={styles.effectLayer}>
+      {type === "foam" ? (
+        <FoamEffect stopping={stopping} />
+      ) : (
+        <WaterEffect stopping={stopping} />
+      )}
+    </View>
+  );
+};
+
+const FoamEffect = ({ stopping }) => {
+  const bubbles = useMemo(() => createFoamBubbles(), []);
+
+  return (
+    <View style={StyleSheet.absoluteFillObject}>
+      {bubbles.map((bubble) => (
+        <FoamBubble key={bubble.id} bubble={bubble} stopping={stopping} />
+      ))}
+    </View>
+  );
+};
+
+const FoamBubble = ({ bubble, stopping }) => {
+  const loop = useRef(new Animated.Value(0)).current;
+  const stop = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const anim = Animated.loop(
+      Animated.sequence([
+        Animated.delay(bubble.delay),
+        Animated.timing(loop, {
+          toValue: 1,
+          duration: bubble.duration,
+          easing: Easing.out(Easing.quad),
+          useNativeDriver: true,
+        }),
+        Animated.timing(loop, {
+          toValue: 0,
+          duration: 0,
+          useNativeDriver: true,
+        }),
+      ])
+    );
+
+    anim.start();
+
+    return () => anim.stop();
+  }, [bubble.delay, bubble.duration, loop]);
+
+  useEffect(() => {
+    Animated.timing(stop, {
+      toValue: stopping ? 1 : 0,
+      duration: stopping ? FOAM_STOP_MS : 120,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+  }, [stopping, stop]);
+
+  const translateY = loop.interpolate({
+    inputRange: [0, 1],
+    outputRange: [25, -105],
+  });
+
+  const translateX = loop.interpolate({
+    inputRange: [0, 0.5, 1],
+    outputRange: [0, bubble.drift, 0],
+  });
+
+  const pulseScale = loop.interpolate({
+    inputRange: [0, 0.45, 1],
+    outputRange: [0.75, 1.15, 0.85],
+  });
+
+  const popScale = stop.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1, 1.8],
+  });
+
+  const loopOpacity = loop.interpolate({
+    inputRange: [0, 0.2, 0.8, 1],
+    outputRange: [0, bubble.opacity, bubble.opacity, 0],
+  });
+
+  const stopOpacity = stop.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1, 0],
+  });
+
+  return (
+    <Animated.View
+      style={[
+        styles.foamBubble,
+        {
+          left: `${bubble.left}%`,
+          top: `${bubble.top}%`,
+          width: bubble.size,
+          height: bubble.size,
+          borderRadius: bubble.size / 2,
+          opacity: Animated.multiply(loopOpacity, stopOpacity),
+          transform: [
+            { translateY },
+            { translateX },
+            { scale: Animated.multiply(pulseScale, popScale) },
+          ],
+        },
+      ]}
+    />
+  );
+};
+
+const WaterEffect = ({ stopping }) => {
+  const drops = useMemo(() => createWaterDrops(), []);
+  const fade = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    Animated.timing(fade, {
+      toValue: stopping ? 0 : 1,
+      duration: stopping ? WATER_STOP_MS : 120,
+      easing: Easing.out(Easing.quad),
+      useNativeDriver: true,
+    }).start();
+  }, [stopping, fade]);
+
+  return (
+    <Animated.View style={[StyleSheet.absoluteFillObject, { opacity: fade }]}>
+      {drops.map((drop) => (
+        <WaterDrop key={drop.id} drop={drop} />
+      ))}
+    </Animated.View>
+  );
+};
+
+const WaterDrop = ({ drop }) => {
+  const fall = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const anim = Animated.loop(
+      Animated.sequence([
+        Animated.delay(drop.delay),
+        Animated.timing(fall, {
+          toValue: 1,
+          duration: drop.duration,
+          easing: Easing.linear,
+          useNativeDriver: true,
+        }),
+        Animated.timing(fall, {
+          toValue: 0,
+          duration: 0,
+          useNativeDriver: true,
+        }),
+      ])
+    );
+
+    anim.start();
+
+    return () => anim.stop();
+  }, [drop.delay, drop.duration, fall]);
+
+  const translateY = fall.interpolate({
+    inputRange: [0, 1],
+    outputRange: [-55, 220],
+  });
+
+  const opacity = fall.interpolate({
+    inputRange: [0, 0.15, 0.85, 1],
+    outputRange: [0, drop.opacity, drop.opacity, 0],
+  });
+
+  return (
+    <Animated.View
+      style={[
+        styles.waterDrop,
+        {
+          left: `${drop.left}%`,
+          height: drop.height,
+          opacity,
+          transform: [{ translateY }],
+        },
+      ]}
+    />
+  );
+};
+
+const PeronSayaci = ({ session, bayId, sessionBitir, onTimeoutStart }) => {
   const [kalan, setKalan] = useState(null);
   const bitirildiRef = useRef(false);
 
@@ -124,8 +340,10 @@ const PeronSayaci = ({ session, bayId, sessionBitir }) => {
 
       if (k <= 0) {
         setKalan(0);
+
         if (!bitirildiRef.current) {
           bitirildiRef.current = true;
+          onTimeoutStart?.(bayId, session.type);
           sessionBitir(bayId, session.id, "timeout").catch(() => {});
         }
       } else {
@@ -136,7 +354,7 @@ const PeronSayaci = ({ session, bayId, sessionBitir }) => {
     tick();
     const iv = setInterval(tick, 1000);
     return () => clearInterval(iv);
-  }, [session, bayId, sessionBitir]);
+  }, [session, bayId, sessionBitir, onTimeoutStart]);
 
   if (kalan === null) return null;
 
@@ -152,6 +370,10 @@ const PeronSayaci = ({ session, bayId, sessionBitir }) => {
 
 export default function KullaniciEkrani() {
   const router = useRouter();
+
+  const [stoppingEffects, setStoppingEffects] = useState({});
+  const [lastEffectTypeByBay, setLastEffectTypeByBay] = useState({});
+  const effectTimersRef = useRef({});
 
   const {
     authYukleniyor,
@@ -201,6 +423,83 @@ export default function KullaniciEkrani() {
       router.replace("/login");
     }
   }, [authYukleniyor, uid]);
+
+  useEffect(() => {
+    return () => {
+      Object.values(effectTimersRef.current).forEach(clearTimeout);
+    };
+  }, []);
+
+  const effectTypeFromSession = (session) => {
+    if (session?.type === "wash") return "wash";
+    if (session?.type === "foam") return "foam";
+    return null;
+  };
+
+  const saveLastEffectType = (bayId, type) => {
+    if (!type) return;
+
+    setLastEffectTypeByBay((prev) => ({
+      ...prev,
+      [bayId]: type,
+    }));
+  };
+
+  const startStoppingEffect = (bayId, type) => {
+    const effectType = type || lastEffectTypeByBay[bayId];
+    if (!effectType) return;
+
+    if (effectTimersRef.current[bayId]) {
+      clearTimeout(effectTimersRef.current[bayId]);
+    }
+
+    setLastEffectTypeByBay((prev) => ({
+      ...prev,
+      [bayId]: effectType,
+    }));
+
+    setStoppingEffects((prev) => ({
+      ...prev,
+      [bayId]: true,
+    }));
+
+    const clearAfter = effectType === "foam" ? FOAM_STOP_MS : WATER_STOP_MS;
+
+    effectTimersRef.current[bayId] = setTimeout(() => {
+      setStoppingEffects((prev) => {
+        const next = { ...prev };
+        delete next[bayId];
+        return next;
+      });
+
+      setLastEffectTypeByBay((prev) => {
+        const next = { ...prev };
+        delete next[bayId];
+        return next;
+      });
+
+      delete effectTimersRef.current[bayId];
+    }, clearAfter);
+  };
+
+  const handleStartSession = (bayId, type) => {
+    saveLastEffectType(bayId, type);
+    sessionBaslat(bayId, type);
+  };
+
+  const handleStopSession = (bayId, session) => {
+    const effectType = effectTypeFromSession(session) || lastEffectTypeByBay[bayId];
+
+    startStoppingEffect(bayId, effectType);
+    sessionBitir(bayId, session?.id, "user_stop");
+  };
+
+  const handleTimeoutStart = (bayId, sessionType) => {
+    const effectType =
+      sessionType === "wash" || sessionType === "foam" ? sessionType : null;
+
+    startStoppingEffect(bayId, effectType);
+  };
 
   if (authYukleniyor || !uid) {
     return (
@@ -265,114 +564,131 @@ export default function KullaniciEkrani() {
             const sessionVarMi =
               !!bay?.currentSessionId || session?.status === "running";
 
+            const activeEffectType = sessionVarMi
+              ? effectTypeFromSession(session)
+              : null;
+
+            const stopping = !!stoppingEffects[bayId];
+            const effectType = activeEffectType || lastEffectTypeByBay[bayId];
+            const renderEffect = !!effectType && (!!activeEffectType || stopping);
+
             return (
               <View key={bayId} style={styles.card}>
-                <View style={styles.cardHeaderRow}>
-                  <View style={{ flexDirection: "row", alignItems: "center" }}>
-                    <View style={styles.bayBadge}>
-                      <Text style={styles.bayIdText}>
-                        {bayId.split("_").pop()}
-                      </Text>
+                {renderEffect && (
+                  <BayBackgroundEffect
+                    type={effectType}
+                    active={!!activeEffectType}
+                    stopping={stopping}
+                  />
+                )}
+
+                <View style={styles.cardContent}>
+                  <View style={styles.cardHeaderRow}>
+                    <View style={{ flexDirection: "row", alignItems: "center" }}>
+                      <View style={styles.bayBadge}>
+                        <Text style={styles.bayIdText}>
+                          {bayId.split("_").pop()}
+                        </Text>
+                      </View>
+
+                      {/* Aktif modun ikonu */}
+                      {sessionVarMi && session?.type === "wash" && (
+                        <Ionicons
+                          name="water-outline"
+                          size={16}
+                          color="#378ADD"
+                          style={{ marginLeft: 8 }}
+                        />
+                      )}
+
+                      {sessionVarMi && session?.type === "foam" && (
+                        <BubbleIconOutlined
+                          size={16}
+                          color="#10b981"
+                          style={{ marginLeft: 8 }}
+                        />
+                      )}
                     </View>
 
-                    {/* Aktif modun ikonu */}
-                    {sessionVarMi && session?.type === "wash" && (
-                      <Ionicons
-                        name="water-outline"
-                        size={16}
-                        color="#378ADD"
-                        style={{ marginLeft: 8 }}
-                      />
-                    )}
-
-                    {sessionVarMi && session?.type === "foam" && (
-                      <BubbleIconOutlined
-                        size={16}
-                        color="#10b981"
-                        style={{ marginLeft: 8 }}
-                      />
-                    )}
+                    {/* Ayrıl */}
+                    <Pressable
+                      onPress={() => perondanCik(bayId)}
+                      disabled={sessionVarMi}
+                      style={[
+                        styles.leaveBtn,
+                        { backgroundColor: sessionVarMi ? "#a3a3a3" : "#FF3B30" },
+                      ]}
+                    >
+                      <Ionicons name="exit-outline" size={18} color={WHITE} />
+                    </Pressable>
                   </View>
 
-                  {/* Ayrıl */}
-                  <Pressable
-                    onPress={() => perondanCik(bayId)}
-                    disabled={sessionVarMi}
-                    style={[
-                      styles.leaveBtn,
-                      { backgroundColor: sessionVarMi ? "#a3a3a3" : "#FF3B30" },
-                    ]}
-                  >
-                    <Ionicons name="exit-outline" size={18} color={WHITE} />
-                  </Pressable>
-                </View>
+                  {sessionVarMi ? (
+                    <View style={styles.sessionBox}>
+                      {islemde ? (
+                        <ActivityIndicator color={YELLOW} />
+                      ) : (
+                        <>
+                          <PeronSayaci
+                            session={session}
+                            bayId={bayId}
+                            sessionBitir={sessionBitir}
+                            onTimeoutStart={handleTimeoutStart}
+                          />
 
-                {sessionVarMi ? (
-                  <View style={styles.sessionBox}>
-                    {islemde ? (
-                      <ActivityIndicator color={YELLOW} />
-                    ) : (
-                      <>
-                        <PeronSayaci
-                          session={session}
-                          bayId={bayId}
-                          sessionBitir={sessionBitir}
-                        />
+                          {session?.durationSec > 0 && (
+                            <ProgressBar session={session} />
+                          )}
 
-                        {session?.durationSec > 0 && (
-                          <ProgressBar session={session} />
-                        )}
-
+                          <Pressable
+                            onPress={() => handleStopSession(bayId, session)}
+                            disabled={islemde}
+                            style={[
+                              styles.durdurBtn,
+                              islemde && styles.btnDisabled,
+                            ]}
+                          >
+                            <Ionicons
+                              name="stop-circle-outline"
+                              size={20}
+                              color={WHITE}
+                            />
+                          </Pressable>
+                        </>
+                      )}
+                    </View>
+                  ) : (
+                    <View style={styles.startSection}>
+                      <View style={styles.row}>
+                        {/* Su */}
                         <Pressable
-                          onPress={() =>
-                            sessionBitir(bayId, session?.id, "user_stop")
-                          }
-                          disabled={islemde}
+                          onPress={() => handleStartSession(bayId, "wash")}
+                          disabled={islemde || bakiyeYukleniyor}
                           style={[
-                            styles.durdurBtn,
-                            islemde && styles.btnDisabled,
+                            styles.startBtn,
+                            (islemde || bakiyeYukleniyor) && styles.btnDisabled,
                           ]}
                         >
-                          <Ionicons
-                            name="stop-circle-outline"
-                            size={20}
-                            color={WHITE}
-                          />
+                          <Ionicons name="water-outline" size={28} color={WHITE} />
+                          <Text style={styles.startBtnText}>Su</Text>
                         </Pressable>
-                      </>
-                    )}
-                  </View>
-                ) : (
-                  <View style={styles.startSection}>
-                    <View style={styles.row}>
-                      {/* Su */}
-                      <Pressable
-                        onPress={() => sessionBaslat(bayId, "wash")}
-                        disabled={islemde || bakiyeYukleniyor}
-                        style={[
-                          styles.startBtn,
-                          (islemde || bakiyeYukleniyor) && styles.btnDisabled,
-                        ]}
-                      >
-                        <Ionicons name="water-outline" size={28} color={WHITE} />
-                        <Text style={styles.startBtnText}>Su</Text>
-                      </Pressable>
 
-                      {/* Köpük */}
-                      <Pressable
-                        onPress={() => sessionBaslat(bayId, "foam")}
-                        disabled={islemde || bakiyeYukleniyor}
-                        style={[
-                          styles.startBtn,
-                          (islemde || bakiyeYukleniyor) && styles.btnDisabled,
-                        ]}
-                      >
-                        <BubbleIconOutlined size={28} color={WHITE} />
-                        <Text style={styles.startBtnText}>Köpük</Text>
-                      </Pressable>
+                        {/* Köpük */}
+                        <Pressable
+                          onPress={() => handleStartSession(bayId, "foam")}
+                          disabled={islemde || bakiyeYukleniyor}
+                          style={[
+                            styles.startBtn,
+                            (islemde || bakiyeYukleniyor) && styles.btnDisabled,
+                          ]}
+                        >
+                          <BubbleIconOutlined size={28} color={WHITE} />
+                          <Text style={styles.startBtnText}>Köpük</Text>
+                        </Pressable>
+                      </View>
                     </View>
-                  </View>
-                )}
+                  )}
+                </View>
               </View>
             );
           })
@@ -681,6 +997,33 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
     shadowOffset: { width: 0, height: 2 },
     elevation: 2,
+    overflow: "hidden",
+  },
+
+  cardContent: {
+    position: "relative",
+    zIndex: 2,
+  },
+
+  effectLayer: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 1,
+    overflow: "hidden",
+  },
+
+  foamBubble: {
+    position: "absolute",
+    borderWidth: 1.5,
+    borderColor: "rgba(255,255,255,0.9)",
+    backgroundColor: "rgba(167,243,208,0.35)",
+  },
+
+  waterDrop: {
+    position: "absolute",
+    top: -55,
+    width: 2.5,
+    borderRadius: 99,
+    backgroundColor: "rgba(96,165,250,0.7)",
   },
 
   cardHeaderRow: {
