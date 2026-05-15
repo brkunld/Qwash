@@ -13,3 +13,4 @@ reset-project.js
 release
 dist
 firebase-config.js
+firebase-config-browser.js

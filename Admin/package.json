@@ -23,16 +23,17 @@
     "directories": {
       "output": "release"
     },
-    "files": [
-      "index.html",
-      "test.html",
-      "main.js",
-      "preload.js",
-      "firebase-config.js",
-      "secrets.js",
-      "images/**/*",
-      "build/**/*"
-    ],
+"files": [
+  "index.html",
+  "test.html",
+  "main.js",
+  "preload.js",
+  "firebase-config.js",
+  "firebase-config-browser.js",
+  "secrets.js",
+  "images/**/*",
+  "build/**/*"
+],
     "win": {
       "target": "nsis",
       "icon": "build/icon.ico"
