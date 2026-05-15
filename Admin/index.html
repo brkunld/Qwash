@@ -1538,7 +1538,8 @@
         onValue,
       } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-database.js";
 
-      const firebaseConfig = window.electronAPI.getFirebaseConfig();
+      const firebaseConfig =
+        window.electronAPI?.getFirebaseConfig?.() || window.FIREBASE_CONFIG;
       const app = initializeApp(firebaseConfig);
       const auth = getAuth(app);
       const database = getDatabase(app);
