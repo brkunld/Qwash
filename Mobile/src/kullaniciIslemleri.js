@@ -17,6 +17,7 @@ import {
   ref,
   serverTimestamp as rtdbServerTimestamp,
   update,
+  get,
 } from "firebase/database";
 
 import { auth, db, rtdb } from "../firebase";
@@ -153,9 +154,28 @@ export function useKullaniciIslemleri() {
                 return;
               }
 
-              // Firebase'e yaz ve peronu rezerve et
+              // === YENİ: Firebase'den mevcut durumu kontrol et ve yaz ===
               try {
                 const bayRef = ref(rtdb, `bays/${okunantBayId}`);
+                
+                // 1. Peronun anlık durumunu çek
+                const snapshot = await get(bayRef);
+                if (snapshot.exists()) {
+                  const currentBayData = snapshot.val();
+                  
+                  // 2. Peron "available" (boş) DEĞİLSE işlemi iptal et
+                  if (currentBayData.status !== "available") {
+                    let mesaj = "Bu peron şu anda kullanıma uygun değil.";
+                    if (currentBayData.status === "maintenance") mesaj = "Bu peron şu anda bakım modundadır.";
+                    else if (currentBayData.status === "busy") mesaj = "Bu peron şu anda başkası tarafından kullanılıyor.";
+                    else if (currentBayData.status === "offline" || currentBayData.isActive === false) mesaj = "Bu peron şu anda sistem tarafından kapatılmıştır.";
+                    
+                    Alert.alert("Peron Müsait Değil", mesaj);
+                    return; // İşlemi kes, waiting'e geçirme!
+                  }
+                }
+
+                // 3. Peron boşsa, durumu "waiting" yap ve kullanıcıyı bağla
                 await update(bayRef, {
                   status: "waiting",
                   updatedAt: rtdbServerTimestamp(),
@@ -278,6 +298,7 @@ export function useKullaniciIslemleri() {
   }, [uid]);
 
   // BAY (PERON) DİNLEME VE OTOMATİK KOPARMA MANTIĞI
+  // BAY (PERON) DİNLEME VE OTOMATİK KOPARMA MANTIĞI
   // ========================================================
   useEffect(() => {
     const unsubs = aktifBayIdListesi.map((bayId) => {
@@ -288,8 +309,15 @@ export function useKullaniciIslemleri() {
           const bayData = snapshot.val();
           setBaylarData((prev) => ({ ...prev, [bayId]: bayData }));
 
+          // Peronun kopmasını gerektiren durumları kontrol ediyoruz
+          const kopmaGerekliMi = 
+            bayData.status === "available" || 
+            bayData.status === "maintenance" || 
+            bayData.status === "offline" || 
+            bayData.isActive === false;
+
           // Otomatik Bağlantı Kesme Uyarısı
-          if (bayData.status === "available") {
+          if (kopmaGerekliMi) {
             // 1. Önce sadece kendi listemizden (State) peronu siliyoruz
             setAktifBayIdListesi((prev) => {
               if (prev.includes(bayId)) {
@@ -300,10 +328,15 @@ export function useKullaniciIslemleri() {
 
             // 2. Uyarıyı state updater'ın DIŞINDA veriyoruz
             if (!kasitliCikisRef.current[bayId]) {
-              Alert.alert(
-                "Bağlantı Kesildi",
-                `${bayId} peronunda süreniz doldu veya işlem yapmadığınız için bağlantınız kesildi.`,
-              );
+              let mesaj = `${bayId} peronunda süreniz doldu veya işlem yapmadığınız için bağlantınız kesildi.`;
+              
+              if (bayData.status === "maintenance") {
+                mesaj = `${bayId} peronu bakıma alındığı için bağlantınız kesildi.`;
+              } else if (bayData.status === "offline" || bayData.isActive === false) {
+                mesaj = `${bayId} peronu sistem tarafından kapatıldığı için bağlantınız kesildi.`;
+              }
+
+              Alert.alert("Bağlantı Kesildi", mesaj);
             }
             delete kasitliCikisRef.current[bayId];
 
