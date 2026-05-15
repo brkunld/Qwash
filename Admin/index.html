@@ -1963,11 +1963,22 @@
         });
       };
 
+      // === GÜNCELLENMİŞ PERON İŞLEMLERİ (ONAY SİSTEMLİ) ===
+
       window.changeBayStatus = async function (bayId, currentStatus, isActive) {
         if (!isActive) return;
         const idx = STATUS_CYCLE.indexOf(currentStatus);
-        const next =
-          STATUS_CYCLE[idx === -1 ? 0 : (idx + 1) % STATUS_CYCLE.length];
+        const next = STATUS_CYCLE[idx === -1 ? 0 : (idx + 1) % STATUS_CYCLE.length];
+        
+        // Eğer "available" yapılmıyorsa ve içeride müşteri varsa onay iste
+        if (next !== "available" && previousBaysState && previousBaysState[bayId]) {
+          const bay = previousBaysState[bayId];
+          if (bay.status === "busy" || bay.currentSessionId) {
+            const isConfirmed = confirm(`DİKKAT: ${bayId} peronunda şu anda aktif bir araç yıkama işlemi var!\n\nYine de durumunu "${STATUS_LABELS[next].text}" olarak değiştirmek istiyor musunuz? (İşlem yarıda kesilebilir)`);
+            if (!isConfirmed) return; // Yönetici iptal etti
+          }
+        }
+
         adminFetch("/update-bay", {
           method: "POST",
           body: JSON.stringify({ bayId, patch: { status: next } }),
@@ -1975,6 +1986,15 @@
       };
 
       window.toggleBayActive = async function (bayId, isCurrentlyActive) {
+        // Eğer peron KAPATILIYORSA (offline) ve içeride müşteri varsa onay iste
+        if (isCurrentlyActive && previousBaysState && previousBaysState[bayId]) {
+          const bay = previousBaysState[bayId];
+          if (bay.status === "busy" || bay.currentSessionId) {
+             const isConfirmed = confirm(`DİKKAT: ${bayId} peronunda şu anda aktif bir araç yıkama işlemi var!\n\nYine de peronu tamamen KAPATMAK istiyor musunuz?`);
+             if (!isConfirmed) return; // Yönetici iptal etti
+          }
+        }
+
         const patch = isCurrentlyActive
           ? { isActive: false, status: "offline" }
           : { isActive: true, status: "available" };
@@ -1991,6 +2011,16 @@
           (snap) => {
             const data = snap.val();
             if (!data) return;
+
+            // "available" haricinde toplu işlem yapılıyorsa kontrol et
+            if (targetStatus !== "available") {
+              const busyBays = Object.values(data).filter(bay => bay.status === "busy" || bay.currentSessionId);
+              if (busyBays.length > 0) {
+                const isConfirmed = confirm(`DİKKAT: Şu anda ${busyBays.length} peronda aktif yıkama işlemi devam ediyor!\n\nYine de TÜM peronları toplu olarak "${targetStatus === 'maintenance' ? 'BAKIMA ALMAK' : targetStatus}" istiyor musunuz?`);
+                if (!isConfirmed) return; // Yönetici iptal etti
+              }
+            }
+
             Object.keys(data).forEach((bayId) =>
               adminFetch("/update-bay", {
                 method: "POST",
@@ -2012,6 +2042,14 @@
           (snap) => {
             const data = snap.val();
             if (!data) return;
+
+            // Toplu kapatma öncesi meşgul peronları bul
+            const busyBays = Object.values(data).filter(bay => bay.status === "busy" || bay.currentSessionId);
+            if (busyBays.length > 0) {
+              const isConfirmed = confirm(`DİKKAT: Şu anda ${busyBays.length} peronda aktif yıkama işlemi devam ediyor!\n\nYine de TÜM peronları toplu olarak KAPATMAK istiyor musunuz?`);
+              if (!isConfirmed) return; // Yönetici iptal etti
+            }
+
             Object.keys(data).forEach((bayId) =>
               adminFetch("/update-bay", {
                 method: "POST",
@@ -2026,6 +2064,7 @@
         );
       };
 
+      // Toplu "Available" yapma butonuna onay eklemiyoruz çünkü isteğiniz doğrultusunda bu kuralın dışında tutuldu.
       window.bulkEnableBays = async function () {
         const baysRef = ref(database, "bays");
         onValue(
