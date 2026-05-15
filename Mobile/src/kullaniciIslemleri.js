@@ -85,15 +85,41 @@ export function useKullaniciIslemleri() {
 
   const nfcKilitRef = useRef(false);
 
+  // === YENİ VE GÜVENLİ NFC BAŞLATMA BLOĞU ===
   useEffect(() => {
     let isMounted = true;
 
     const initNfc = async () => {
       try {
+        // 1. Cihazda fiziksel olarak NFC çipi var mı?
+        const supported = await NfcManager.isSupported();
+        if (!supported) {
+          Alert.alert("NFC Hatası", "Telefonunuzda NFC donanımı bulunmuyor veya desteklenmiyor.");
+          return;
+        }
+
+        // 2. Telefonun ayarlarından NFC açık mı?
+        const enabled = await NfcManager.isEnabled();
+        if (!enabled) {
+          Alert.alert(
+            "NFC Kapalı",
+            "Peronlara bağlanabilmek için telefonunuzun NFC özelliğini açmanız gerekiyor.",
+            [
+              { text: "İptal", style: "cancel" },
+              { text: "Ayarlara Git", onPress: () => NfcManager.goToNfcSetting() }
+            ]
+          );
+          return;
+        }
+
+        // 3. Çip uyandıysa NFC motorunu başlat
         await NfcManager.start();
 
+        // 4. Kart okuma olayını dinle
         NfcManager.setEventListener(NfcEvents.DiscoverTag, async (tag) => {
           if (!isMounted || nfcKilitRef.current) return;
+          
+          // Çift okumayı engellemek için kilit
           nfcKilitRef.current = true;
           setTimeout(() => {
             nfcKilitRef.current = false;
@@ -105,6 +131,7 @@ export function useKullaniciIslemleri() {
               const raw = Ndef.text.decodePayload(ndefRecord.payload);
               let okunantBayId = raw.trim();
 
+              // JSON formatındaysa ayıkla
               if (okunantBayId.startsWith("{")) {
                 try {
                   const obj = JSON.parse(okunantBayId);
@@ -112,18 +139,21 @@ export function useKullaniciIslemleri() {
                 } catch {}
               }
 
+              // Sadece ID'yi al
               okunantBayId = okunantBayId.replace(/^\/?bays\//i, "").trim();
               okunantBayId = okunantBayId.replace(/\s+/g, "");
 
+              // Güvenlik formatı kontrolü
               const re = /^bay_\d{5}_\d{2}_\d{2}$/i;
               if (!re.test(okunantBayId)) {
                 Alert.alert(
-                  "Geçersiz NFC",
-                  `Okunan: "${raw}"\nBeklenen örnek: bay_42060_01_01`,
+                  "Geçersiz Etiket",
+                  `Bu QWash sistemine ait bir etiket değil.\nOkunan veri: "${raw}"`,
                 );
                 return;
               }
 
+              // Firebase'e yaz ve peronu rezerve et
               try {
                 const bayRef = ref(rtdb, `bays/${okunantBayId}`);
                 await update(bayRef, {
@@ -132,23 +162,26 @@ export function useKullaniciIslemleri() {
                 });
 
                 setAktifBayIdListesi((prev) => {
-                  if (!prev.includes(okunantBayId))
-                    return [...prev, okunantBayId];
+                  if (!prev.includes(okunantBayId)) return [...prev, okunantBayId];
                   return prev;
                 });
               } catch (updateErr) {
-                console.log("NFC Waiting Update Hatası", updateErr);
-                Alert.alert("Hata", "Peron rezerve edilemedi.");
+                Alert.alert("Bağlantı Hatası", "Peron sunucusu ile iletişim kurulamadı.", updateErr);
               }
+            } else {
+              Alert.alert("Okuma Hatası", "Okutulan etiketin içi boş veya NDEF formatında değil.");
             }
           } catch (err) {
-            console.log("NFC Parse Hatası:", err);
+            Alert.alert("Okuma Başarısız", "Kart okutulurken bir hata oluştu.", err);
           }
         });
 
+        // Arka plan / Ön plan dinleyicisini Android sistemine kaydet
         await NfcManager.registerTagEvent();
+
       } catch (ex) {
-        console.log("NFC başlatılamadı", ex);
+        // Eğer sistem NFC izni vermediyse veya çöktüyse kullanıcıya ekranda göster
+        Alert.alert("NFC Başlatılamadı", "Sistemsel bir hata oluştu:\n" + String(ex));
       }
     };
 

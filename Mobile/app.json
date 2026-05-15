@@ -13,6 +13,9 @@
       "infoPlist": {
         "NFCReaderUsageDescription": "Araç yıkama peronlarına bağlanmak için NFC özelliğine ihtiyacımız var.",
         "NSCameraUsageDescription": "QR kod okumak için kameraya erişim gereklidir."
+      },
+      "entitlements": {
+        "com.apple.developer.nfc.readersession.formats": ["NDEF", "TAG"]
       }
     },
     "android": {
