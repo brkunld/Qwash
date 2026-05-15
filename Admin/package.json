@@ -28,8 +28,8 @@
       "test.html",
       "main.js",
       "preload.js",
+      "firebase-config.js",
       "secrets.js",
-      ".env",
       "images/**/*",
       "build/**/*"
     ],
