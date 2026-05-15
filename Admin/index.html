@@ -1796,21 +1796,45 @@
         .getElementById("add-token-btn")
         .addEventListener("click", async () => {
           if (!selectedUserId) return;
-          const amount = parseInt(document.getElementById("tokenAmt").value);
-          if (isNaN(amount) || amount <= 0)
-            return alert("Geçerli jeton girin.");
+          
+          const inputEl = document.getElementById("tokenAmt");
+          const amount = parseInt(inputEl.value);
+          
+          if (isNaN(amount) || amount <= 0) {
+            alert("Geçerli jeton girin.");
+            return;
+          }
+
           const btn = document.getElementById("add-token-btn");
+          
+          // İşlem süresince butonu ve input'u geçici olarak kilitle
           btn.disabled = true;
+          inputEl.disabled = true;
+
           try {
             const res = await adminFetch("/topup", {
               method: "POST",
               body: JSON.stringify({ userId: selectedUserId, tokens: amount }),
             });
             const data = await res.json();
-            if (!res.ok) return alert("Hata: " + data.error);
+            
+            if (!res.ok) {
+              alert("Hata: " + data.error);
+              return;
+            }
+            
             const el = document.getElementById("res-tokens");
             el.textContent = parseInt(el.textContent || "0", 10) + amount;
-            document.getElementById("tokenAmt").value = "";
+            
+            // İşlem başarılı oldu. Alert göstermeden ÖNCE UI kilitlerini kaldırıp kutuyu temizle
+            inputEl.value = "";
+            btn.disabled = false;
+            inputEl.disabled = false;
+            
+            // Jeton miktarını yazdıktan sonra input'a tekrar odaklan
+            inputEl.focus(); 
+            
+            // En son alert ver
             alert(`${data.tokensAdded} jeton eklendi.`);
             appendLocalLog(
               `Kullanıcıya (${selectedUserId}) ${data.tokensAdded} jeton yüklendi.`,
@@ -1819,7 +1843,9 @@
           } catch (e) {
             alert("Sunucuya ulaşılamadı!");
           } finally {
+            // Hata olsa bile mutlaka kilitleri kaldır
             btn.disabled = false;
+            inputEl.disabled = false;
           }
         });
 
@@ -1970,8 +1996,8 @@
         const idx = STATUS_CYCLE.indexOf(currentStatus);
         const next = STATUS_CYCLE[idx === -1 ? 0 : (idx + 1) % STATUS_CYCLE.length];
         
-        // Eğer "available" yapılmıyorsa ve içeride müşteri varsa onay iste
-        if (next !== "available" && previousBaysState && previousBaysState[bayId]) {
+        // Artık "available" durumuna geçerken de içeride müşteri varsa onay isteyecek
+        if (previousBaysState && previousBaysState[bayId]) {
           const bay = previousBaysState[bayId];
           if (bay.status === "busy" || bay.currentSessionId) {
             const isConfirmed = confirm(`DİKKAT: ${bayId} peronunda şu anda aktif bir araç yıkama işlemi var!\n\nYine de durumunu "${STATUS_LABELS[next].text}" olarak değiştirmek istiyor musunuz? (İşlem yarıda kesilebilir)`);
@@ -2012,13 +2038,12 @@
             const data = snap.val();
             if (!data) return;
 
-            // "available" haricinde toplu işlem yapılıyorsa kontrol et
-            if (targetStatus !== "available") {
-              const busyBays = Object.values(data).filter(bay => bay.status === "busy" || bay.currentSessionId);
-              if (busyBays.length > 0) {
-                const isConfirmed = confirm(`DİKKAT: Şu anda ${busyBays.length} peronda aktif yıkama işlemi devam ediyor!\n\nYine de TÜM peronları toplu olarak "${targetStatus === 'maintenance' ? 'BAKIMA ALMAK' : targetStatus}" istiyor musunuz?`);
-                if (!isConfirmed) return; // Yönetici iptal etti
-              }
+            // Artık targetStatus === "available" olsa BİLE içeride araç varsa kontrol edecek
+            const busyBays = Object.values(data).filter(bay => bay.status === "busy" || bay.currentSessionId);
+            if (busyBays.length > 0) {
+              const durumMetni = targetStatus === 'maintenance' ? 'BAKIMA ALMAK' : (targetStatus === 'available' ? 'BOŞ YAPMAK' : targetStatus);
+              const isConfirmed = confirm(`DİKKAT: Şu anda ${busyBays.length} peronda aktif yıkama işlemi devam ediyor!\n\nYine de TÜM peronları toplu olarak "${durumMetni}" istiyor musunuz?`);
+              if (!isConfirmed) return; // Yönetici iptal etti
             }
 
             Object.keys(data).forEach((bayId) =>
@@ -2064,7 +2089,6 @@
         );
       };
 
-      // Toplu "Available" yapma butonuna onay eklemiyoruz çünkü isteğiniz doğrultusunda bu kuralın dışında tutuldu.
       window.bulkEnableBays = async function () {
         const baysRef = ref(database, "bays");
         onValue(
@@ -2072,6 +2096,14 @@
           (snap) => {
             const data = snap.val();
             if (!data) return;
+            
+            // "Tümünü Aktif Et" (Available) butonuna da onay mekanizması eklendi
+            const busyBays = Object.values(data).filter(bay => bay.status === "busy" || bay.currentSessionId);
+            if (busyBays.length > 0) {
+              const isConfirmed = confirm(`DİKKAT: Şu anda ${busyBays.length} peronda aktif yıkama işlemi devam ediyor!\n\nYine de TÜM peronları toplu olarak AKTİF VE BOŞ hale getirmek istiyor musunuz?`);
+              if (!isConfirmed) return; // Yönetici iptal etti
+            }
+
             Object.keys(data).forEach((bayId) =>
               adminFetch("/update-bay", {
                 method: "POST",
