@@ -21,7 +21,7 @@
     "appId": "com.qwash.admin",
     "productName": "QWASH Admin",
     "directories": {
-      "output": "dist"
+      "output": "release"
     },
     "files": [
       "index.html",

@@ -10,3 +10,5 @@ Admin/.expo/
 .env
 secrets.js
 reset-project.js
+release
+dist
