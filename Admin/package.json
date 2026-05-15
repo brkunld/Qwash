@@ -1,14 +1,48 @@
 {
   "name": "qwash-admin-desktop",
   "version": "1.0.0",
+  "description": "QWASH Admin Desktop Panel",
   "main": "main.js",
+  "author": "QWASH",
+  "private": true,
   "scripts": {
-    "start": "electron ."
-  },
-  "devDependencies": {
-    "electron": "^30.0.0"
+    "start": "electron .",
+    "dist": "electron-builder",
+    "dist:win": "electron-builder --win nsis"
   },
   "dependencies": {
     "dotenv": "^17.4.2"
+  },
+  "devDependencies": {
+    "electron": "^30.0.0",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.qwash.admin",
+    "productName": "QWASH Admin",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "index.html",
+      "test.html",
+      "main.js",
+      "preload.js",
+      "secrets.js",
+      ".env",
+      "images/**/*",
+      "build/**/*"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "QWASH Admin"
+    }
   }
 }
