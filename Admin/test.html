@@ -52,7 +52,8 @@
         display: grid;
         grid-template-columns: 400px minmax(0, 1fr);
         gap: 20px;
-        align-items: start;
+        /* YENİ: Kartların dikeyde birbirine eşitlenerek esnemesini sağlar */
+        align-items: stretch; 
       }
 
       /* ─── SOL SÜTUN ─── */
@@ -60,6 +61,14 @@
         display: flex;
         flex-direction: column;
         gap: 16px;
+        height: 100%; /* YENİ: Sütunun boyunu Grid esnemesiyle birleştirir */
+      }
+
+      /* YENİ: Sol sütundaki kartın tam esnemesini sağlar */
+      .device-col .card {
+        height: 100%;
+        display: flex;
+        flex-direction: column;
       }
 
       .card {
@@ -227,7 +236,9 @@
         display: grid;
         grid-template-columns: 1fr 1fr;
         gap: 10px;
-        margin-top: 14px;
+        /* YENİ: Kartlar eşitlendiğinde fiziksel butonları her zaman ekranın en altına hizalar */
+        margin-top: auto; 
+        padding-top: 14px;
       }
       .physical-btn {
         background: #f9fafb;
@@ -390,51 +401,6 @@
         transform: translateY(0);
       }
 
-      .actions-grid {
-        display: grid;
-        grid-template-columns: repeat(2, 1fr);
-        gap: 10px;
-      }
-      .btn-action {
-        border: none;
-        border-radius: 10px;
-        padding: 12px 14px;
-        font-family: var(--font-ui);
-        font-size: 12px;
-        font-weight: 800;
-        cursor: pointer;
-        transition: all 0.18s;
-        text-transform: uppercase;
-        letter-spacing: 0.6px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        gap: 6px;
-      }
-      .btn-action:hover {
-        transform: translateY(-1px);
-        filter: brightness(0.95);
-      }
-      .btn-action:active {
-        transform: translateY(0);
-      }
-      .btn-green {
-        background: var(--success-dim);
-        color: #059669;
-      }
-      .btn-blue {
-        background: var(--info-dim);
-        color: #2563eb;
-      }
-      .btn-slate {
-        background: #f3f4f6;
-        color: #374151;
-      }
-      .btn-red {
-        background: var(--danger-dim);
-        color: #dc2626;
-      }
-
       @media (max-width: 860px) {
         .app {
           grid-template-columns: 1fr;
@@ -496,56 +462,6 @@
             Sisteme Bağlan
           </button>
         </div>
-
-        <div>
-          <div class="section-label">Durum Enjeksiyonu</div>
-          <div class="fields-grid" style="margin-bottom: 12px">
-            <div class="field-group">
-              <label>Mevcut Durum</label>
-              <select id="status" onchange="writeStatus(this.value)">
-                <option value="baslangic">baslangic</option>
-                <option value="available">available (Boş)</option>
-                <option value="waiting">waiting (Bekliyor)</option>
-                <option value="busy">busy (Dolu)</option>
-                <option value="maintenance">maintenance (Bakım)</option>
-                <option value="offline">offline (Kapalı)</option>
-              </select>
-            </div>
-            <div class="field-group">
-              <label>Aktiflik (Güç)</label>
-              <select
-                id="isActive"
-                onchange="writeActive(this.value === 'true')"
-              >
-                <option value="true">Açık (True)</option>
-                <option value="false">Kapalı (False)</option>
-              </select>
-            </div>
-          </div>
-          <div class="actions-grid">
-            <button
-              class="btn-action btn-green"
-              onclick="writeStatus('available')"
-            >
-              ▶ QR Göster
-            </button>
-            <button
-              class="btn-action btn-blue"
-              onclick="writeStatus('waiting')"
-            >
-              ⋯ Paket Seçimi
-            </button>
-            <button
-              class="btn-action btn-slate"
-              onclick="writeStatus('maintenance')"
-            >
-              ⚙ Bakım Modu
-            </button>
-            <button class="btn-action btn-red" onclick="writeStatus('offline')">
-              ✕ Peronu Kapat
-            </button>
-          </div>
-        </div>
       </div>
     </div>
 
@@ -602,7 +518,6 @@
       const buzzerEl = document.getElementById("buzzer");
       const nowMs = () => Date.now();
 
-      // Eski log kutusu kaldırıldı, loglar gizli konsola gönderiliyor
       function log(msg) {
         const t = new Date().toLocaleTimeString("tr-TR");
         console.log(`[${t}] ${msg}`);
@@ -762,8 +677,12 @@
           oldActive !== isBayActive ||
           oldPackage !== requestedPackage ||
           oldDuration !== durationSec;
-        document.getElementById("status").value = currentStatus;
-        document.getElementById("isActive").value = String(isBayActive);
+
+        const statusDOM = document.getElementById("status");
+        if (statusDOM) statusDOM.value = currentStatus;
+
+        const isActiveDOM = document.getElementById("isActive");
+        if (isActiveDOM) isActiveDOM.value = String(isBayActive);
       }
 
       async function connectFirebase() {
@@ -810,13 +729,16 @@
 
       async function writeStatus(status) {
         currentStatus = status;
-        document.getElementById("status").value = status;
+        const statusDOM = document.getElementById("status");
+        if (statusDOM) statusDOM.value = status;
         await writeBayPatch({ status });
         applyStatusChange();
       }
+      
       async function writeActive(active) {
         isBayActive = active;
-        document.getElementById("isActive").value = String(active);
+        const isActiveDOM = document.getElementById("isActive");
+        if (isActiveDOM) isActiveDOM.value = String(active);
         await writeBayPatch({ isActive: active });
         applyStatusChange();
       }
