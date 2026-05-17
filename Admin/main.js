@@ -3,59 +3,73 @@ require("dotenv").config();
 const { app, BrowserWindow, ipcMain } = require("electron");
 const path = require("path");
 
-function createWindow() {
-const win = new BrowserWindow({
-  title: "QWASH Admin",
-  backgroundColor: "#f8f9fb",
-  icon: path.join(__dirname, "build", "icon.ico"),
-
-  fullscreen: true,
-  autoHideMenuBar: true,
-
-  webPreferences: {
-    nodeIntegration: false,
-    contextIsolation: true,
-    sandbox: false,
-    preload: path.join(__dirname, "preload.js")
-  }
-});
-
-  win.loadFile(path.join(__dirname, "index.html"));
-
-  // Menü istemiyorsan aç:
-  // win.setMenuBarVisibility(false);
-
-  // Geliştirme sırasında DevTools istersen aç:
-  // win.webContents.openDevTools();
+// =========================================================
+// 1. SQUIRREL KURULUM KİLİDİ
+// Windows'ta kurulum (.exe) sırasında arka planda uygulamanın 
+// defalarca açılmasını engeller.
+// =========================================================
+if (require('electron-squirrel-startup')) {
+  app.quit();
+  return;
 }
 
-app.whenReady().then(() => {
-  createWindow();
+// =========================================================
+// 2. TEKİL ÇALIŞMA KİLİDİ (SINGLE INSTANCE LOCK)
+// =========================================================
+const gotTheLock = app.requestSingleInstanceLock();
 
-  app.on("activate", () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-      createWindow();
+let mainWindow; // Pencere referansını dışarıda tutuyoruz
+
+if (!gotTheLock) {
+  app.quit();
+} else {
+  app.on('second-instance', (event, commandLine, workingDirectory) => {
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.focus();
     }
   });
-});
 
-app.on("window-all-closed", () => {
-  if (process.platform !== "darwin") {
-    app.quit();
+  // =========================================================
+  // UYGULAMA BAŞLATMA
+  // =========================================================
+  function createWindow() {
+    mainWindow = new BrowserWindow({
+      title: "QWASH Admin",
+      backgroundColor: "#f8f9fb",
+      icon: path.join(__dirname, "build", "icon.ico"),
+
+      fullscreen: true,
+      autoHideMenuBar: true,
+
+      webPreferences: {
+        nodeIntegration: false,
+        contextIsolation: true,
+        sandbox: false,
+        preload: path.join(__dirname, "preload.js")
+      }
+    });
+
+    mainWindow.loadFile(path.join(__dirname, "index.html"));
   }
-});
 
-app.whenReady().then(() => {
-  createWindow();
+  app.whenReady().then(() => {
+    createWindow();
 
-  // YENİ EKLENEN KISIM: Arayüzden gelen kapatma sinyalini dinler
-  ipcMain.on("close-app", () => {
-    app.quit();
+    ipcMain.on("close-app", () => {
+      app.quit();
+    });
+
+    app.on("activate", () => {
+      if (BrowserWindow.getAllWindows().length === 0) {
+        createWindow();
+      }
+    });
   });
 
-  app.on("activate", () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-      createWindow();
+  app.on("window-all-closed", () => {
+    if (process.platform !== "darwin") {
+      app.quit();
     }
   });
-});
+}
