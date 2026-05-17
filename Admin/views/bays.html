@@ -1,0 +1,15 @@
+<div class="sec-header">
+  <div class="sec-title" id="bay-count-label">Peronlar Yükleniyor...</div>
+</div>
+<div class="bulk-actions">
+  <span class="bulk-actions-title">Hızlı Toplu İşlem:</span>
+  <button class="bulk-btn green" onclick="bulkUpdateBays('available')">Tümünü Boş Yap</button>
+  <button class="bulk-btn amber" onclick="bulkUpdateBays('maintenance')">Tümünü Bakıma Al</button>
+  <button class="bulk-btn blue" onclick="bulkEnableBays()">Tümünü Aktif Et</button>
+  <button class="bulk-btn red" onclick="bulkDisableBays()">Tümünü Kapat</button>
+</div>
+<div id="bay-list" class="bay-grid">
+  <p style="color: var(--text-muted); font-weight: 600; grid-column: 1/-1;">
+    Lütfen bekleyin, veriler çekiliyor...
+  </p>
+</div>
