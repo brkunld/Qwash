@@ -1133,9 +1133,45 @@
           opacity: 1;
         }
       }
+
+      /* --- GLOBAL YÜKLEME (LOADER) EKRANI --- */
+      #global-loader {
+        position: fixed;
+        inset: 0;
+        background: rgba(17, 24, 39, 0.8);
+        backdrop-filter: blur(5px);
+        z-index: 99999; /* En üstte durması için */
+        display: none; /* Başlangıçta gizli */
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        animation: fadeIn 0.2s ease;
+      }
+      .spinner {
+        width: 48px;
+        height: 48px;
+        border: 4px solid rgba(255, 255, 255, 0.2);
+        border-top-color: var(--accent-yellow); /* Sarı renkli dönen kısım */
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+        margin-bottom: 16px;
+      }
+      .loader-text {
+        font-size: 15px;
+        font-weight: 600;
+        letter-spacing: 0.5px;
+      }
+      @keyframes spin {
+        to { transform: rotate(360deg); }
+      }
     </style>
   </head>
   <body>
+    <div id="global-loader">
+      <div class="spinner"></div>
+      <div class="loader-text" id="loader-text">Lütfen bekleyin...</div>
+    </div>
     <div id="custom-confirm-overlay">
       <div class="confirm-box">
         <div class="confirm-title">Onay Bekleniyor</div>
@@ -1851,39 +1887,65 @@
         });
       });
 
-      window.doLogout = async function () {
-        await signOut(auth);
-        document.getElementById("login-screen").style.display = "flex";
-        document.getElementById("email").value = "";
-        document.getElementById("password").value = "";
-        document.getElementById("error-msg").style.display = "none";
+      // --- YÜKLEME (LOADER) GÖSTER/GİZLE YARDIMCILARI ---
+      window.showLoader = function (mesaj = "Lütfen bekleyin...") {
+        document.getElementById("loader-text").textContent = mesaj;
+        document.getElementById("global-loader").style.display = "flex";
       };
-      // Uygulamayı tamamen kapatan fonksiyon
-      // Uygulamayı tamamen kapatan fonksiyon
+
+      window.hideLoader = function () {
+        document.getElementById("global-loader").style.display = "none";
+      };
+
+      // --- ÇIKIŞ YAPMA İŞLEMİ (GÜNCELLENDİ) ---
+      window.doLogout = async function () {
+        // Çıkış yaparken dönen halkayı göster
+        window.showLoader("Güvenli çıkış yapılıyor...");
+        
+        try {
+          await signOut(auth);
+        } catch (e) {
+          console.error("Çıkış hatası:", e);
+        } finally {
+          // Kısa bir bekleme (animasyonun görünmesi için) sonrası giriş ekranına at
+          setTimeout(() => {
+            window.hideLoader();
+            document.getElementById("login-screen").style.display = "flex";
+            document.getElementById("email").value = "";
+            document.getElementById("password").value = "";
+            document.getElementById("error-msg").style.display = "none";
+          }, 800); // 800 milisaniye (0.8 saniye) gösterip kapatır
+        }
+      };
+
+      // --- UYGULAMAYI KAPATMA İŞLEMİ (GÜNCELLENDİ) ---
       window.quitApplication = async function () {
-        // Yeni tasarladığımız kilitlenmeyen onay kutusunu çağırıyoruz
         const onaylandi = await showConfirm(
           "Uygulamayı kapatmak istediğinize emin misiniz?",
         );
 
         if (onaylandi) {
-          // 1. ÖNCE HESAPTAN ÇIKIŞ YAP (Oturumu sonlandır)
+          // Uygulama kapanırken de halkayı göster
+          window.showLoader("Oturum kapatılıyor, uygulama sonlandırılıyor...");
+          
           try {
-            await window.doLogout(); 
+            await signOut(auth);
           } catch (e) {
-            console.error("Çıkış yapılırken hata:", e);
+            console.error("Kapanış çıkış hatası:", e);
           }
 
-          // 2. SONRA UYGULAMAYI KAPAT
-          if (window.electronAPI && window.electronAPI.closeApp) {
-            window.electronAPI.closeApp();
-          } else {
-            // Tarayıcıdan açıldıysa uyarı ver
-            showToast(
-              "Tarayıcı modunda uygulama kapatılamaz, sadece sekmeyi kapatabilirsiniz.",
-              "warning",
-            );
-          }
+          // Kapanma emrini gönder
+          setTimeout(() => {
+            if (window.electronAPI && window.electronAPI.closeApp) {
+              window.electronAPI.closeApp();
+            } else {
+              window.hideLoader();
+              showToast(
+                "Tarayıcı modunda uygulama kapatılamaz, sadece sekmeyi kapatabilirsiniz.",
+                "warning"
+              );
+            }
+          }, 1000); // 1 saniye loading animasyonu gösterip sonra uygulamayı komple kapatır
         }
       };
 
