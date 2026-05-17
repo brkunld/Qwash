@@ -151,81 +151,6 @@ app.get("/", (req, res) => {
   return res.status(200).send("QWash API Sapasağlam Ayakta! 🚀");
 });
 
-// =========================================================
-// 🔥 CANLI SAYAÇ TAKİP SİSTEMİ
-// =========================================================
-const activeTimers = {};
-
-const clearBayTimer = (bayId) => {
-  if (activeTimers[bayId]) {
-    clearTimeout(activeTimers[bayId].timeout);
-    delete activeTimers[bayId];
-  }
-};
-
-const startWaitingTimer = (bayId) => {
-  clearBayTimer(bayId);
-  safeLog(`⏱️ BEKLEME MODU: ${bayId} işlemi için 60 sn süre tanındı.`);
-
-  activeTimers[bayId] = {
-    type: "Müşteri Bekleniyor",
-    endTime: Date.now() + 60000,
-    timeout: setTimeout(async () => {
-      try {
-        const checkSnap = await rtdb.ref(`bays/${bayId}`).once("value");
-        const bayData = checkSnap.val();
-
-        if (bayData?.status === "waiting") {
-          await rtdb.ref(`bays/${bayId}`).update({
-            status: "available",
-            updatedAt: admin.database.ServerValue.TIMESTAMP,
-          });
-
-          safeLog(`⏳ ZAMAN AŞIMI: ${bayId} işlem yapılmadığı için boşa çıkarıldı.`);
-        }
-      } catch (error) {
-        safeLog(`❌ Bekleme timer hatası: ${error.message}`);
-      } finally {
-        clearBayTimer(bayId);
-      }
-    }, 60000),
-  };
-};
-
-// =========================================================
-// 🔥 1 DAKİKA BEKLEME DİNLEYİCİSİ
-// =========================================================
-const bayStatusCache = {};
-
-rtdb.ref("bays").on("child_changed", (snapshot) => {
-  const bayId = snapshot.key;
-  const bayData = snapshot.val();
-
-  if (!bayData) return;
-
-  const oldStatus = bayStatusCache[bayId];
-  const currentStatus = bayData.status;
-
-  bayStatusCache[bayId] = currentStatus;
-
-  if (oldStatus === currentStatus) {
-    return;
-  }
-
-  if (currentStatus === "waiting") {
-    if (activeTimers[bayId]) return;
-    startWaitingTimer(bayId);
-    return;
-  }
-
-  if (
-    currentStatus !== "waiting" &&
-    activeTimers[bayId]?.type === "Müşteri Bekleniyor"
-  ) {
-    clearBayTimer(bayId);
-    safeLog(`🛑 BEKLEME İPTAL: ${bayId} durumu değişti, 60sn sayaç durduruldu.`);
-  }
-});
 
 // ---------------------------------------------------------
 // 1. OTURUM BAŞLATMA API'Sİ
@@ -291,6 +216,8 @@ app.post("/api/start-session", verifyUser, async (req, res) => {
         durationSec: finalDurationSec,
         status: "running",
         startedAt: admin.firestore.FieldValue.serverTimestamp(),
+        // 🔥 YENİ: Makinenin bitiş zamanını Firestore'a yazıyoruz
+        expectedEndTime: admin.firestore.Timestamp.fromMillis(Date.now() + (finalDurationSec * 1000))
       });
     });
 
@@ -307,43 +234,6 @@ app.post("/api/start-session", verifyUser, async (req, res) => {
     safeLog(
       `✅ BAŞARILI: ${bayId} başlatıldı. Süre: ${finalDurationSec} sn, Kesilen: ${finalTokensCost} jeton`,
     );
-
-    clearBayTimer(bayId);
-
-    const timeoutMs = finalDurationSec * 1000;
-    activeTimers[bayId] = {
-      type: "Çalışıyor",
-      endTime: Date.now() + timeoutMs,
-      timeout: setTimeout(async () => {
-        try {
-          safeLog(`⏰ SÜRE DOLDU: ${bayId} otomatik kapatılıyor...`);
-
-          const sessionCheck = await db.collection("sessions").doc(newSessionId).get();
-
-          if (sessionCheck.exists && sessionCheck.data().status === "running") {
-            await db.collection("sessions").doc(newSessionId).update({
-              status: "ended",
-              endedAt: admin.firestore.FieldValue.serverTimestamp(),
-              endedReason: "time_up",
-            });
-
-            await rtdbBayRef.update({
-              status: "waiting",
-              currentSessionId: "",
-              requestedPackage: null,
-              durationSec: null,
-              tokensCost: null,
-              updatedAt: admin.database.ServerValue.TIMESTAMP,
-            });
-
-            safeLog(`🏁 OTOMATİK KAPATMA BAŞARILI: ${bayId} bekleme moduna alındı.`);
-            startWaitingTimer(bayId);
-          }
-        } catch (err) {
-          safeLog(`❌ Zamanlayıcı hatası: ${err.message}`);
-        }
-      }, timeoutMs),
-    };
 
     return res.status(200).json({
       success: true,
@@ -405,7 +295,6 @@ app.post("/api/stop-session", verifyUser, async (req, res) => {
     });
 
     safeLog(`⛔ MANUEL DURDURMA BAŞARILI: ${bayId} durduruldu.`);
-    startWaitingTimer(bayId);
 
     return res.status(200).json({
       success: true,
@@ -883,81 +772,138 @@ const sendAdminAlert = async (bayId, type) => {
 };
 
 // =========================================================
-// 🔥 HEARTBEAT / NABIZ KONTROLÜ
+// 🔥 TEKİL VE OPTİMİZE EDİLMİŞ CRON JOB (SÜPER CRON)
 // =========================================================
 let isHeartbeatCronRunning = false;
 
 cron.schedule("* * * * *", async () => {
   if (isHeartbeatCronRunning) {
-    safeLog("⏭️ [CRON] Önceki nabız kontrolü hâlâ çalışıyor, bu tur atlandı.");
+    safeLog("⏭️ [CRON] Önceki kontrol hâlâ çalışıyor, bu tur atlandı.");
     return;
   }
 
   isHeartbeatCronRunning = true;
-  safeLog("🔍 [CRON] Nabız kontrolü çalışıyor...");
+  safeLog("🔍 [CRON] Sistem kontrolü çalışıyor...");
 
   try {
-    const baysSnap = await rtdb.ref("bays").once("value");
-    const bays = baysSnap.val();
+    const now = Date.now();
 
-    if (!bays) {
-      safeLog("⚠️ [CRON] Firebase'de hiç peron bulunamadı!");
-      return;
+    // ---------------------------------------------------------
+    // 1. SÜRESİ DOLMUŞ "RUNNING" OTURUMLARI KAPAT
+    // ---------------------------------------------------------
+    const expiredSessions = await db.collection("sessions")
+      .where("status", "==", "running")
+      .where("expectedEndTime", "<=", admin.firestore.Timestamp.fromMillis(now))
+      .get();
+
+    if (!expiredSessions.empty) {
+      const batch = db.batch();
+      const bayUpdates = {};
+
+      expiredSessions.forEach((doc) => {
+        batch.update(doc.ref, {
+          status: "ended",
+          endedAt: admin.firestore.FieldValue.serverTimestamp(),
+          endedReason: "time_up",
+        });
+
+        const bayId = doc.data().bayId;
+        bayUpdates[`bays/${bayId}/status`] = "waiting";
+        bayUpdates[`bays/${bayId}/currentSessionId`] = "";
+        bayUpdates[`bays/${bayId}/requestedPackage`] = null;
+        bayUpdates[`bays/${bayId}/durationSec`] = null;
+        bayUpdates[`bays/${bayId}/tokensCost`] = null;
+        bayUpdates[`bays/${bayId}/updatedAt`] = admin.database.ServerValue.TIMESTAMP;
+
+        safeLog(`🏁 [CRON] OTOMATİK KAPATMA: ${bayId} süresi doldu, bekleme moduna alındı.`);
+      });
+
+      await batch.commit();
+      if (Object.keys(bayUpdates).length > 0) {
+        await rtdb.ref().update(bayUpdates);
+      }
     }
 
-    const now = Date.now();
+    // ---------------------------------------------------------
+    // 2. 60 SANİYEDİR "WAITING" DURUMUNDA OLANLARI TEMİZLE
+    // ---------------------------------------------------------
+    const waitingBaysSnap = await rtdb.ref("bays")
+      .orderByChild("status")
+      .equalTo("waiting")
+      .once("value");
+
+    if (waitingBaysSnap.exists()) {
+      const waitingBays = waitingBaysSnap.val();
+      const waitingUpdates = {};
+
+      for (const [bayId, bay] of Object.entries(waitingBays)) {
+        if (bay.updatedAt && (now - bay.updatedAt > 60000)) {
+          waitingUpdates[`bays/${bayId}/status`] = "available";
+          waitingUpdates[`bays/${bayId}/updatedAt`] = admin.database.ServerValue.TIMESTAMP;
+          safeLog(`⏳ [CRON] ZAMAN AŞIMI: ${bayId} 60sn işlem yapılmadığı için boşa çıkarıldı.`);
+        }
+      }
+
+      if (Object.keys(waitingUpdates).length > 0) {
+        await rtdb.ref().update(waitingUpdates);
+      }
+    }
+
+    // ---------------------------------------------------------
+    // 3. NABIZ KONTROLÜ - SADECE KOPANLARI ÇEK
+    // ---------------------------------------------------------
     const timeoutMs = 2 * 60 * 1000;
+    
+    // Son görülmesi 2 dakikadan eski olanları bul
+    const deadBaysSnap = await rtdb.ref("bays")
+      .orderByChild("lastSeen")
+      .endAt(now - timeoutMs)
+      .once("value");
 
-    for (const bayId of Object.keys(bays)) {
-      const bay = bays[bayId];
+    if (deadBaysSnap.exists()) {
+      const deadBays = deadBaysSnap.val();
+      for (const [bayId, bay] of Object.entries(deadBays)) {
+        if ((bay.status === "offline" && !bay.autoOffline) || bay.status === "maintenance") {
+          continue;
+        }
 
-      if ((bay.status === "offline" && !bay.autoOffline) || bay.status === "maintenance") {
-        safeLog(`ℹ️ [CRON] ${bayId} admin tarafından kapatılmış veya bakımda, es geçiliyor.`);
-        continue;
-      }
-
-      const lastSeen = bay.lastSeen;
-
-      if (!lastSeen) {
-        safeLog(`❌ [CRON] ${bayId} için 'lastSeen' verisi YOK!`);
-        continue;
-      }
-
-      const farkSaniye = Math.floor((now - lastSeen) / 1000);
-      safeLog(`📊 [CRON] ${bayId} en son ${farkSaniye} saniye önce haber verdi.`);
-
-      const isDisconnected = now - lastSeen > timeoutMs;
-
-      if (isDisconnected) {
         if (bay.status !== "offline" || bay.autoOffline !== true) {
-          safeLog(`⚠️ KOPMA TESPİT EDİLDİ: ${bayId} otomatik kapatılıyor...`);
-
+          safeLog(`⚠️ [CRON] KOPMA TESPİT EDİLDİ: ${bayId} otomatik kapatılıyor...`);
           await rtdb.ref(`bays/${bayId}`).update({
             status: "offline",
             isActive: false,
             autoOffline: true,
             updatedAt: admin.database.ServerValue.TIMESTAMP,
           });
-
           await sendAdminAlert(bayId, "down");
         }
-
-        continue;
-      }
-
-      if (bay.status === "offline" && bay.autoOffline === true) {
-        safeLog(`✅ İNTERNET GELDİ: ${bayId} otomatik olarak açılıyor...`);
-
-        await rtdb.ref(`bays/${bayId}`).update({
-          status: "available",
-          isActive: true,
-          autoOffline: null,
-          updatedAt: admin.database.ServerValue.TIMESTAMP,
-        });
-
-        await sendAdminAlert(bayId, "up");
       }
     }
+
+    // ---------------------------------------------------------
+    // 4. BAĞLANTISI GERİ GELENLERİ BUL VE AÇ
+    // ---------------------------------------------------------
+    const autoOfflineBaysSnap = await rtdb.ref("bays")
+      .orderByChild("autoOffline")
+      .equalTo(true)
+      .once("value");
+
+    if (autoOfflineBaysSnap.exists()) {
+      const autoOfflineBays = autoOfflineBaysSnap.val();
+      for (const [bayId, bay] of Object.entries(autoOfflineBays)) {
+        if (bay.lastSeen && (now - bay.lastSeen <= timeoutMs)) {
+          safeLog(`✅ [CRON] İNTERNET GELDİ: ${bayId} otomatik olarak açılıyor...`);
+          await rtdb.ref(`bays/${bayId}`).update({
+            status: "available",
+            isActive: true,
+            autoOffline: null,
+            updatedAt: admin.database.ServerValue.TIMESTAMP,
+          });
+          await sendAdminAlert(bayId, "up");
+        }
+      }
+    }
+
   } catch (error) {
     safeLog(`❌ Cron Job Hatası: ${error.message}`);
   } finally {
