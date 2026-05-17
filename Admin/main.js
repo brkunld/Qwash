@@ -1,6 +1,6 @@
 require("dotenv").config();
 
-const { app, BrowserWindow } = require("electron");
+const { app, BrowserWindow, ipcMain } = require("electron");
 const path = require("path");
 
 function createWindow() {
@@ -43,4 +43,19 @@ app.on("window-all-closed", () => {
   if (process.platform !== "darwin") {
     app.quit();
   }
+});
+
+app.whenReady().then(() => {
+  createWindow();
+
+  // YENİ EKLENEN KISIM: Arayüzden gelen kapatma sinyalini dinler
+  ipcMain.on("close-app", () => {
+    app.quit();
+  });
+
+  app.on("activate", () => {
+    if (BrowserWindow.getAllWindows().length === 0) {
+      createWindow();
+    }
+  });
 });

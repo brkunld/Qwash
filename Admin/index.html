@@ -1056,9 +1056,103 @@
         display: none;
         text-align: center;
       }
+      /* --- CUSTOM CONFIRM MODAL --- */
+      #custom-confirm-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(17, 24, 39, 0.6);
+        backdrop-filter: blur(4px);
+        z-index: 10000;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        animation: fadeIn 0.2s ease;
+      }
+      .confirm-box {
+        background: #fff;
+        width: 100%;
+        max-width: 400px;
+        border-radius: 16px;
+        padding: 24px;
+        box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+        transform: scale(0.95);
+        animation: popUp 0.2s ease forwards;
+      }
+      .confirm-title {
+        font-size: 18px;
+        font-weight: 800;
+        color: #111827;
+        margin-bottom: 8px;
+      }
+      .confirm-msg {
+        font-size: 14px;
+        color: #4b5563;
+        line-height: 1.5;
+        margin-bottom: 24px;
+        white-space: pre-wrap;
+      }
+      .confirm-actions {
+        display: flex;
+        gap: 12px;
+        justify-content: flex-end;
+      }
+      .confirm-btn {
+        padding: 10px 16px;
+        border-radius: 10px;
+        font-weight: 700;
+        font-size: 14px;
+        cursor: pointer;
+        border: none;
+        transition: all 0.2s;
+      }
+      .btn-cancel {
+        background: #f3f4f6;
+        color: #4b5563;
+      }
+      .btn-cancel:hover {
+        background: #e5e7eb;
+      }
+      .btn-confirm {
+        background: #ef4444; /* Kırmızı uyarı rengi */
+        color: white;
+      }
+      .btn-confirm:hover {
+        background: #dc2626;
+      }
+
+      @keyframes popUp {
+        to {
+          transform: scale(1);
+        }
+      }
+      @keyframes fadeIn {
+        from {
+          opacity: 0;
+        }
+        to {
+          opacity: 1;
+        }
+      }
     </style>
   </head>
   <body>
+    <div id="custom-confirm-overlay">
+      <div class="confirm-box">
+        <div class="confirm-title">Onay Bekleniyor</div>
+        <div class="confirm-msg" id="custom-confirm-msg">
+          Bu işlemi yapmak istediğinize emin misiniz?
+        </div>
+        <div class="confirm-actions">
+          <button class="confirm-btn btn-cancel" id="custom-confirm-no">
+            İptal
+          </button>
+          <button class="confirm-btn btn-confirm" id="custom-confirm-yes">
+            Evet, Onaylıyorum
+          </button>
+        </div>
+      </div>
+    </div>
+
     <div id="login-screen">
       <div class="top-decor">
         <div class="decor-circle-large"></div>
@@ -1251,6 +1345,18 @@
           </div>
         </div>
         <button class="logout-btn-full" onclick="doLogout()">Çıkış Yap</button>
+        <button
+          class="logout-btn-full"
+          style="
+            background: transparent;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: #9ca3af;
+            margin-top: 8px;
+          "
+          onclick="quitApplication()"
+        >
+          Uygulamayı Kapat
+        </button>
       </div>
     </div>
 
@@ -1564,6 +1670,81 @@
         return await fetch(`${API_BASE}${path}`, { ...options, headers });
       }
 
+      // --- ÖZEL BİLDİRİM (TOAST) SİSTEMİ ---
+      window.showToast = function (mesaj, tip = "error") {
+        let container = document.getElementById("toast-container");
+        if (!container) {
+          container = document.createElement("div");
+          container.id = "toast-container";
+          container.style.cssText =
+            "position: fixed; top: 24px; right: 24px; z-index: 9999; display: flex; flex-direction: column; gap: 10px; pointer-events: none;";
+          document.body.appendChild(container);
+        }
+
+        const toast = document.createElement("div");
+        const bgRenk =
+          tip === "success"
+            ? "#10b981"
+            : tip === "warning"
+              ? "#f5a623"
+              : "#ef4444";
+        toast.style.cssText = `
+          background: ${bgRenk}; color: white; padding: 16px 24px; border-radius: 12px;
+          font-family: 'Inter', sans-serif; font-size: 14px; font-weight: 600;
+          box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); opacity: 0; transform: translateX(100%);
+          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        `;
+        toast.textContent = mesaj;
+        container.appendChild(toast);
+
+        // Animasyonla ekrana giriş yap
+        requestAnimationFrame(() => {
+          setTimeout(() => {
+            toast.style.opacity = "1";
+            toast.style.transform = "translateX(0)";
+          }, 10);
+        });
+
+        // 3 saniye sonra ekrandan çık
+        setTimeout(() => {
+          toast.style.opacity = "0";
+          toast.style.transform = "translateX(100%)";
+          setTimeout(() => toast.remove(), 300);
+        }, 3000);
+      };
+
+      // --- ÖZEL ONAY (CONFIRM) SİSTEMİ ---
+      window.showConfirm = function (mesaj) {
+        return new Promise((resolve) => {
+          const overlay = document.getElementById("custom-confirm-overlay");
+          const msgEl = document.getElementById("custom-confirm-msg");
+          const btnYes = document.getElementById("custom-confirm-yes");
+          const btnNo = document.getElementById("custom-confirm-no");
+
+          msgEl.textContent = mesaj;
+          overlay.style.display = "flex";
+
+          // Temizleme ve kapatma işlemi
+          const cleanup = () => {
+            overlay.style.display = "none";
+            btnYes.onclick = null;
+            btnNo.onclick = null;
+          };
+
+          // "Evet"e basılırsa true döndür
+          btnYes.onclick = () => {
+            cleanup();
+            resolve(true);
+          };
+
+          // "Hayır"a basılırsa false döndür
+          btnNo.onclick = () => {
+            cleanup();
+            resolve(false);
+          };
+        });
+      };
+
       window.appendLocalLog = function (mesaj, type = "info") {
         const entries = document.getElementById("log-entries");
         const div = document.createElement("div");
@@ -1677,6 +1858,34 @@
         document.getElementById("password").value = "";
         document.getElementById("error-msg").style.display = "none";
       };
+      // Uygulamayı tamamen kapatan fonksiyon
+      // Uygulamayı tamamen kapatan fonksiyon
+      window.quitApplication = async function () {
+        // Yeni tasarladığımız kilitlenmeyen onay kutusunu çağırıyoruz
+        const onaylandi = await showConfirm(
+          "Uygulamayı kapatmak istediğinize emin misiniz?",
+        );
+
+        if (onaylandi) {
+          // 1. ÖNCE HESAPTAN ÇIKIŞ YAP (Oturumu sonlandır)
+          try {
+            await window.doLogout(); 
+          } catch (e) {
+            console.error("Çıkış yapılırken hata:", e);
+          }
+
+          // 2. SONRA UYGULAMAYI KAPAT
+          if (window.electronAPI && window.electronAPI.closeApp) {
+            window.electronAPI.closeApp();
+          } else {
+            // Tarayıcıdan açıldıysa uyarı ver
+            showToast(
+              "Tarayıcı modunda uygulama kapatılamaz, sadece sekmeyi kapatabilirsiniz.",
+              "warning",
+            );
+          }
+        }
+      };
 
       let selectedUserId = null;
       let isUserBlocked = false;
@@ -1694,7 +1903,7 @@
           });
           const data = await res.json();
           if (!res.ok) {
-            alert(data.error || "Kullanıcı bulunamadı!");
+            showToast(data.error || "Kullanıcı bulunamadı!", "error");
             card.style.display = "none";
             selectedUserId = null;
             return;
@@ -1731,7 +1940,7 @@
           }
           card.style.display = "block";
         } catch (e) {
-          alert("Sunucuya ulaşılamadı!");
+          showToast("Sunucuya ulaşılamadı!", "error");
         } finally {
           btn.textContent = "Bul";
           btn.disabled = false;
@@ -1747,14 +1956,14 @@
       window.toggleUserBlock = async function () {
         if (!selectedUserId) return;
         const newState = !isUserBlocked;
-        if (
-          !confirm(
-            newState
-              ? "Kullanıcıyı engellemek istediğinize emin misiniz?"
-              : "Kullanıcının engelini kaldır?",
-          )
-        )
-          return;
+        const isConfirmed = await showConfirm(
+          newState
+            ? "Kullanıcıyı engellemek istediğinize emin misiniz?"
+            : "Kullanıcının engelini kaldırmak istediğinize emin misiniz?",
+        );
+
+        if (!isConfirmed) return;
+
         const btn = document.getElementById("block-user-btn");
         btn.disabled = true;
         try {
@@ -1765,7 +1974,10 @@
               patch: { isBlocked: newState },
             }),
           });
-          if (!res.ok) return alert("İşlem başarısız.");
+          if (!res.ok) {
+            showToast("İşlem başarısız.", "error");
+            return;
+          }
           isUserBlocked = newState;
           const badge = document.getElementById("res-blocked-badge");
           if (isUserBlocked) {
@@ -1786,7 +1998,7 @@
             );
           }
         } catch (e) {
-          alert("Sunucu hatası.");
+          showToast("Sunucu hatası.", "error");
         } finally {
           btn.disabled = false;
         }
@@ -1796,17 +2008,17 @@
         .getElementById("add-token-btn")
         .addEventListener("click", async () => {
           if (!selectedUserId) return;
-          
+
           const inputEl = document.getElementById("tokenAmt");
           const amount = parseInt(inputEl.value);
-          
+
           if (isNaN(amount) || amount <= 0) {
-            alert("Geçerli jeton girin.");
+            showToast("Geçerli jeton girin.", "warning");
             return;
           }
 
           const btn = document.getElementById("add-token-btn");
-          
+
           // İşlem süresince butonu ve input'u geçici olarak kilitle
           btn.disabled = true;
           inputEl.disabled = true;
@@ -1817,31 +2029,38 @@
               body: JSON.stringify({ userId: selectedUserId, tokens: amount }),
             });
             const data = await res.json();
-            
+
             if (!res.ok) {
-              alert("Hata: " + data.error);
+              showToast("Hata: " + data.error, "error");
               return;
             }
-            
+
             const el = document.getElementById("res-tokens");
             el.textContent = parseInt(el.textContent || "0", 10) + amount;
-            
-            // İşlem başarılı oldu. Alert göstermeden ÖNCE UI kilitlerini kaldırıp kutuyu temizle
+
+            // İşlem başarılı oldu. UI kilitlerini kaldırıp kutuyu temizle
             inputEl.value = "";
             btn.disabled = false;
             inputEl.disabled = false;
-            
-            // Jeton miktarını yazdıktan sonra input'a tekrar odaklan
-            inputEl.focus(); 
-            
-            // En son alert ver
-            alert(`${data.tokensAdded} jeton eklendi.`);
+
+            // --- SAĞ ÜSTTE ÇIKAN BİLDİRİM (FİYAT EKLENDİ) ---
+            showToast(
+              `${data.tokensAdded} jeton (${data.amountTRY} ₺) başarıyla eklendi.`,
+              "success",
+            );
+
+            // Küçük bir gecikmeyle input'a tekrar odaklan
+            setTimeout(() => {
+              inputEl.focus();
+            }, 50);
+
+            // Sol taraftaki sistem loglarına da yazdır
             appendLocalLog(
-              `Kullanıcıya (${selectedUserId}) ${data.tokensAdded} jeton yüklendi.`,
+              `Kullanıcıya (${selectedUserId}) ${data.tokensAdded} jeton (${data.amountTRY} ₺ karşılığında) yüklendi.`,
               "success",
             );
           } catch (e) {
-            alert("Sunucuya ulaşılamadı!");
+            showToast("Sunucuya ulaşılamadı!", "error");
           } finally {
             // Hata olsa bile mutlaka kilitleri kaldır
             btn.disabled = false;
@@ -1994,13 +2213,16 @@
       window.changeBayStatus = async function (bayId, currentStatus, isActive) {
         if (!isActive) return;
         const idx = STATUS_CYCLE.indexOf(currentStatus);
-        const next = STATUS_CYCLE[idx === -1 ? 0 : (idx + 1) % STATUS_CYCLE.length];
-        
+        const next =
+          STATUS_CYCLE[idx === -1 ? 0 : (idx + 1) % STATUS_CYCLE.length];
+
         // Artık "available" durumuna geçerken de içeride müşteri varsa onay isteyecek
         if (previousBaysState && previousBaysState[bayId]) {
           const bay = previousBaysState[bayId];
           if (bay.status === "busy" || bay.currentSessionId) {
-            const isConfirmed = confirm(`DİKKAT: ${bayId} peronunda şu anda aktif bir araç yıkama işlemi var!\n\nYine de durumunu "${STATUS_LABELS[next].text}" olarak değiştirmek istiyor musunuz? (İşlem yarıda kesilebilir)`);
+            const isConfirmed = await showConfirm(
+              `DİKKAT: ${bayId} peronunda şu anda aktif bir araç yıkama işlemi var!\n\nYine de durumunu "${STATUS_LABELS[next].text}" olarak değiştirmek istiyor musunuz? (İşlem yarıda kesilebilir)`,
+            );
             if (!isConfirmed) return; // Yönetici iptal etti
           }
         }
@@ -2013,11 +2235,17 @@
 
       window.toggleBayActive = async function (bayId, isCurrentlyActive) {
         // Eğer peron KAPATILIYORSA (offline) ve içeride müşteri varsa onay iste
-        if (isCurrentlyActive && previousBaysState && previousBaysState[bayId]) {
+        if (
+          isCurrentlyActive &&
+          previousBaysState &&
+          previousBaysState[bayId]
+        ) {
           const bay = previousBaysState[bayId];
           if (bay.status === "busy" || bay.currentSessionId) {
-             const isConfirmed = confirm(`DİKKAT: ${bayId} peronunda şu anda aktif bir araç yıkama işlemi var!\n\nYine de peronu tamamen KAPATMAK istiyor musunuz?`);
-             if (!isConfirmed) return; // Yönetici iptal etti
+            const isConfirmed = await showConfirm(
+              `DİKKAT: ${bayId} peronunda şu anda aktif bir araç yıkama işlemi var!\n\nYine de peronu tamamen KAPATMAK istiyor musunuz?`,
+            );
+            if (!isConfirmed) return; // Yönetici iptal etti
           }
         }
 
@@ -2034,15 +2262,24 @@
         const baysRef = ref(database, "bays");
         onValue(
           baysRef,
-          (snap) => {
+          async (snap) => {
             const data = snap.val();
             if (!data) return;
 
             // Artık targetStatus === "available" olsa BİLE içeride araç varsa kontrol edecek
-            const busyBays = Object.values(data).filter(bay => bay.status === "busy" || bay.currentSessionId);
+            const busyBays = Object.values(data).filter(
+              (bay) => bay.status === "busy" || bay.currentSessionId,
+            );
             if (busyBays.length > 0) {
-              const durumMetni = targetStatus === 'maintenance' ? 'BAKIMA ALMAK' : (targetStatus === 'available' ? 'BOŞ YAPMAK' : targetStatus);
-              const isConfirmed = confirm(`DİKKAT: Şu anda ${busyBays.length} peronda aktif yıkama işlemi devam ediyor!\n\nYine de TÜM peronları toplu olarak "${durumMetni}" istiyor musunuz?`);
+              const durumMetni =
+                targetStatus === "maintenance"
+                  ? "BAKIMA ALMAK"
+                  : targetStatus === "available"
+                    ? "BOŞ YAPMAK"
+                    : targetStatus;
+              const isConfirmed = await showConfirm(
+                `DİKKAT: Şu anda ${busyBays.length} peronda aktif yıkama işlemi devam ediyor!\n\nYine de TÜM peronları toplu olarak "${durumMetni}" istiyor musunuz?`,
+              );
               if (!isConfirmed) return; // Yönetici iptal etti
             }
 
@@ -2064,14 +2301,18 @@
         const baysRef = ref(database, "bays");
         onValue(
           baysRef,
-          (snap) => {
+          async (snap) => {
             const data = snap.val();
             if (!data) return;
 
             // Toplu kapatma öncesi meşgul peronları bul
-            const busyBays = Object.values(data).filter(bay => bay.status === "busy" || bay.currentSessionId);
+            const busyBays = Object.values(data).filter(
+              (bay) => bay.status === "busy" || bay.currentSessionId,
+            );
             if (busyBays.length > 0) {
-              const isConfirmed = confirm(`DİKKAT: Şu anda ${busyBays.length} peronda aktif yıkama işlemi devam ediyor!\n\nYine de TÜM peronları toplu olarak KAPATMAK istiyor musunuz?`);
+              const isConfirmed = await showConfirm(
+                `DİKKAT: Şu anda ${busyBays.length} peronda aktif yıkama işlemi devam ediyor!\n\nYine de TÜM peronları toplu olarak KAPATMAK istiyor musunuz?`,
+              );
               if (!isConfirmed) return; // Yönetici iptal etti
             }
 
@@ -2093,14 +2334,18 @@
         const baysRef = ref(database, "bays");
         onValue(
           baysRef,
-          (snap) => {
+          async (snap) => {
             const data = snap.val();
             if (!data) return;
-            
+
             // "Tümünü Aktif Et" (Available) butonuna da onay mekanizması eklendi
-            const busyBays = Object.values(data).filter(bay => bay.status === "busy" || bay.currentSessionId);
+            const busyBays = Object.values(data).filter(
+              (bay) => bay.status === "busy" || bay.currentSessionId,
+            );
             if (busyBays.length > 0) {
-              const isConfirmed = confirm(`DİKKAT: Şu anda ${busyBays.length} peronda aktif yıkama işlemi devam ediyor!\n\nYine de TÜM peronları toplu olarak AKTİF VE BOŞ hale getirmek istiyor musunuz?`);
+              const isConfirmed = await showConfirm(
+                `DİKKAT: Şu anda ${busyBays.length} peronda aktif yıkama işlemi devam ediyor!\n\nYine de TÜM peronları toplu olarak AKTİF VE BOŞ hale getirmek istiyor musunuz?`,
+              );
               if (!isConfirmed) return; // Yönetici iptal etti
             }
 
