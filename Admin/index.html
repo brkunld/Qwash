@@ -1163,7 +1163,9 @@
         letter-spacing: 0.5px;
       }
       @keyframes spin {
-        to { transform: rotate(360deg); }
+        to {
+          transform: rotate(360deg);
+        }
       }
 
       .login-close-btn {
@@ -1216,8 +1218,21 @@
     </div>
 
     <div id="login-screen">
-      <button class="login-close-btn" onclick="quitApplication()" title="Uygulamayı Kapat">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+      <button
+        class="login-close-btn"
+        onclick="quitApplication()"
+        title="Uygulamayı Kapat"
+      >
+        <svg
+          width="24"
+          height="24"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2.5"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
           <line x1="18" y1="6" x2="6" y2="18"></line>
           <line x1="6" y1="6" x2="18" y2="18"></line>
         </svg>
@@ -1227,7 +1242,7 @@
         <div class="decor-circle-large"></div>
         <div class="decor-circle-small"></div>
       </div>
-      
+
       <div class="top-decor">
         <div class="decor-circle-large"></div>
         <div class="decor-circle-small"></div>
@@ -1446,20 +1461,18 @@
           </div>
           <div class="topbar-time" id="clock">--:--:--</div>
           <div class="topbar-btn" title="Yenile" onclick="reloadCurrent()">
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-              <path
-                d="M13.7 2.3A8 8 0 102.3 13.7"
-                stroke="currentColor"
-                stroke-width="1.5"
-                stroke-linecap="round"
-              />
-              <path
-                d="M14 6V2h-4"
-                stroke="currentColor"
-                stroke-width="1.5"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              />
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M21 12a9 9 0 1 1-2.64-6.36L21 8" />
+              <polyline points="21 3 21 8 16 8" />
             </svg>
           </div>
         </div>
@@ -1939,7 +1952,7 @@
       window.doLogout = async function () {
         // Çıkış yaparken dönen halkayı göster
         window.showLoader("Güvenli çıkış yapılıyor...");
-        
+
         try {
           await signOut(auth);
         } catch (e) {
@@ -1965,7 +1978,7 @@
         if (onaylandi) {
           // Uygulama kapanırken de halkayı göster
           window.showLoader("Oturum kapatılıyor, uygulama sonlandırılıyor...");
-          
+
           try {
             await signOut(auth);
           } catch (e) {
@@ -1980,7 +1993,7 @@
               window.hideLoader();
               showToast(
                 "Tarayıcı modunda uygulama kapatılamaz, sadece sekmeyi kapatabilirsiniz.",
-                "warning"
+                "warning",
               );
             }
           }, 1000); // 1 saniye loading animasyonu gösterip sonra uygulamayı komple kapatır
