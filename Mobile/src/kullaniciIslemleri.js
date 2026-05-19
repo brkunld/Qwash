@@ -140,12 +140,12 @@ export function useKullaniciIslemleri() {
                 } catch {}
               }
 
-              // Sadece ID'yi al
+// Sadece ID'yi al
               okunantBayId = okunantBayId.replace(/^\/?bays\//i, "").trim();
               okunantBayId = okunantBayId.replace(/\s+/g, "");
 
-              // Güvenlik formatı kontrolü
-              const re = /^bay_\d{5}_\d{2}_\d{2}$/i;
+              // YENİ güvenlik formatı kontrolü (MAC Adresi formatı: bay_246F28ABCDEF)
+              const re = /^bay_[A-Fa-f0-9]{12}$/i;
               if (!re.test(okunantBayId)) {
                 Alert.alert(
                   "Geçersiz Etiket",

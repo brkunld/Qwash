@@ -63,7 +63,7 @@ export default function QrKamera() {
     );
   }
 
-const okundu = async ({ data }) => {
+  const okundu = async ({ data }) => {
     if (kilit) return;
     setKilit(true);
     setYukleniyor(true);
@@ -81,10 +81,15 @@ const okundu = async ({ data }) => {
     bayId = bayId.replace(/^\/?bays\//i, "").trim();
     bayId = bayId.replace(/\s+/g, "");
 
-    const re = /^bay_\d{5}_\d{2}_\d{2}$/i;
+    // YENİ: MAC adresleri 12 haneli harf ve rakamlardan (hexadecimal) oluşur. Örn: bay_246F28ABCDEF
+    const re = /^bay_[A-Fa-f0-9]{12}$/i;
+
     if (!re.test(bayId)) {
       setYukleniyor(false);
-      Alert.alert("Geçersiz QR", `Okunan: "${raw}"\nBeklenen: bay_42060_01_01`);
+      Alert.alert(
+        "Geçersiz QR",
+        `Okunan: "${raw}"\nLütfen geçerli bir Qwash peron QR kodu okutun.`,
+      );
       setTimeout(() => setKilit(false), 2000);
       return;
     }
@@ -93,24 +98,30 @@ const okundu = async ({ data }) => {
       const bayRef = ref(rtdb, `bays/${bayId}`);
 
       // 🔥 RACE CONDITION ÇÖZÜMÜ: runTransaction Kullanımı
-      const { committed, snapshot } = await runTransaction(bayRef, (currentData) => {
-        if (currentData === null) {
-          return currentData; // Peron yoksa işlemi iptal et
-        }
-        if (currentData.status === "available") {
-          currentData.status = "waiting";
-          currentData.updatedAt = Date.now(); // Transaction içinde Date.now() kullanmak daha güvenlidir
-          return currentData; // Başarıyla kendine rezerve et
-        }
-        return; // Müsait değilse işlemi (transaction) iptal et
-      });
+      const { committed, snapshot } = await runTransaction(
+        bayRef,
+        (currentData) => {
+          if (currentData === null) {
+            return currentData; // Peron yoksa işlemi iptal et
+          }
+          if (currentData.status === "available") {
+            currentData.status = "waiting";
+            currentData.updatedAt = Date.now(); // Transaction içinde Date.now() kullanmak daha güvenlidir
+            return currentData; // Başarıyla kendine rezerve et
+          }
+          return; // Müsait değilse işlemi (transaction) iptal et
+        },
+      );
 
       if (!committed) {
         setYukleniyor(false);
         if (!snapshot.exists()) {
           Alert.alert("Hata", "Okutulan peron sistemde bulunamadı.");
         } else {
-          Alert.alert("Peron Meşgul", "Bu peron şu anda rezerve edilmiş veya kullanımda.");
+          Alert.alert(
+            "Peron Meşgul",
+            "Bu peron şu anda rezerve edilmiş veya kullanımda.",
+          );
         }
         setTimeout(() => setKilit(false), 2500);
         return;
@@ -118,7 +129,6 @@ const okundu = async ({ data }) => {
 
       setYukleniyor(false);
       router.navigate({ pathname: "/kullanici", params: { bayId } });
-
     } catch (error) {
       console.error("RTDB Güncelleme Hatası:", error);
       Alert.alert("Hata", "Peron durumu güncellenemedi.");
