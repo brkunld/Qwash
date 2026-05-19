@@ -69,6 +69,13 @@ const unsigned long WIFI_TIMEOUT_MS = 10000;
 const unsigned long WIFI_RETRY_INTERVAL_MS = 10000;
 unsigned long sonWifiDenemeMs = 0;
 
+// Loop icinde WiFi kopunca sayac/ekran/buzzer donmasin diye
+// yeniden baglanma islemi non-blocking state ile yapiliyor.
+bool wifiReconnectInProgress = false;
+bool wifiWasConnected = false;
+unsigned long wifiReconnectStartedMs = 0;
+const unsigned long WIFI_RECONNECT_TIMEOUT_MS = 10000;
+
 // ================= NABIZ =================
 unsigned long sonNabizZamani = 0;
 const unsigned long nabizAraligi = 30000;
@@ -93,6 +100,11 @@ const unsigned long ODEME_BEKLEME_TIMEOUT_MS = 60000;
 int sayacSonEkranSaniye = -1;
 unsigned long sayacSonYarimSaniyeMs = 0;
 bool sayacIslemBittiCalindi = false;
+
+// ================= BUTON DEBOUNCE =================
+unsigned long sonKopukButonMs = 0;
+const unsigned long BUTON_DEBOUNCE_MS = 200;
+bool oncekiKopukButonDurumu = HIGH;
 
 // ================= YARDIMCI =================
 void resetSayacDurumu() {
@@ -590,6 +602,66 @@ bool mqttBaglan() {
   return false;
 }
 
+void wifiNonBlockingKontrolEt() {
+  wl_status_t wifiStatus = WiFi.status();
+
+  if (wifiStatus == WL_CONNECTED) {
+    if (!wifiWasConnected) {
+      LOG_PRINTLN(F("WiFi yeniden baglandi."));
+      LOG_PRINT(F("WiFi IP: "));
+      LOG_PRINTLN(WiFi.localIP());
+
+      wifiWasConnected = true;
+      wifiReconnectInProgress = false;
+      sonWifiDenemeMs = millis();
+
+      mqttBaglan();
+
+      // WiFi geri gelince ekran mevcut duruma göre yenilensin.
+      durumDegisti = true;
+    }
+
+    return;
+  }
+
+  // WiFi bağlı değilse, kopma anını sadece bir kez yakala.
+  if (wifiWasConnected) {
+    LOG_PRINTLN(F("WiFi baglantisi koptu."));
+
+    wifiWasConnected = false;
+
+    // Busy sırasında sayaç ekranını bozma.
+    // Busy değilse bağlantı hatası ekranına geçmek için ekran yenile.
+    if (currentStatus != "busy") {
+      durumDegisti = true;
+    }
+  }
+
+  if (!wifiReconnectInProgress) {
+    if (millis() - sonWifiDenemeMs >= WIFI_RETRY_INTERVAL_MS) {
+      sonWifiDenemeMs = millis();
+      wifiReconnectStartedMs = millis();
+      wifiReconnectInProgress = true;
+
+      LOG_PRINTLN(F("WiFi non-blocking reconnect baslatiliyor..."));
+
+      WiFi.disconnect(false);
+      WiFi.reconnect();
+    }
+
+    return;
+  }
+
+  if (millis() - wifiReconnectStartedMs >= WIFI_RECONNECT_TIMEOUT_MS) {
+    LOG_PRINTLN(F("WiFi reconnect timeout, tekrar denenecek."));
+
+    wifiReconnectInProgress = false;
+    sonWifiDenemeMs = millis();
+
+    WiFi.disconnect(false);
+  }
+}
+
 // ================= SAYAC =================
 void ekrandaSayaciGuncelle() {
   time_t suAn;
@@ -693,9 +765,13 @@ void setup() {
     return;
   }
 
+  wifiWasConnected = true;
+  wifiReconnectInProgress = false;
+
   ntpBekle();
 
   mqttBaglan();
+  wifiWasConnected = WiFi.status() == WL_CONNECTED;
 
   sonNabizZamani = millis();
   durumDegisti = true;
@@ -705,26 +781,25 @@ void setup() {
 void loop() {
   static String eskiDurum = "";
 
-  if (WiFi.status() != WL_CONNECTED) {
-    if (millis() - sonWifiDenemeMs >= WIFI_RETRY_INTERVAL_MS) {
-      sonWifiDenemeMs = millis();
+  wifiNonBlockingKontrolEt();
 
-      ekranaBaglantiHatasiYaz();
+  bool wifiBagli = WiFi.status() == WL_CONNECTED;
 
-      if (wifiBaglan(WIFI_TIMEOUT_MS)) {
-        ntpBekle();
-        mqttBaglan();
-        durumDegisti = true;
+  if (wifiBagli) {
+    mqttBaglan();
+
+    if (mqttClient.connected()) {
+      mqttClient.loop();
+    }
+  } else {
+    // Busy sirasinda WiFi koparsa loop devam etmeli.
+    // Boylece ekran sayaci ve buzzer donmaz.
+    if (currentStatus != "busy" && !hataEkraniGosteriliyor && durumDegisti) {
+      if (durumDegisti) {
+        ekranaBaglantiHatasiYaz();
+        durumDegisti = false;
       }
     }
-
-    return;
-  }
-
-  mqttBaglan();
-
-  if (mqttClient.connected()) {
-    mqttClient.loop();
   }
 
   if (millis() - sonNabizZamani >= nabizAraligi) {
@@ -887,9 +962,18 @@ void loop() {
   if (currentStatus == "waiting" && !dokunmatikKilit && !hataEkraniGosteriliyor) {
     String secilenPaket = "";
 
-    if (digitalRead(btnKopukPin) == LOW) {
+    bool kopukButonDurumu = digitalRead(btnKopukPin);
+
+    if (
+      kopukButonDurumu == LOW &&
+      oncekiKopukButonDurumu == HIGH &&
+      millis() - sonKopukButonMs > BUTON_DEBOUNCE_MS
+    ) {
+      sonKopukButonMs = millis();
       secilenPaket = "foam";
     }
+
+    oncekiKopukButonDurumu = kopukButonDurumu;
 
     if (secilenPaket == "") {
       uint16_t x, y;

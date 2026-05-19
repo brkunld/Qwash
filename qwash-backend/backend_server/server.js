@@ -613,22 +613,48 @@ app.post("/api/start-session", verifyUser, async (req, res) => {
     });
 
     const mqttOk = await safeSendBayCommand(
-      bayId,
-      `BUSY|${packageId}|${finalDurationSec}`,
-    );
+  bayId,
+  `BUSY|${packageId}|${finalDurationSec}`,
+);
 
-    safeLog(
-      `✅ BAŞARILI: ${bayId} başlatıldı. Süre: ${finalDurationSec} sn, Kesilen: ${finalTokensCost} jeton`,
-    );
+if (!mqttOk) {
+  const refundResult = await refundSessionIfNeeded(
+    newSessionId,
+    "mqtt_start_failed",
+  );
 
-    return res.status(200).json({
-      success: true,
-      mqttOk,
-      sessionId: newSessionId,
-      message: mqttOk
-        ? "Makine başlatıldı."
-        : "Oturum oluşturuldu ama cihaza MQTT komutu gönderilemedi.",
-    });
+  await clearBaySessionFields(bayId, {
+    status: "waiting",
+  });
+
+  safeLog(
+    `💸 MQTT BAŞLATMA HATASI: ${bayId} başlatılamadı. ` +
+      `Session: ${newSessionId}. ` +
+      `İade: ${refundResult.refunded ? `${refundResult.tokens} jeton` : refundResult.reason}`,
+  );
+
+  return res.status(503).json({
+    success: false,
+    mqttOk: false,
+    refunded: refundResult.refunded,
+    refundedTokens: refundResult.tokens || 0,
+    sessionId: newSessionId,
+    error: refundResult.refunded
+      ? "Makine başlatılamadı. Kesilen jetonlar hesabınıza iade edildi."
+      : "Makine başlatılamadı. İade işlemi kontrol edilmeli.",
+  });
+}
+
+safeLog(
+  `✅ BAŞARILI: ${bayId} başlatıldı. Süre: ${finalDurationSec} sn, Kesilen: ${finalTokensCost} jeton`,
+);
+
+return res.status(200).json({
+  success: true,
+  mqttOk: true,
+  sessionId: newSessionId,
+  message: "Makine başlatıldı.",
+});
   } catch (error) {
     if (error.message === "Engellenmis_Kullanici") {
       safeLog(`🚨 GÜVENLİK İHLALİ: Engelli kullanıcı (${uid}) işlem yapmayı denedi!`);

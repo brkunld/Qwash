@@ -2,7 +2,6 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert } from "react-native";
-import NfcManager, { Ndef, NfcEvents } from "react-native-nfc-manager";
 
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import {
@@ -17,7 +16,6 @@ import {
   ref,
   serverTimestamp as rtdbServerTimestamp,
   update,
-  get,
 } from "firebase/database";
 
 import { auth, db, rtdb } from "../firebase";
@@ -84,135 +82,6 @@ export function useKullaniciIslemleri() {
     }
   }, [params?.bayId]);
 
-  const nfcKilitRef = useRef(false);
-
-  // === YENİ VE GÜVENLİ NFC BAŞLATMA BLOĞU ===
-  useEffect(() => {
-    let isMounted = true;
-
-    const initNfc = async () => {
-      try {
-        // 1. Cihazda fiziksel olarak NFC çipi var mı?
-        const supported = await NfcManager.isSupported();
-        if (!supported) {
-          Alert.alert("NFC Hatası", "Telefonunuzda NFC donanımı bulunmuyor veya desteklenmiyor.");
-          return;
-        }
-
-        // 2. Telefonun ayarlarından NFC açık mı?
-        const enabled = await NfcManager.isEnabled();
-        if (!enabled) {
-          Alert.alert(
-            "NFC Kapalı",
-            "Peronlara bağlanabilmek için telefonunuzun NFC özelliğini açmanız gerekiyor.",
-            [
-              { text: "İptal", style: "cancel" },
-              { text: "Ayarlara Git", onPress: () => NfcManager.goToNfcSetting() }
-            ]
-          );
-          return;
-        }
-
-        // 3. Çip uyandıysa NFC motorunu başlat
-        await NfcManager.start();
-
-        // 4. Kart okuma olayını dinle
-        NfcManager.setEventListener(NfcEvents.DiscoverTag, async (tag) => {
-          if (!isMounted || nfcKilitRef.current) return;
-          
-          // Çift okumayı engellemek için kilit
-          nfcKilitRef.current = true;
-          setTimeout(() => {
-            nfcKilitRef.current = false;
-          }, 3000);
-
-          try {
-            if (tag.ndefMessage && tag.ndefMessage.length > 0) {
-              const ndefRecord = tag.ndefMessage[0];
-              const raw = Ndef.text.decodePayload(ndefRecord.payload);
-              let okunantBayId = raw.trim();
-
-              // JSON formatındaysa ayıkla
-              if (okunantBayId.startsWith("{")) {
-                try {
-                  const obj = JSON.parse(okunantBayId);
-                  if (obj?.id) okunantBayId = String(obj.id).trim();
-                } catch {}
-              }
-
-// Sadece ID'yi al
-              okunantBayId = okunantBayId.replace(/^\/?bays\//i, "").trim();
-              okunantBayId = okunantBayId.replace(/\s+/g, "");
-
-              // YENİ güvenlik formatı kontrolü (MAC Adresi formatı: bay_246F28ABCDEF)
-              const re = /^bay_[A-Fa-f0-9]{12}$/i;
-              if (!re.test(okunantBayId)) {
-                Alert.alert(
-                  "Geçersiz Etiket",
-                  `Bu QWash sistemine ait bir etiket değil.\nOkunan veri: "${raw}"`,
-                );
-                return;
-              }
-
-              // === YENİ: Firebase'den mevcut durumu kontrol et ve yaz ===
-              try {
-                const bayRef = ref(rtdb, `bays/${okunantBayId}`);
-                
-                // 1. Peronun anlık durumunu çek
-                const snapshot = await get(bayRef);
-                if (snapshot.exists()) {
-                  const currentBayData = snapshot.val();
-                  
-                  // 2. Peron "available" (boş) DEĞİLSE işlemi iptal et
-                  if (currentBayData.status !== "available") {
-                    let mesaj = "Bu peron şu anda kullanıma uygun değil.";
-                    if (currentBayData.status === "maintenance") mesaj = "Bu peron şu anda bakım modundadır.";
-                    else if (currentBayData.status === "busy") mesaj = "Bu peron şu anda başkası tarafından kullanılıyor.";
-                    else if (currentBayData.status === "offline" || currentBayData.isActive === false) mesaj = "Bu peron şu anda sistem tarafından kapatılmıştır.";
-                    
-                    Alert.alert("Peron Müsait Değil", mesaj);
-                    return; // İşlemi kes, waiting'e geçirme!
-                  }
-                }
-
-                // 3. Peron boşsa, durumu "waiting" yap ve kullanıcıyı bağla
-                await update(bayRef, {
-                  status: "waiting",
-                  updatedAt: rtdbServerTimestamp(),
-                });
-
-                setAktifBayIdListesi((prev) => {
-                  if (!prev.includes(okunantBayId)) return [...prev, okunantBayId];
-                  return prev;
-                });
-              } catch (updateErr) {
-                Alert.alert("Bağlantı Hatası", "Peron sunucusu ile iletişim kurulamadı.", updateErr);
-              }
-            } else {
-              Alert.alert("Okuma Hatası", "Okutulan etiketin içi boş veya NDEF formatında değil.");
-            }
-          } catch (err) {
-            Alert.alert("Okuma Başarısız", "Kart okutulurken bir hata oluştu.", err);
-          }
-        });
-
-        // Arka plan / Ön plan dinleyicisini Android sistemine kaydet
-        await NfcManager.registerTagEvent();
-
-      } catch (ex) {
-        // Eğer sistem NFC izni vermediyse veya çöktüyse kullanıcıya ekranda göster
-        Alert.alert("NFC Başlatılamadı", "Sistemsel bir hata oluştu:\n" + String(ex));
-      }
-    };
-
-    initNfc();
-
-    return () => {
-      isMounted = false;
-      NfcManager.setEventListener(NfcEvents.DiscoverTag, null);
-      NfcManager.unregisterTagEvent().catch(() => {});
-    };
-  }, []);
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (user) => {
