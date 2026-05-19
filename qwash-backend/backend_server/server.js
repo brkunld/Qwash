@@ -6,21 +6,29 @@ const express = require("express");
 const cors = require("cors");
 const admin = require("firebase-admin");
 const cron = require("node-cron");
+const mqtt = require("mqtt");
 
 // =========================================================
 // 🔥 SERVICE ACCOUNT AYARLARI
+// Render'da Secret File, localde backend_server/serviceAccountKey.json kullanır
 // =========================================================
 const renderSecretPath = "/etc/secrets/serviceAccountKey.json";
-const localSecretPath = path.join(__dirname, "..", "..", "serviceAccountKey.json");
+const localSecretPath = path.join(__dirname, "serviceAccountKey.json");
 
-let serviceAccountPath;
+let serviceAccountPath = null;
 
 if (fs.existsSync(renderSecretPath)) {
   serviceAccountPath = renderSecretPath;
   console.log("✅ Render Secret File bulundu ve kullanılıyor.");
-} else {
+} else if (fs.existsSync(localSecretPath)) {
   serviceAccountPath = localSecretPath;
-  console.log("✅ Lokal Secret File kullanılıyor.");
+  console.log("✅ Lokal Secret File bulundu ve kullanılıyor.");
+} else {
+  throw new Error(
+    `❌ Firebase serviceAccountKey.json bulunamadı.
+Render için beklenen yol: ${renderSecretPath}
+Local için beklenen yol: ${localSecretPath}`
+  );
 }
 
 const serviceAccount = require(serviceAccountPath);
@@ -48,6 +56,169 @@ const safeLog = (message) => {
 app.use((req, res, next) => {
   safeLog(`🌐 İSTEK: ${req.method} ${req.url}`);
   next();
+});
+
+// =========================================================
+// 📡 MQTT SİSTEMİ - ESP32 HABERLEŞME
+// =========================================================
+const MQTT_HOST = process.env.MQTT_HOST;
+const MQTT_PORT = Number(process.env.MQTT_PORT || 8883);
+const MQTT_USER = process.env.MQTT_USER;
+const MQTT_PASS = process.env.MQTT_PASS;
+
+if (!MQTT_HOST || !MQTT_USER || !MQTT_PASS) {
+  throw new Error("❌ MQTT env eksik: MQTT_HOST, MQTT_USER, MQTT_PASS gerekli.");
+}
+
+const mqttUrl = `mqtts://${MQTT_HOST}:${MQTT_PORT}`;
+
+const mqttClient = mqtt.connect(mqttUrl, {
+  username: MQTT_USER,
+  password: MQTT_PASS,
+  reconnectPeriod: 3000,
+  connectTimeout: 20000,
+  clean: true,
+});
+
+const mqttTopic = {
+  commands: (bayId) => `qwash/bays/${bayId}/commands`,
+  status: (bayId) => `qwash/bays/${bayId}/status`,
+  heartbeat: (bayId) => `qwash/bays/${bayId}/heartbeat`,
+  selection: (bayId) => `qwash/bays/${bayId}/selection`,
+};
+
+const mqttPublish = (topic, payload, options = {}) => {
+  return new Promise((resolve, reject) => {
+    if (!mqttClient.connected) {
+      return reject(new Error("MQTT broker bağlı değil."));
+    }
+
+    mqttClient.publish(topic, String(payload), options, (error) => {
+      if (error) return reject(error);
+      return resolve();
+    });
+  });
+};
+
+const sendBayCommand = async (bayId, command) => {
+  const topic = mqttTopic.commands(bayId);
+
+  await mqttPublish(topic, command, {
+    qos: 1,
+    retain: false,
+  });
+
+  safeLog(`📡 MQTT KOMUT: ${bayId} -> ${command}`);
+};
+
+const safeSendBayCommand = async (bayId, command) => {
+  try {
+    await sendBayCommand(bayId, command);
+    return true;
+  } catch (error) {
+    safeLog(`❌ MQTT komut gönderilemedi: ${bayId} -> ${command} | ${error.message}`);
+    return false;
+  }
+};
+
+mqttClient.on("connect", () => {
+  safeLog("✅ MQTT Broker bağlantısı başarılı.");
+
+  mqttClient.subscribe("qwash/bays/+/status", { qos: 1 });
+  mqttClient.subscribe("qwash/bays/+/heartbeat", { qos: 0 });
+  mqttClient.subscribe("qwash/bays/+/selection", { qos: 1 });
+
+  safeLog("📡 MQTT topic abonelikleri aktif.");
+});
+
+mqttClient.on("reconnect", () => {
+  safeLog("🔄 MQTT yeniden bağlanıyor...");
+});
+
+mqttClient.on("error", (error) => {
+  safeLog(`❌ MQTT hata: ${error.message}`);
+});
+
+mqttClient.on("close", () => {
+  safeLog("⚠️ MQTT bağlantısı kapandı.");
+});
+
+mqttClient.on("message", async (topic, messageBuffer) => {
+  const message = messageBuffer.toString();
+  const parts = topic.split("/");
+
+  // Beklenen topic:
+  // qwash/bays/{bayId}/status
+  // qwash/bays/{bayId}/heartbeat
+  // qwash/bays/{bayId}/selection
+  if (parts.length !== 4 || parts[0] !== "qwash" || parts[1] !== "bays") {
+    return;
+  }
+
+  const bayId = parts[2];
+  const eventType = parts[3];
+
+  try {
+    if (eventType === "status") {
+      await rtdb.ref(`bays/${bayId}`).update({
+        status: message,
+        isActive: message !== "offline",
+        autoOffline: null,
+        lastSeen: admin.database.ServerValue.TIMESTAMP,
+        updatedAt: admin.database.ServerValue.TIMESTAMP,
+      });
+
+      safeLog(`📥 MQTT STATUS: ${bayId} -> ${message}`);
+      return;
+    }
+
+    if (eventType === "heartbeat") {
+      const bayRef = rtdb.ref(`bays/${bayId}`);
+      const snap = await bayRef.once("value");
+
+      if (!snap.exists()) {
+        await bayRef.update({
+          status: "available",
+          isActive: true,
+          autoOffline: null,
+          currentSessionId: "",
+          lastUserId: "",
+          requestedPackage: null,
+          hardwareSelection: "",
+          durationSec: null,
+          tokensCost: null,
+          createdAt: admin.database.ServerValue.TIMESTAMP,
+          updatedAt: admin.database.ServerValue.TIMESTAMP,
+          lastSeen: admin.database.ServerValue.TIMESTAMP,
+        });
+
+        safeLog(`🆕 Yeni peron MQTT ile kaydedildi: ${bayId}`);
+        return;
+      }
+
+      await bayRef.update({
+        lastSeen: admin.database.ServerValue.TIMESTAMP,
+        isActive: true,
+        autoOffline: null,
+        updatedAt: admin.database.ServerValue.TIMESTAMP,
+      });
+
+      safeLog(`💓 MQTT HEARTBEAT: ${bayId}`);
+      return;
+    }
+
+    if (eventType === "selection") {
+      await rtdb.ref(`bays/${bayId}`).update({
+        hardwareSelection: message,
+        updatedAt: admin.database.ServerValue.TIMESTAMP,
+      });
+
+      safeLog(`🧼 MQTT SEÇİM: ${bayId} -> ${message}`);
+      return;
+    }
+  } catch (error) {
+    safeLog(`❌ MQTT mesaj işleme hatası: ${error.message}`);
+  }
 });
 
 // =========================================================
@@ -151,7 +322,6 @@ app.get("/", (req, res) => {
   return res.status(200).send("QWash API Sapasağlam Ayakta! 🚀");
 });
 
-
 // ---------------------------------------------------------
 // 1. OTURUM BAŞLATMA API'Sİ
 // ---------------------------------------------------------
@@ -216,8 +386,9 @@ app.post("/api/start-session", verifyUser, async (req, res) => {
         durationSec: finalDurationSec,
         status: "running",
         startedAt: admin.firestore.FieldValue.serverTimestamp(),
-        // 🔥 YENİ: Makinenin bitiş zamanını Firestore'a yazıyoruz
-        expectedEndTime: admin.firestore.Timestamp.fromMillis(Date.now() + (finalDurationSec * 1000))
+        expectedEndTime: admin.firestore.Timestamp.fromMillis(
+          Date.now() + finalDurationSec * 1000,
+        ),
       });
     });
 
@@ -228,8 +399,14 @@ app.post("/api/start-session", verifyUser, async (req, res) => {
       tokensCost: finalTokensCost,
       lastUserId: uid,
       currentSessionId: newSessionId,
+      hardwareSelection: "",
       updatedAt: admin.database.ServerValue.TIMESTAMP,
     });
+
+    const mqttOk = await safeSendBayCommand(
+      bayId,
+      `BUSY|${packageId}|${finalDurationSec}`,
+    );
 
     safeLog(
       `✅ BAŞARILI: ${bayId} başlatıldı. Süre: ${finalDurationSec} sn, Kesilen: ${finalTokensCost} jeton`,
@@ -237,7 +414,11 @@ app.post("/api/start-session", verifyUser, async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      message: "Makine başlatıldı.",
+      mqttOk,
+      sessionId: newSessionId,
+      message: mqttOk
+        ? "Makine başlatıldı."
+        : "Oturum oluşturuldu ama cihaza MQTT komutu gönderilemedi.",
     });
   } catch (error) {
     if (error.message === "Engellenmis_Kullanici") {
@@ -291,13 +472,17 @@ app.post("/api/stop-session", verifyUser, async (req, res) => {
       currentSessionId: "",
       requestedPackage: null,
       durationSec: null,
+      tokensCost: null,
       updatedAt: admin.database.ServerValue.TIMESTAMP,
     });
+
+    const mqttOk = await safeSendBayCommand(bayId, "WAITING");
 
     safeLog(`⛔ MANUEL DURDURMA BAŞARILI: ${bayId} durduruldu.`);
 
     return res.status(200).json({
       success: true,
+      mqttOk,
       message: "Oturum durduruldu.",
     });
   } catch (error) {
@@ -436,10 +621,36 @@ app.post("/api/admin/update-bay", verifyAdmin, async (req, res) => {
 
     await rtdb.ref(`bays/${bayId}`).update(guncellemeVerisi);
 
+    let mqttOk = null;
+
+    if (patch.status) {
+      const statusCommandMap = {
+        available: "AVAILABLE",
+        waiting: "WAITING",
+        offline: "OFFLINE",
+        maintenance: "MAINTENANCE",
+      };
+
+      const command = statusCommandMap[patch.status];
+
+      if (command) {
+        mqttOk = await safeSendBayCommand(bayId, command);
+      }
+    }
+
+    if (patch.isActive === true) {
+      mqttOk = await safeSendBayCommand(bayId, "ACTIVE_ON");
+    }
+
+    if (patch.isActive === false) {
+      mqttOk = await safeSendBayCommand(bayId, "ACTIVE_OFF");
+    }
+
     safeLog(`🛠️ Peron Güncellendi: ${bayId} -> ${JSON.stringify(patch)}`);
 
     return res.status(200).json({
       success: true,
+      mqttOk,
       message: "Peron güncellendi.",
     });
   } catch (error) {
@@ -643,6 +854,7 @@ const systemStartupClean = async () => {
         updates[`bays/${bayId}/durationSec`] = null;
         updates[`bays/${bayId}/tokensCost`] = null;
         updates[`bays/${bayId}/lastUserId`] = null;
+        updates[`bays/${bayId}/hardwareSelection`] = "";
         updates[`bays/${bayId}/updatedAt`] = admin.database.ServerValue.TIMESTAMP;
       });
 
@@ -764,15 +976,69 @@ const sendAdminAlert = async (bayId, type) => {
     }
 
     safeLog(
-      `📧 E-Posta başarıyla gönderildi: ${type === "down" ? "Kopma" : "Düzelme"} bildirimi.`,
+      `📧 E-Posta başarıyla gönderildi: ${
+        type === "down" ? "Kopma" : "Düzelme"
+      } bildirimi.`,
     );
   } catch (error) {
     safeLog(`❌ Mail API Bağlantı Hatası: ${error.message}`);
   }
 };
 
+// ---------------------------------------------------------
+// QR OKUTULUNCA PERONU WAITING MODUNA AL
+// ---------------------------------------------------------
+app.post("/api/prepare-bay", verifyUser, async (req, res) => {
+  const { bayId } = req.body;
+
+  if (!bayId) {
+    return res.status(400).json({ error: "bayId gerekli." });
+  }
+
+  try {
+    const bayRef = rtdb.ref(`bays/${bayId}`);
+    const baySnap = await bayRef.once("value");
+    const bayData = baySnap.val();
+
+    if (!bayData) {
+      return res.status(404).json({
+        error: "Peron bulunamadı.",
+      });
+    }
+
+    if (bayData.status !== "available" && bayData.status !== "waiting") {
+      return res.status(400).json({
+        error: "Peron şu anda kullanılıyor.",
+      });
+    }
+
+    await bayRef.update({
+      status: "waiting",
+      lastUserId: req.user.uid,
+      hardwareSelection: "",
+      updatedAt: admin.database.ServerValue.TIMESTAMP,
+    });
+
+    const mqttOk = await safeSendBayCommand(bayId, "WAITING");
+
+    return res.status(200).json({
+      success: true,
+      mqttOk,
+      message: mqttOk
+        ? "Peron seçim ekranına alındı."
+        : "Peron waiting yapıldı ama MQTT komutu gönderilemedi.",
+    });
+  } catch (error) {
+    safeLog(`❌ Prepare Bay Hatası: ${error.message}`);
+
+    return res.status(500).json({
+      error: "Peron hazırlanırken sunucu hatası oluştu.",
+    });
+  }
+});
+
 // =========================================================
-// 🔥 TEKİL VE OPTİMİZE EDİLMİŞ CRON JOB (SÜPER CRON)
+// 🔥 TEKİL VE OPTİMİZE EDİLMİŞ CRON JOB
 // =========================================================
 let isHeartbeatCronRunning = false;
 
@@ -789,9 +1055,10 @@ cron.schedule("* * * * *", async () => {
     const now = Date.now();
 
     // ---------------------------------------------------------
-    // 1. SÜRESİ DOLMUŞ "RUNNING" OTURUMLARI KAPAT
+    // 1. SÜRESİ DOLMUŞ RUNNING OTURUMLARI KAPAT
     // ---------------------------------------------------------
-    const expiredSessions = await db.collection("sessions")
+    const expiredSessions = await db
+      .collection("sessions")
       .where("status", "==", "running")
       .where("expectedEndTime", "<=", admin.firestore.Timestamp.fromMillis(now))
       .get();
@@ -799,6 +1066,7 @@ cron.schedule("* * * * *", async () => {
     if (!expiredSessions.empty) {
       const batch = db.batch();
       const bayUpdates = {};
+      const mqttWaitingCommands = [];
 
       expiredSessions.forEach((doc) => {
         batch.update(doc.ref, {
@@ -808,6 +1076,7 @@ cron.schedule("* * * * *", async () => {
         });
 
         const bayId = doc.data().bayId;
+
         bayUpdates[`bays/${bayId}/status`] = "waiting";
         bayUpdates[`bays/${bayId}/currentSessionId`] = "";
         bayUpdates[`bays/${bayId}/requestedPackage`] = null;
@@ -815,19 +1084,27 @@ cron.schedule("* * * * *", async () => {
         bayUpdates[`bays/${bayId}/tokensCost`] = null;
         bayUpdates[`bays/${bayId}/updatedAt`] = admin.database.ServerValue.TIMESTAMP;
 
+        mqttWaitingCommands.push(bayId);
+
         safeLog(`🏁 [CRON] OTOMATİK KAPATMA: ${bayId} süresi doldu, bekleme moduna alındı.`);
       });
 
       await batch.commit();
+
       if (Object.keys(bayUpdates).length > 0) {
         await rtdb.ref().update(bayUpdates);
       }
+
+      mqttWaitingCommands.forEach((bayId) => {
+        safeSendBayCommand(bayId, "WAITING");
+      });
     }
 
     // ---------------------------------------------------------
-    // 2. 60 SANİYEDİR "WAITING" DURUMUNDA OLANLARI TEMİZLE
+    // 2. 60 SANİYEDİR WAITING DURUMUNDA OLANLARI AVAILABLE YAP
     // ---------------------------------------------------------
-    const waitingBaysSnap = await rtdb.ref("bays")
+    const waitingBaysSnap = await rtdb
+      .ref("bays")
       .orderByChild("status")
       .equalTo("waiting")
       .once("value");
@@ -835,11 +1112,14 @@ cron.schedule("* * * * *", async () => {
     if (waitingBaysSnap.exists()) {
       const waitingBays = waitingBaysSnap.val();
       const waitingUpdates = {};
+      const mqttAvailableCommands = [];
 
       for (const [bayId, bay] of Object.entries(waitingBays)) {
-        if (bay.updatedAt && (now - bay.updatedAt > 60000)) {
+        if (bay.updatedAt && now - bay.updatedAt > 60000) {
           waitingUpdates[`bays/${bayId}/status`] = "available";
           waitingUpdates[`bays/${bayId}/updatedAt`] = admin.database.ServerValue.TIMESTAMP;
+          mqttAvailableCommands.push(bayId);
+
           safeLog(`⏳ [CRON] ZAMAN AŞIMI: ${bayId} 60sn işlem yapılmadığı için boşa çıkarıldı.`);
         }
       }
@@ -847,21 +1127,26 @@ cron.schedule("* * * * *", async () => {
       if (Object.keys(waitingUpdates).length > 0) {
         await rtdb.ref().update(waitingUpdates);
       }
+
+      mqttAvailableCommands.forEach((bayId) => {
+        safeSendBayCommand(bayId, "AVAILABLE");
+      });
     }
 
     // ---------------------------------------------------------
-    // 3. NABIZ KONTROLÜ - SADECE KOPANLARI ÇEK
+    // 3. MQTT HEARTBEAT KONTROLÜ
     // ---------------------------------------------------------
     const timeoutMs = 2 * 60 * 1000;
-    
-    // Son görülmesi 2 dakikadan eski olanları bul
-    const deadBaysSnap = await rtdb.ref("bays")
+
+    const deadBaysSnap = await rtdb
+      .ref("bays")
       .orderByChild("lastSeen")
       .endAt(now - timeoutMs)
       .once("value");
 
     if (deadBaysSnap.exists()) {
       const deadBays = deadBaysSnap.val();
+
       for (const [bayId, bay] of Object.entries(deadBays)) {
         if ((bay.status === "offline" && !bay.autoOffline) || bay.status === "maintenance") {
           continue;
@@ -869,41 +1154,47 @@ cron.schedule("* * * * *", async () => {
 
         if (bay.status !== "offline" || bay.autoOffline !== true) {
           safeLog(`⚠️ [CRON] KOPMA TESPİT EDİLDİ: ${bayId} otomatik kapatılıyor...`);
+
           await rtdb.ref(`bays/${bayId}`).update({
             status: "offline",
             isActive: false,
             autoOffline: true,
             updatedAt: admin.database.ServerValue.TIMESTAMP,
           });
+
           await sendAdminAlert(bayId, "down");
         }
       }
     }
 
     // ---------------------------------------------------------
-    // 4. BAĞLANTISI GERİ GELENLERİ BUL VE AÇ
+    // 4. BAĞLANTISI GERİ GELENLERİ AÇ
     // ---------------------------------------------------------
-    const autoOfflineBaysSnap = await rtdb.ref("bays")
+    const autoOfflineBaysSnap = await rtdb
+      .ref("bays")
       .orderByChild("autoOffline")
       .equalTo(true)
       .once("value");
 
     if (autoOfflineBaysSnap.exists()) {
       const autoOfflineBays = autoOfflineBaysSnap.val();
+
       for (const [bayId, bay] of Object.entries(autoOfflineBays)) {
-        if (bay.lastSeen && (now - bay.lastSeen <= timeoutMs)) {
+        if (bay.lastSeen && now - bay.lastSeen <= timeoutMs) {
           safeLog(`✅ [CRON] İNTERNET GELDİ: ${bayId} otomatik olarak açılıyor...`);
+
           await rtdb.ref(`bays/${bayId}`).update({
             status: "available",
             isActive: true,
             autoOffline: null,
             updatedAt: admin.database.ServerValue.TIMESTAMP,
           });
+
+          await safeSendBayCommand(bayId, "AVAILABLE");
           await sendAdminAlert(bayId, "up");
         }
       }
     }
-
   } catch (error) {
     safeLog(`❌ Cron Job Hatası: ${error.message}`);
   } finally {

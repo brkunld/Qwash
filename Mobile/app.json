@@ -12,17 +12,32 @@
       "bundleIdentifier": "com.brkunld.utproject",
       "infoPlist": {
         "NFCReaderUsageDescription": "Araç yıkama peronlarına bağlanmak için NFC özelliğine ihtiyacımız var.",
-        "NSCameraUsageDescription": "QR kod okumak için kameraya erişim gereklidir."
+        "NSCameraUsageDescription": "QR kod okumak için kameraya erişim gereklidir.",
+        "NSBluetoothAlwaysUsageDescription": "Qwash cihazlarına Bluetooth ile bağlanmak ve servis işlemleri yapmak için Bluetooth erişimi gereklidir.",
+        "NSBluetoothPeripheralUsageDescription": "Qwash cihazlarına Bluetooth ile bağlanmak için Bluetooth erişimi gereklidir.",
+        "NSLocationWhenInUseUsageDescription": "Yakındaki Bluetooth cihazlarını bulmak için konum izni gerekebilir."
       },
       "entitlements": {
-        "com.apple.developer.nfc.readersession.formats": ["NDEF", "TAG"]
+        "com.apple.developer.nfc.readersession.formats": [
+          "NDEF",
+          "TAG"
+        ]
       }
     },
     "android": {
       "package": "com.brkunld.utproject",
       "permissions": [
         "android.permission.NFC",
-        "android.permission.CAMERA"
+        "android.permission.CAMERA",
+
+        "android.permission.BLUETOOTH",
+        "android.permission.BLUETOOTH_ADMIN",
+        "android.permission.BLUETOOTH_SCAN",
+        "android.permission.BLUETOOTH_CONNECT",
+        "android.permission.BLUETOOTH_ADVERTISE",
+
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION"
       ],
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE"
