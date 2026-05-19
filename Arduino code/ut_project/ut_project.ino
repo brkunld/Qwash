@@ -900,9 +900,9 @@ void loop() {
         }
         else if (y > 80 && y < 170) {
           if (x > 20 && x < 150) {
-            secilenPaket = "wash";
-          } else if (x > 170 && x < 300) {
             secilenPaket = "foam";
+          } else if (x > 170 && x < 300) {
+            secilenPaket = "wash";
           }
         }
       }
