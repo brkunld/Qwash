@@ -25,9 +25,6 @@ export default function Login() {
 
   // 🔥 Sunucuyu (Backend) Önceden Isıtma (Hızlandırma Hilesi)
   useEffect(() => {
-    // Kullanıcı giriş ekranındayken sunucuya bir 'ping' atıyoruz ki
-    // giriş yap tuşuna bastığında ağ bağlantısı zaten hazır olsun.
-    // .catch() ekledik: Eğer sunucu o an uykudaysa ve cevap geç gelirse uygulama hata vermesin.
     fetch("https://qwash-8q4y.onrender.com/").catch(() =>
       console.log("Sunucu uyanıyor..."),
     );
@@ -51,7 +48,6 @@ export default function Login() {
 
       // 2. Email Doğrulama Kontrolü
       if (!user.emailVerified) {
-        // En güncel durumu kontrol etmek için reload şart
         await user.reload();
         if (!user.emailVerified) {
           await signOut(auth);
@@ -61,7 +57,20 @@ export default function Login() {
         }
       }
 
-      // 3. Profil Kontrolü
+      // 3. Admin (Özel Yetki - Custom Claims) Kontrolü
+      // Veritabanına sormadan doğrudan kullanıcının şifreli jetonunu çözüyoruz
+      const idTokenResult = await user.getIdTokenResult();
+      const isAdmin =
+        idTokenResult.claims.admin === true ||
+        idTokenResult.claims.role === "admin";
+
+      if (isAdmin) {
+        // Kullanıcı admin ise profil kontrolüne takılmadan direkt admin paneline gönder
+        router.replace("/admin-panel");
+        return;
+      }
+
+      // 4. Profil Kontrolü (Sadece normal kullanıcılar için çalışır)
       const userSnap = await getDoc(doc(db, "users", user.uid));
 
       if (userSnap.exists()) {
@@ -98,7 +107,7 @@ export default function Login() {
   return (
     <KeyboardAvoidingView
       style={{ flex: 1, backgroundColor: "#f8f9fb" }}
-      behavior={Platform.OS === "ios" ? "padding" : "height"} // Android için "height" eklendi
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
     >
       <ScrollView
         contentContainerStyle={styles.container}
@@ -245,8 +254,6 @@ const styles = StyleSheet.create({
     paddingBottom: 32,
     gap: 8,
   },
-
-  /* 🔥 CSS HATASI BURADA DÜZELTİLDİ: width:1, height:1 değerleri silindi 🔥 */
   logoBox: {
     backgroundColor: "transparent",
     alignItems: "center",
@@ -256,8 +263,8 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   logoImage: {
-    width: 150, // Logonun tam görünebilmesi için genişlik eklendi
-    height: 50, // Yükseklik biraz daha okunabilir olması için artırıldı
+    width: 150,
+    height: 50,
   },
   brandTitle: {
     fontSize: 26,
