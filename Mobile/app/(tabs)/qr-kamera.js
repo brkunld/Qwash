@@ -1,6 +1,6 @@
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { router, useFocusEffect } from "expo-router"; // 🔥 useFocusEffect eklendi
-import { ref, runTransaction } from "firebase/database";
+import { ref, update , get } from "firebase/database";
 import { useCallback, useState } from "react"; // 🔥 useCallback eklendi
 import {
   ActivityIndicator,
@@ -94,41 +94,41 @@ export default function QrKamera() {
       return;
     }
 
-    try {
+try {
       const bayRef = ref(rtdb, `bays/${bayId}`);
 
-      // 🔥 RACE CONDITION ÇÖZÜMÜ: runTransaction Kullanımı
-      const { committed, snapshot } = await runTransaction(
-        bayRef,
-        (currentData) => {
-          if (currentData === null) {
-            return currentData; // Peron yoksa işlemi iptal et
-          }
-          if (currentData.status === "available") {
-            currentData.status = "waiting";
-            currentData.updatedAt = Date.now(); // Transaction içinde Date.now() kullanmak daha güvenlidir
-            return currentData; // Başarıyla kendine rezerve et
-          }
-          return; // Müsait değilse işlemi (transaction) iptal et
-        },
-      );
-
-      if (!committed) {
+      // 1. Önce peronun anlık durumunu çekiyoruz (NFC mantığıyla aynı)
+      const snapshot = await get(bayRef);
+      
+      if (!snapshot.exists()) {
         setYukleniyor(false);
-        if (!snapshot.exists()) {
-          Alert.alert("Hata", "Okutulan peron sistemde bulunamadı.");
-        } else {
-          Alert.alert(
-            "Peron Meşgul",
-            "Bu peron şu anda rezerve edilmiş veya kullanımda.",
-          );
-        }
+        Alert.alert("Hata", "Okutulan peron sistemde bulunamadı.");
         setTimeout(() => setKilit(false), 2500);
         return;
       }
 
+      const currentBayData = snapshot.val();
+      
+      // 2. Peron "available" (boş) DEĞİLSE işlemi iptal et
+      if (currentBayData.status !== "available") {
+        setYukleniyor(false);
+        Alert.alert(
+          "Peron Meşgul",
+          "Bu peron şu anda rezerve edilmiş veya kullanımda."
+        );
+        setTimeout(() => setKilit(false), 2500);
+        return;
+      }
+
+      // 3. Müsaitse durumu 'waiting' yapıp kullanıcıyı bağla
+      await update(bayRef, {
+        status: "waiting",
+        updatedAt: Date.now(),
+      });
+
       setYukleniyor(false);
       router.navigate({ pathname: "/kullanici", params: { bayId } });
+
     } catch (error) {
       console.error("RTDB Güncelleme Hatası:", error);
       Alert.alert("Hata", "Peron durumu güncellenemedi.");

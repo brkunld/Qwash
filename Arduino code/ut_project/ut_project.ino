@@ -19,7 +19,7 @@
 
 // ================= OPTIMIZASYON AYARLARI =================
 // Uretimde 0 kalsin. Debug gerekirse 1 yap.
-#define DEBUG_LOG 0
+#define DEBUG_LOG 1
 
 #if DEBUG_LOG
   #define LOG_PRINT(x) Serial.print(x)
@@ -350,7 +350,7 @@ bool streamBaslat() {
     return false;
   }
 
-  Firebase.RTDB.setStreamCallback(&streamFbdo, streamCallback, streamTimeoutCallback);
+  // DİKKAT: Callback fonksiyon ataması iptal edildi, Loop içinde dinlenecek.
 
   LOG_PRINT(F("Stream: "));
   LOG_PRINTLN(path);
@@ -363,6 +363,12 @@ void firebaseKurulumYap() {
   auth.user.email = USER_EMAIL;
   auth.user.password = USER_PASSWORD;
   config.database_url = DATABASE_URL;
+
+  // ================= YENİ EKLENEN KISIM =================
+  // ESP32'nin ağ paketlerini alabilmesi için hafızayı genişletiyoruz
+  streamFbdo.setBSSLBufferSize(4096, 1024);
+  fbdo.setBSSLBufferSize(4096, 1024);
+  // =======================================================
 
   Firebase.begin(&config, &auth);
   Firebase.reconnectWiFi(true);
@@ -445,83 +451,6 @@ void ekrandaSayaciGuncelle() {
     
     // İşlem tamamen bittiğinde hafızadaki süreyi sıfırla
     preferences.putULong("endTime", 0);
-  }
-}
-
-// ================= STREAM CALLBACK =================
-
-void streamCallback(FirebaseStream data) {
-  String path = data.dataPath();
-
-  if (path == "/lastSeen" || path == "/updatedAt" || path == "/hardwareSelection") {
-    return;
-  }
-
-  bool durumFarkli = false;
-
-  if (data.dataType() == "json") {
-    StaticJsonDocument<768> doc;
-
-    DeserializationError err = deserializeJson(doc, data.jsonString());
-    if (err) {
-      LOG_PRINT(F("JSON hata: "));
-      LOG_PRINTLN(err.c_str());
-      return;
-    }
-
-    if (doc.containsKey("status")) {
-      String yeniDurum = doc["status"].as<String>();
-      if (currentStatus != yeniDurum) {
-        currentStatus = yeniDurum;
-        durumFarkli = true; 
-      }
-    }
-
-    if (doc.containsKey("isActive")) {
-      bool yeniAktiflik = doc["isActive"].as<bool>();
-      if (isBayActive != yeniAktiflik) {
-        isBayActive = yeniAktiflik;
-        durumFarkli = true;
-      }
-    }
-
-    if (doc.containsKey("requestedPackage")) {
-      requestedPackage = doc["requestedPackage"].as<String>();
-    }
-
-    if (doc.containsKey("durationSec")) {
-      int gelenSure = doc["durationSec"].as<int>();
-      durationSec = guvenliDurationOku(gelenSure);
-    }
-  } else {
-    if (path == "/status") {
-      String yeniDurum = data.stringData();
-      if (currentStatus != yeniDurum) {
-        currentStatus = yeniDurum;
-        durumFarkli = true;
-      }
-    } else if (path == "/isActive") {
-      bool yeniAktiflik = data.boolData();
-      if (isBayActive != yeniAktiflik) {
-        isBayActive = yeniAktiflik;
-        durumFarkli = true;
-      }
-    } else if (path == "/requestedPackage") {
-      requestedPackage = data.stringData();
-    } else if (path == "/durationSec") {
-      int gelenSure = data.intData();
-      durationSec = guvenliDurationOku(gelenSure);
-    }
-  }
-
-  if (durumFarkli) {
-    durumDegisti = true;
-  }
-}
-
-void streamTimeoutCallback(bool timeout) {
-  if (timeout) {
-    LOG_PRINTLN(F("Stream timeout."));
   }
 }
 
@@ -713,6 +642,67 @@ void loop() {
   if (firebaseBaslatildi && Firebase.ready() && !streamBaslatildi) {
     streamBaslatildi = streamBaslat();
   }
+
+  // =============== YENİ KESİNTİSİZ STREAM DİNLEME MANTIĞI ===============
+  if (streamBaslatildi && Firebase.ready()) {
+    if (!Firebase.RTDB.readStream(&streamFbdo)) {
+      // Bağlantı hatası olursa sessizce atlar
+    }
+
+    if (streamFbdo.streamTimeout()) {
+      LOG_PRINTLN(F("Stream zaman asimi. Yenileniyor..."));
+    }
+
+    if (streamFbdo.streamAvailable()) {
+      String path = streamFbdo.dataPath();
+      LOG_PRINT(F("Stream Gelen Veri Path: "));
+      LOG_PRINTLN(path);
+
+      if (path != "/lastSeen" && path != "/updatedAt" && path != "/hardwareSelection") {
+        bool durumFarkli = false;
+
+        if (streamFbdo.dataType() == "json") {
+          DynamicJsonDocument doc(2048);
+          DeserializationError err = deserializeJson(doc, streamFbdo.jsonString());
+          if (!err) {
+            if (doc.containsKey("status")) {
+              String yeniDurum = doc["status"].as<String>();
+              if (currentStatus != yeniDurum) { currentStatus = yeniDurum; durumFarkli = true; }
+            }
+            if (doc.containsKey("isActive")) {
+              bool yeniAktiflik = doc["isActive"].as<bool>();
+              if (isBayActive != yeniAktiflik) { isBayActive = yeniAktiflik; durumFarkli = true; }
+            }
+            if (doc.containsKey("requestedPackage")) {
+              requestedPackage = doc["requestedPackage"].as<String>();
+            }
+            if (doc.containsKey("durationSec")) {
+              durationSec = guvenliDurationOku(doc["durationSec"].as<int>());
+            }
+          } else {
+            Serial.print(F("JSON Hata: ")); Serial.println(err.c_str());
+          }
+        } else {
+          if (path == "/status" || path == "status") {
+            String yeniDurum = streamFbdo.stringData();
+            if (currentStatus != yeniDurum) { currentStatus = yeniDurum; durumFarkli = true; }
+          } else if (path == "/isActive" || path == "isActive") {
+            bool yeniAktiflik = streamFbdo.boolData();
+            if (isBayActive != yeniAktiflik) { isBayActive = yeniAktiflik; durumFarkli = true; }
+          } else if (path == "/requestedPackage" || path == "requestedPackage") {
+            requestedPackage = streamFbdo.stringData();
+          } else if (path == "/durationSec" || path == "durationSec") {
+            durationSec = guvenliDurationOku(streamFbdo.intData());
+          }
+        }
+
+        if (durumFarkli) {
+          durumDegisti = true;
+        }
+      }
+    }
+  }
+  // ========================================================================
 
   if (millis() - sonNabizZamani >= nabizAraligi) {
     sonNabizZamani = millis();
