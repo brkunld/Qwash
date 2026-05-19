@@ -375,31 +375,53 @@ export function useKullaniciIslemleri() {
   );
 
   const perondanCik = async (islemBayId) => {
-    const bay = baylarData[islemBayId];
-    const session = sessionsData[islemBayId];
+  const bay = baylarData[islemBayId];
+  const session = sessionsData[islemBayId];
 
-    if (bay?.currentSessionId || session?.status === "running") {
-      Alert.alert(
-        "Hata",
-        "Aktif oturum varken peronu terkedemezsiniz. Önce durdurunuz.",
-      );
+  if (bay?.currentSessionId || session?.status === "running") {
+    Alert.alert(
+      "Hata",
+      "Aktif oturum varken peronu terkedemezsiniz. Önce durdurunuz.",
+    );
+    return;
+  }
+
+  try {
+    const token = await auth.currentUser?.getIdToken();
+
+    if (!token) {
+      Alert.alert("Oturum Hatası", "Lütfen tekrar giriş yapın.");
       return;
     }
 
-    try {
-      kasitliCikisRef.current[islemBayId] = true;
+    kasitliCikisRef.current[islemBayId] = true;
 
-      const bayRef = ref(rtdb, `bays/${islemBayId}`);
-      await update(bayRef, {
-        status: "available",
-        updatedAt: rtdbServerTimestamp(),
-      });
+    const API_URL = "https://qwash-8q4y.onrender.com/api/cancel-waiting";
 
-      Alert.alert("Başarılı", "Peron serbest bırakıldı.");
-    } catch (error) {
-      console.error("Çıkış hatası:", error);
+    const response = await fetch(API_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ bayId: islemBayId }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      kasitliCikisRef.current[islemBayId] = false;
+      Alert.alert("Hata", data.error || "Çıkış yapılamadı.");
+      return;
     }
-  };
+
+    Alert.alert("Başarılı", data.message || "Peron serbest bırakıldı.");
+  } catch (error) {
+    kasitliCikisRef.current[islemBayId] = false;
+    console.error("Çıkış hatası:", error);
+    Alert.alert("Bağlantı Hatası", "Sunucuya ulaşılamadı.");
+  }
+};
 
   const bakiyeYukle = async (tokens, amountTRYParam) => {
     if (!uid) return router.replace("/login");

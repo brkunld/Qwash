@@ -26,7 +26,7 @@ if (fs.existsSync(renderSecretPath)) {
   throw new Error(
     `❌ Firebase serviceAccountKey.json bulunamadı.
 Render için beklenen yol: ${renderSecretPath}
-Local için beklenen yol: ${localSecretPath}`
+Local için beklenen yol: ${localSecretPath}`,
   );
 }
 
@@ -66,7 +66,9 @@ const MQTT_USER = process.env.MQTT_USER;
 const MQTT_PASS = process.env.MQTT_PASS;
 
 if (!MQTT_HOST || !MQTT_USER || !MQTT_PASS) {
-  throw new Error("❌ MQTT env eksik: MQTT_HOST, MQTT_USER, MQTT_PASS gerekli.");
+  throw new Error(
+    "❌ MQTT env eksik: MQTT_HOST, MQTT_USER, MQTT_PASS gerekli.",
+  );
 }
 
 const mqttUrl = `mqtts://${MQTT_HOST}:${MQTT_PORT}`;
@@ -115,7 +117,9 @@ const safeSendBayCommand = async (bayId, command) => {
     await sendBayCommand(bayId, command);
     return true;
   } catch (error) {
-    safeLog(`❌ MQTT komut gönderilemedi: ${bayId} -> ${command} | ${error.message}`);
+    safeLog(
+      `❌ MQTT komut gönderilemedi: ${bayId} -> ${command} | ${error.message}`,
+    );
     return false;
   }
 };
@@ -349,7 +353,9 @@ mqttClient.on("message", async (topic, messageBuffer) => {
           lastSeen: admin.database.ServerValue.TIMESTAMP,
         });
 
-        safeLog(`🔄 BOOT TEMİZLİĞİ: ${bayId} eski session alanları temizlendi.`);
+        safeLog(
+          `🔄 BOOT TEMİZLİĞİ: ${bayId} eski session alanları temizlendi.`,
+        );
         return;
       }
 
@@ -408,7 +414,8 @@ const verifyUser = async (req, res, next) => {
       );
 
       return res.status(403).json({
-        error: "Güvenlik ihlali: Başka bir kullanıcının adına işlem yapamazsınız!",
+        error:
+          "Güvenlik ihlali: Başka bir kullanıcının adına işlem yapamazsınız!",
       });
     }
 
@@ -553,7 +560,10 @@ app.post("/api/start-session", verifyUser, async (req, res) => {
     const baySnap = await rtdbBayRef.once("value");
     const bayData = baySnap.val();
 
-    if (!bayData || (bayData.status !== "available" && bayData.status !== "waiting")) {
+    if (
+      !bayData ||
+      (bayData.status !== "available" && bayData.status !== "waiting")
+    ) {
       return res.status(400).json({ error: "Peron şu anda kullanılıyor." });
     }
 
@@ -613,51 +623,53 @@ app.post("/api/start-session", verifyUser, async (req, res) => {
     });
 
     const mqttOk = await safeSendBayCommand(
-  bayId,
-  `BUSY|${packageId}|${finalDurationSec}`,
-);
+      bayId,
+      `BUSY|${packageId}|${finalDurationSec}`,
+    );
 
-if (!mqttOk) {
-  const refundResult = await refundSessionIfNeeded(
-    newSessionId,
-    "mqtt_start_failed",
-  );
+    if (!mqttOk) {
+      const refundResult = await refundSessionIfNeeded(
+        newSessionId,
+        "mqtt_start_failed",
+      );
 
-  await clearBaySessionFields(bayId, {
-    status: "waiting",
-  });
+      await clearBaySessionFields(bayId, {
+        status: "waiting",
+      });
 
-  safeLog(
-    `💸 MQTT BAŞLATMA HATASI: ${bayId} başlatılamadı. ` +
-      `Session: ${newSessionId}. ` +
-      `İade: ${refundResult.refunded ? `${refundResult.tokens} jeton` : refundResult.reason}`,
-  );
+      safeLog(
+        `💸 MQTT BAŞLATMA HATASI: ${bayId} başlatılamadı. ` +
+          `Session: ${newSessionId}. ` +
+          `İade: ${refundResult.refunded ? `${refundResult.tokens} jeton` : refundResult.reason}`,
+      );
 
-  return res.status(503).json({
-    success: false,
-    mqttOk: false,
-    refunded: refundResult.refunded,
-    refundedTokens: refundResult.tokens || 0,
-    sessionId: newSessionId,
-    error: refundResult.refunded
-      ? "Makine başlatılamadı. Kesilen jetonlar hesabınıza iade edildi."
-      : "Makine başlatılamadı. İade işlemi kontrol edilmeli.",
-  });
-}
+      return res.status(503).json({
+        success: false,
+        mqttOk: false,
+        refunded: refundResult.refunded,
+        refundedTokens: refundResult.tokens || 0,
+        sessionId: newSessionId,
+        error: refundResult.refunded
+          ? "Makine başlatılamadı. Kesilen jetonlar hesabınıza iade edildi."
+          : "Makine başlatılamadı. İade işlemi kontrol edilmeli.",
+      });
+    }
 
-safeLog(
-  `✅ BAŞARILI: ${bayId} başlatıldı. Süre: ${finalDurationSec} sn, Kesilen: ${finalTokensCost} jeton`,
-);
+    safeLog(
+      `✅ BAŞARILI: ${bayId} başlatıldı. Süre: ${finalDurationSec} sn, Kesilen: ${finalTokensCost} jeton`,
+    );
 
-return res.status(200).json({
-  success: true,
-  mqttOk: true,
-  sessionId: newSessionId,
-  message: "Makine başlatıldı.",
-});
+    return res.status(200).json({
+      success: true,
+      mqttOk: true,
+      sessionId: newSessionId,
+      message: "Makine başlatıldı.",
+    });
   } catch (error) {
     if (error.message === "Engellenmis_Kullanici") {
-      safeLog(`🚨 GÜVENLİK İHLALİ: Engelli kullanıcı (${uid}) işlem yapmayı denedi!`);
+      safeLog(
+        `🚨 GÜVENLİK İHLALİ: Engelli kullanıcı (${uid}) işlem yapmayı denedi!`,
+      );
       return res.status(403).json({
         error: "Hesabınız askıya alındığı için işlem yapamazsınız.",
       });
@@ -668,7 +680,9 @@ return res.status(200).json({
     }
 
     if (error.message === "Paket_Bulunamadi") {
-      return res.status(404).json({ error: "İstenilen paket sistemde bulunamadı." });
+      return res
+        .status(404)
+        .json({ error: "İstenilen paket sistemde bulunamadı." });
     }
 
     if (error.message === "Gecersiz_Paket_Degerleri") {
@@ -679,6 +693,66 @@ return res.status(200).json({
 
     safeLog(`❌ Başlatma hatası: ${error.message}`);
     return res.status(500).json({ error: "Sunucu hatası." });
+  }
+});
+
+
+// ---------------------------------------------------------
+// PERONDAN MANUEL ÇIKIŞ (İPTAL / CANCEL WAITING)
+// ---------------------------------------------------------
+app.post("/api/cancel-waiting", verifyUser, async (req, res) => {
+  const { bayId } = req.body;
+
+  if (!bayId) {
+    return res.status(400).json({ error: "bayId gerekli." });
+  }
+
+  try {
+    const bayRef = rtdb.ref(`bays/${bayId}`);
+    const baySnap = await bayRef.once("value");
+    const bayData = baySnap.val();
+
+    if (!bayData) {
+      return res.status(404).json({ error: "Peron bulunamadı." });
+    }
+
+    if (bayData.currentSessionId) {
+      safeLog(
+        `🚨 AKTİF SESSION VARKEN İPTAL DENEMESİ: ${req.user.uid}, Peron: ${bayId}`,
+      );
+
+      return res.status(409).json({
+        error: "Aktif oturum varken peron iptal edilemez.",
+      });
+    }
+
+    if (bayData.status !== "waiting" || bayData.lastUserId !== req.user.uid) {
+      safeLog(`🚨 YETKİSİZ İPTAL DENEMESİ: ${req.user.uid}, Peron: ${bayId}`);
+
+      return res.status(403).json({
+        error: "Bu peronu iptal etme yetkiniz yok veya peron şu an iptal edilebilir durumda değil.",
+      });
+    }
+
+    await clearBaySessionFields(bayId, {
+      status: "available",
+    });
+
+    const mqttOk = await safeSendBayCommand(bayId, "AVAILABLE");
+
+    return res.status(200).json({
+      success: true,
+      mqttOk,
+      message: mqttOk
+        ? "Peron başarıyla serbest bırakıldı."
+        : "Peron veritabanında serbest bırakıldı ancak cihaza MQTT komutu gönderilemedi.",
+    });
+  } catch (error) {
+    safeLog(`❌ Cancel Waiting Hatası: ${error.message}`);
+
+    return res.status(500).json({
+      error: "Sunucu hatası, işlem iptal edilemedi.",
+    });
   }
 });
 
@@ -781,7 +855,9 @@ app.post("/api/topup", verifyUser, async (req, res) => {
       });
     });
 
-    safeLog(`✅ MÜŞTERİ ÖDEMESİ BAŞARILI: ${uid} -> ${eklenecekJeton} jeton eklendi.`);
+    safeLog(
+      `✅ MÜŞTERİ ÖDEMESİ BAŞARILI: ${uid} -> ${eklenecekJeton} jeton eklendi.`,
+    );
 
     return res.status(200).json({
       success: true,
@@ -911,7 +987,11 @@ app.post("/api/admin/search-user", verifyAdmin, async (req, res) => {
       return res.status(400).json({ error: "Arama terimi boş olamaz." });
     }
 
-    if (!queryVal.includes("@") && !queryVal.includes(" ") && queryVal.length >= 20) {
+    if (
+      !queryVal.includes("@") &&
+      !queryVal.includes(" ") &&
+      queryVal.length >= 20
+    ) {
       const uidSnap = await db.collection("users").doc(queryVal).get();
 
       if (uidSnap.exists) {
@@ -1055,7 +1135,9 @@ app.post("/api/admin/topup", verifyAdmin, async (req, res) => {
       });
     });
 
-    safeLog(`💰 ADMİN BAKİYE YÜKLEDİ: ${userId} kullanıcısına ${adet} jeton eklendi.`);
+    safeLog(
+      `💰 ADMİN BAKİYE YÜKLEDİ: ${userId} kullanıcısına ${adet} jeton eklendi.`,
+    );
 
     return res.status(200).json({
       success: true,
@@ -1097,7 +1179,8 @@ const systemStartupClean = async () => {
         updates[`bays/${bayId}/tokensCost`] = null;
         updates[`bays/${bayId}/lastUserId`] = null;
         updates[`bays/${bayId}/hardwareSelection`] = "";
-        updates[`bays/${bayId}/updatedAt`] = admin.database.ServerValue.TIMESTAMP;
+        updates[`bays/${bayId}/updatedAt`] =
+          admin.database.ServerValue.TIMESTAMP;
       });
 
       await rtdb.ref().update(updates);
@@ -1270,11 +1353,14 @@ cron.schedule("* * * * *", async () => {
         bayUpdates[`bays/${bayId}/requestedPackage`] = null;
         bayUpdates[`bays/${bayId}/durationSec`] = null;
         bayUpdates[`bays/${bayId}/tokensCost`] = null;
-        bayUpdates[`bays/${bayId}/updatedAt`] = admin.database.ServerValue.TIMESTAMP;
+        bayUpdates[`bays/${bayId}/updatedAt`] =
+          admin.database.ServerValue.TIMESTAMP;
 
         mqttWaitingCommands.push(bayId);
 
-        safeLog(`🏁 [CRON] OTOMATİK KAPATMA: ${bayId} süresi doldu, bekleme moduna alındı.`);
+        safeLog(
+          `🏁 [CRON] OTOMATİK KAPATMA: ${bayId} süresi doldu, bekleme moduna alındı.`,
+        );
       });
 
       await batch.commit();
@@ -1303,10 +1389,13 @@ cron.schedule("* * * * *", async () => {
       for (const [bayId, bay] of Object.entries(waitingBays)) {
         if (bay.updatedAt && now - bay.updatedAt > 60000) {
           waitingUpdates[`bays/${bayId}/status`] = "available";
-          waitingUpdates[`bays/${bayId}/updatedAt`] = admin.database.ServerValue.TIMESTAMP;
+          waitingUpdates[`bays/${bayId}/updatedAt`] =
+            admin.database.ServerValue.TIMESTAMP;
           mqttAvailableCommands.push(bayId);
 
-          safeLog(`⏳ [CRON] ZAMAN AŞIMI: ${bayId} 60sn işlem yapılmadığı için boşa çıkarıldı.`);
+          safeLog(
+            `⏳ [CRON] ZAMAN AŞIMI: ${bayId} 60sn işlem yapılmadığı için boşa çıkarıldı.`,
+          );
         }
       }
 
@@ -1332,12 +1421,17 @@ cron.schedule("* * * * *", async () => {
       const deadBays = deadBaysSnap.val();
 
       for (const [bayId, bay] of Object.entries(deadBays)) {
-        if ((bay.status === "offline" && !bay.autoOffline) || bay.status === "maintenance") {
+        if (
+          (bay.status === "offline" && !bay.autoOffline) ||
+          bay.status === "maintenance"
+        ) {
           continue;
         }
 
         if (bay.status !== "offline" || bay.autoOffline !== true) {
-          safeLog(`⚠️ [CRON] KOPMA TESPİT EDİLDİ: ${bayId} otomatik kapatılıyor...`);
+          safeLog(
+            `⚠️ [CRON] KOPMA TESPİT EDİLDİ: ${bayId} otomatik kapatılıyor...`,
+          );
 
           let refundResult = {
             refunded: false,
@@ -1355,9 +1449,7 @@ cron.schedule("* * * * *", async () => {
                 `💸 JETON İADESİ: ${bayId} elektrik/bağlantı kesintisi nedeniyle ${refundResult.tokens} jeton iade edildi.`,
               );
             } else {
-              safeLog(
-                `ℹ️ İade yapılmadı: ${bayId} - ${refundResult.reason}`,
-              );
+              safeLog(`ℹ️ İade yapılmadı: ${bayId} - ${refundResult.reason}`);
             }
           }
 
@@ -1384,7 +1476,9 @@ cron.schedule("* * * * *", async () => {
 
       for (const [bayId, bay] of Object.entries(autoOfflineBays)) {
         if (bay.lastSeen && now - bay.lastSeen <= timeoutMs) {
-          safeLog(`✅ [CRON] İNTERNET GELDİ: ${bayId} otomatik olarak açılıyor...`);
+          safeLog(
+            `✅ [CRON] İNTERNET GELDİ: ${bayId} otomatik olarak açılıyor...`,
+          );
 
           await clearBaySessionFields(bayId, {
             status: "available",
