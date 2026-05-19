@@ -9,8 +9,7 @@ const cron = require("node-cron");
 const mqtt = require("mqtt");
 
 // =========================================================
-// 🔥 SERVICE ACCOUNT AYARLARI
-// Render'da Secret File, localde backend_server/serviceAccountKey.json kullanır
+// FIREBASE SERVICE ACCOUNT
 // =========================================================
 const renderSecretPath = "/etc/secrets/serviceAccountKey.json";
 const localSecretPath = path.join(__dirname, "serviceAccountKey.json");
@@ -46,7 +45,7 @@ app.use(cors());
 app.use(express.json());
 
 // =========================================================
-// 🔥 LOG SİSTEMİ
+// LOG
 // =========================================================
 const safeLog = (message) => {
   const saat = new Date().toLocaleTimeString("tr-TR");
@@ -59,7 +58,7 @@ app.use((req, res, next) => {
 });
 
 // =========================================================
-// 📡 MQTT SİSTEMİ - ESP32 HABERLEŞME
+// MQTT
 // =========================================================
 const MQTT_HOST = process.env.MQTT_HOST;
 const MQTT_PORT = Number(process.env.MQTT_PORT || 8883);
@@ -121,6 +120,136 @@ const safeSendBayCommand = async (bayId, command) => {
   }
 };
 
+// =========================================================
+// REFUND
+// =========================================================
+const refundSessionIfNeeded = async (sessionId, reason = "bay_power_loss") => {
+  if (!sessionId) {
+    return {
+      refunded: false,
+      reason: "no_session_id",
+    };
+  }
+
+  const sessionRef = db.collection("sessions").doc(sessionId);
+
+  return await db.runTransaction(async (tx) => {
+    const sessionDoc = await tx.get(sessionRef);
+
+    if (!sessionDoc.exists) {
+      return {
+        refunded: false,
+        reason: "session_not_found",
+      };
+    }
+
+    const session = sessionDoc.data();
+
+    if (session.status !== "running") {
+      return {
+        refunded: false,
+        reason: `session_not_running_${session.status}`,
+      };
+    }
+
+    if (session.refunded === true) {
+      return {
+        refunded: false,
+        reason: "already_refunded",
+      };
+    }
+
+    const userId = session.userId;
+    const tokensCost = Number(session.tokensCost || 0);
+
+    if (!userId || tokensCost <= 0) {
+      tx.update(sessionRef, {
+        status: "ended",
+        endedAt: admin.firestore.FieldValue.serverTimestamp(),
+        endedReason: reason,
+        refundError: "missing_user_or_tokens",
+      });
+
+      return {
+        refunded: false,
+        reason: "missing_user_or_tokens",
+      };
+    }
+
+    const userRef = db.collection("users").doc(userId);
+    const userDoc = await tx.get(userRef);
+
+    if (!userDoc.exists) {
+      tx.update(sessionRef, {
+        status: "ended",
+        endedAt: admin.firestore.FieldValue.serverTimestamp(),
+        endedReason: reason,
+        refundError: "user_not_found",
+      });
+
+      return {
+        refunded: false,
+        reason: "user_not_found",
+      };
+    }
+
+    const currentWallet = Number(userDoc.data().walletTokens || 0);
+    const newWallet = currentWallet + tokensCost;
+
+    tx.update(userRef, {
+      walletTokens: newWallet,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    tx.update(sessionRef, {
+      status: "refunded",
+      refunded: true,
+      refundedTokens: tokensCost,
+      refundedAt: admin.firestore.FieldValue.serverTimestamp(),
+      endedAt: admin.firestore.FieldValue.serverTimestamp(),
+      endedReason: reason,
+    });
+
+    tx.set(db.collection("transactions").doc(), {
+      type: "refund",
+      status: "success",
+      userId,
+      sessionId,
+      bayId: session.bayId || null,
+      packageId: session.packageId || session.type || null,
+      tokens: tokensCost,
+      amountTRY: null,
+      reason,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    return {
+      refunded: true,
+      userId,
+      tokens: tokensCost,
+    };
+  });
+};
+
+// =========================================================
+// RTDB BAY TEMIZLIK
+// =========================================================
+const clearBaySessionFields = async (bayId, extraPatch = {}) => {
+  await rtdb.ref(`bays/${bayId}`).update({
+    currentSessionId: null,
+    lastUserId: null,
+    requestedPackage: null,
+    durationSec: null,
+    tokensCost: null,
+    hardwareSelection: "",
+    updatedAt: admin.database.ServerValue.TIMESTAMP,
+    ...extraPatch,
+  });
+};
+
+// =========================================================
+// MQTT EVENTS
+// =========================================================
 mqttClient.on("connect", () => {
   safeLog("✅ MQTT Broker bağlantısı başarılı.");
 
@@ -147,10 +276,6 @@ mqttClient.on("message", async (topic, messageBuffer) => {
   const message = messageBuffer.toString();
   const parts = topic.split("/");
 
-  // Beklenen topic:
-  // qwash/bays/{bayId}/status
-  // qwash/bays/{bayId}/heartbeat
-  // qwash/bays/{bayId}/selection
   if (parts.length !== 4 || parts[0] !== "qwash" || parts[1] !== "bays") {
     return;
   }
@@ -173,66 +298,71 @@ mqttClient.on("message", async (topic, messageBuffer) => {
     }
 
     if (eventType === "heartbeat") {
-  const bayRef = rtdb.ref(`bays/${bayId}`);
-  const snap = await bayRef.once("value");
+      const bayRef = rtdb.ref(`bays/${bayId}`);
+      const snap = await bayRef.once("value");
+      const isBoot = message === "BOOT";
 
-  const isBoot = message === "BOOT";
+      if (!snap.exists()) {
+        await bayRef.update({
+          status: "available",
+          isActive: true,
+          autoOffline: null,
+          currentSessionId: null,
+          lastUserId: null,
+          requestedPackage: null,
+          hardwareSelection: "",
+          durationSec: null,
+          tokensCost: null,
+          createdAt: admin.database.ServerValue.TIMESTAMP,
+          updatedAt: admin.database.ServerValue.TIMESTAMP,
+          lastSeen: admin.database.ServerValue.TIMESTAMP,
+        });
 
-  if (!snap.exists()) {
-    await bayRef.update({
-      status: "available",
-      isActive: true,
-      autoOffline: null,
+        safeLog(`🆕 Yeni peron MQTT ile kaydedildi: ${bayId}`);
+        return;
+      }
 
-      // RTDB'de null yazmak alanı siler.
-      currentSessionId: null,
-      lastUserId: null,
-      requestedPackage: null,
-      hardwareSelection: "",
-      durationSec: null,
-      tokensCost: null,
+      if (isBoot) {
+        const bayData = snap.val() || {};
 
-      createdAt: admin.database.ServerValue.TIMESTAMP,
-      updatedAt: admin.database.ServerValue.TIMESTAMP,
-      lastSeen: admin.database.ServerValue.TIMESTAMP,
-    });
+        if (bayData.currentSessionId) {
+          const refundResult = await refundSessionIfNeeded(
+            bayData.currentSessionId,
+            "bay_reboot_during_session",
+          );
 
-    safeLog(`🆕 Yeni peron MQTT ile kaydedildi: ${bayId}`);
-    return;
-  }
+          if (refundResult.refunded) {
+            safeLog(
+              `💸 BOOT İADESİ: ${bayId} yeniden başladı, ${refundResult.tokens} jeton iade edildi.`,
+            );
+          } else {
+            safeLog(
+              `ℹ️ BOOT sırasında iade yapılmadı: ${bayId} - ${refundResult.reason}`,
+            );
+          }
+        }
 
-  if (isBoot) {
-    await bayRef.update({
-      status: "available",
-      isActive: true,
-      autoOffline: null,
+        await clearBaySessionFields(bayId, {
+          status: "available",
+          isActive: true,
+          autoOffline: null,
+          lastSeen: admin.database.ServerValue.TIMESTAMP,
+        });
 
-      // Cihaz ilk açılış temizliği
-      currentSessionId: null,
-      lastUserId: null,
-      requestedPackage: null,
-      hardwareSelection: "",
-      durationSec: null,
-      tokensCost: null,
+        safeLog(`🔄 BOOT TEMİZLİĞİ: ${bayId} eski session alanları temizlendi.`);
+        return;
+      }
 
-      updatedAt: admin.database.ServerValue.TIMESTAMP,
-      lastSeen: admin.database.ServerValue.TIMESTAMP,
-    });
+      await bayRef.update({
+        lastSeen: admin.database.ServerValue.TIMESTAMP,
+        isActive: true,
+        autoOffline: null,
+        updatedAt: admin.database.ServerValue.TIMESTAMP,
+      });
 
-    safeLog(`🔄 BOOT TEMİZLİĞİ: ${bayId} eski session alanları temizlendi.`);
-    return;
-  }
-
-  await bayRef.update({
-    lastSeen: admin.database.ServerValue.TIMESTAMP,
-    isActive: true,
-    autoOffline: null,
-    updatedAt: admin.database.ServerValue.TIMESTAMP,
-  });
-
-  safeLog(`💓 MQTT HEARTBEAT: ${bayId}`);
-  return;
-}
+      safeLog(`💓 MQTT HEARTBEAT: ${bayId}`);
+      return;
+    }
 
     if (eventType === "selection") {
       await rtdb.ref(`bays/${bayId}`).update({
@@ -249,7 +379,7 @@ mqttClient.on("message", async (topic, messageBuffer) => {
 });
 
 // =========================================================
-// 🛡️ GÜVENLİK DUVARLARI
+// AUTH MIDDLEWARE
 // =========================================================
 const verifyUser = async (req, res, next) => {
   const authHeader = req.headers.authorization || "";
@@ -343,14 +473,66 @@ const verifyAdmin = async (req, res, next) => {
 };
 
 // =========================================================
-// 🔥 UPTIMEROBOT / HEALTH CHECK
+// HEALTH CHECK
 // =========================================================
 app.get("/", (req, res) => {
   return res.status(200).send("QWash API Sapasağlam Ayakta! 🚀");
 });
 
 // ---------------------------------------------------------
-// 1. OTURUM BAŞLATMA API'Sİ
+// QR OKUTULUNCA PERONU WAITING MODUNA AL
+// ---------------------------------------------------------
+app.post("/api/prepare-bay", verifyUser, async (req, res) => {
+  const { bayId } = req.body;
+
+  if (!bayId) {
+    return res.status(400).json({ error: "bayId gerekli." });
+  }
+
+  try {
+    const bayRef = rtdb.ref(`bays/${bayId}`);
+    const baySnap = await bayRef.once("value");
+    const bayData = baySnap.val();
+
+    if (!bayData) {
+      return res.status(404).json({
+        error: "Peron bulunamadı.",
+      });
+    }
+
+    if (bayData.status !== "available" && bayData.status !== "waiting") {
+      return res.status(400).json({
+        error: "Peron şu anda kullanılıyor.",
+      });
+    }
+
+    await bayRef.update({
+      status: "waiting",
+      lastUserId: req.user.uid,
+      hardwareSelection: "",
+      updatedAt: admin.database.ServerValue.TIMESTAMP,
+    });
+
+    const mqttOk = await safeSendBayCommand(bayId, "WAITING");
+
+    return res.status(200).json({
+      success: true,
+      mqttOk,
+      message: mqttOk
+        ? "Peron seçim ekranına alındı."
+        : "Peron waiting yapıldı ama MQTT komutu gönderilemedi.",
+    });
+  } catch (error) {
+    safeLog(`❌ Prepare Bay Hatası: ${error.message}`);
+
+    return res.status(500).json({
+      error: "Peron hazırlanırken sunucu hatası oluştu.",
+    });
+  }
+});
+
+// ---------------------------------------------------------
+// OTURUM BAŞLATMA
 // ---------------------------------------------------------
 app.post("/api/start-session", verifyUser, async (req, res) => {
   const { uid, bayId, packageId } = req.body;
@@ -475,7 +657,7 @@ app.post("/api/start-session", verifyUser, async (req, res) => {
 });
 
 // ---------------------------------------------------------
-// 2. OTURUMU MANUEL DURDURMA API'Sİ
+// OTURUMU MANUEL DURDURMA
 // ---------------------------------------------------------
 app.post("/api/stop-session", verifyUser, async (req, res) => {
   const { bayId, sessionId } = req.body;
@@ -486,7 +668,6 @@ app.post("/api/stop-session", verifyUser, async (req, res) => {
 
   try {
     const sessionRef = db.collection("sessions").doc(sessionId);
-    const rtdbBayRef = rtdb.ref(`bays/${bayId}`);
 
     await sessionRef.update({
       status: "ended",
@@ -494,13 +675,8 @@ app.post("/api/stop-session", verifyUser, async (req, res) => {
       endedReason: "user_stopped",
     });
 
-    await rtdbBayRef.update({
+    await clearBaySessionFields(bayId, {
       status: "waiting",
-      currentSessionId: "",
-      requestedPackage: null,
-      durationSec: null,
-      tokensCost: null,
-      updatedAt: admin.database.ServerValue.TIMESTAMP,
     });
 
     const mqttOk = await safeSendBayCommand(bayId, "WAITING");
@@ -519,7 +695,7 @@ app.post("/api/stop-session", verifyUser, async (req, res) => {
 });
 
 // ---------------------------------------------------------
-// 3. MÜŞTERİ BAKİYE YÜKLEME API'Sİ
+// MÜŞTERİ BAKİYE YÜKLEME
 // ---------------------------------------------------------
 app.post("/api/topup", verifyUser, async (req, res) => {
   const { uid, tokens, amountTRY, kartNo } = req.body;
@@ -601,7 +777,7 @@ app.post("/api/topup", verifyUser, async (req, res) => {
 });
 
 // ---------------------------------------------------------
-// 4. ADMİN PANELİ API'LERİ
+// ADMIN BAY LISTESI
 // ---------------------------------------------------------
 app.get("/api/admin/bays", verifyAdmin, async (req, res) => {
   try {
@@ -625,6 +801,9 @@ app.get("/api/admin/bays", verifyAdmin, async (req, res) => {
   }
 });
 
+// ---------------------------------------------------------
+// ADMIN BAY UPDATE
+// ---------------------------------------------------------
 app.post("/api/admin/update-bay", verifyAdmin, async (req, res) => {
   const { bayId, patch } = req.body;
 
@@ -639,11 +818,12 @@ app.post("/api/admin/update-bay", verifyAdmin, async (req, res) => {
     };
 
     if (patch.status === "available" || patch.status === "offline") {
-      guncellemeVerisi.currentSessionId = "";
-      guncellemeVerisi.lastUserId = "";
+      guncellemeVerisi.currentSessionId = null;
+      guncellemeVerisi.lastUserId = null;
       guncellemeVerisi.requestedPackage = null;
       guncellemeVerisi.durationSec = null;
       guncellemeVerisi.tokensCost = null;
+      guncellemeVerisi.hardwareSelection = "";
     }
 
     await rtdb.ref(`bays/${bayId}`).update(guncellemeVerisi);
@@ -688,6 +868,9 @@ app.post("/api/admin/update-bay", verifyAdmin, async (req, res) => {
   }
 });
 
+// ---------------------------------------------------------
+// ADMIN USER SEARCH
+// ---------------------------------------------------------
 app.post("/api/admin/search-user", verifyAdmin, async (req, res) => {
   const { arama } = req.body;
 
@@ -755,6 +938,9 @@ app.post("/api/admin/search-user", verifyAdmin, async (req, res) => {
   }
 });
 
+// ---------------------------------------------------------
+// ADMIN USER UPDATE
+// ---------------------------------------------------------
 app.post("/api/admin/update-user", verifyAdmin, async (req, res) => {
   const { userId, patch } = req.body;
 
@@ -785,6 +971,9 @@ app.post("/api/admin/update-user", verifyAdmin, async (req, res) => {
   }
 });
 
+// ---------------------------------------------------------
+// ADMIN TOPUP
+// ---------------------------------------------------------
 app.post("/api/admin/topup", verifyAdmin, async (req, res) => {
   const { userId, tokens } = req.body;
 
@@ -860,7 +1049,7 @@ app.post("/api/admin/topup", verifyAdmin, async (req, res) => {
 });
 
 // =========================================================
-// 🔥 SUNUCU AYAĞA KALKARKEN TEMİZLİK
+// STARTUP CLEAN
 // =========================================================
 const systemStartupClean = async () => {
   try {
@@ -876,7 +1065,7 @@ const systemStartupClean = async () => {
         updates[`bays/${bayId}/status`] = "available";
         updates[`bays/${bayId}/isActive`] = true;
         updates[`bays/${bayId}/autoOffline`] = null;
-        updates[`bays/${bayId}/currentSessionId`] = "";
+        updates[`bays/${bayId}/currentSessionId`] = null;
         updates[`bays/${bayId}/requestedPackage`] = null;
         updates[`bays/${bayId}/durationSec`] = null;
         updates[`bays/${bayId}/tokensCost`] = null;
@@ -914,7 +1103,7 @@ const systemStartupClean = async () => {
 };
 
 // =========================================================
-// 🔥 MAIL GÖNDERME - BREVO HTTP API
+// MAIL
 // =========================================================
 const mailCooldown = {};
 const MAIL_COOLDOWN_MS = 10 * 60 * 1000;
@@ -1012,60 +1201,8 @@ const sendAdminAlert = async (bayId, type) => {
   }
 };
 
-// ---------------------------------------------------------
-// QR OKUTULUNCA PERONU WAITING MODUNA AL
-// ---------------------------------------------------------
-app.post("/api/prepare-bay", verifyUser, async (req, res) => {
-  const { bayId } = req.body;
-
-  if (!bayId) {
-    return res.status(400).json({ error: "bayId gerekli." });
-  }
-
-  try {
-    const bayRef = rtdb.ref(`bays/${bayId}`);
-    const baySnap = await bayRef.once("value");
-    const bayData = baySnap.val();
-
-    if (!bayData) {
-      return res.status(404).json({
-        error: "Peron bulunamadı.",
-      });
-    }
-
-    if (bayData.status !== "available" && bayData.status !== "waiting") {
-      return res.status(400).json({
-        error: "Peron şu anda kullanılıyor.",
-      });
-    }
-
-    await bayRef.update({
-      status: "waiting",
-      lastUserId: req.user.uid,
-      hardwareSelection: "",
-      updatedAt: admin.database.ServerValue.TIMESTAMP,
-    });
-
-    const mqttOk = await safeSendBayCommand(bayId, "WAITING");
-
-    return res.status(200).json({
-      success: true,
-      mqttOk,
-      message: mqttOk
-        ? "Peron seçim ekranına alındı."
-        : "Peron waiting yapıldı ama MQTT komutu gönderilemedi.",
-    });
-  } catch (error) {
-    safeLog(`❌ Prepare Bay Hatası: ${error.message}`);
-
-    return res.status(500).json({
-      error: "Peron hazırlanırken sunucu hatası oluştu.",
-    });
-  }
-});
-
 // =========================================================
-// 🔥 TEKİL VE OPTİMİZE EDİLMİŞ CRON JOB
+// CRON
 // =========================================================
 let isHeartbeatCronRunning = false;
 
@@ -1081,9 +1218,7 @@ cron.schedule("* * * * *", async () => {
   try {
     const now = Date.now();
 
-    // ---------------------------------------------------------
     // 1. SÜRESİ DOLMUŞ RUNNING OTURUMLARI KAPAT
-    // ---------------------------------------------------------
     const expiredSessions = await db
       .collection("sessions")
       .where("status", "==", "running")
@@ -1105,7 +1240,7 @@ cron.schedule("* * * * *", async () => {
         const bayId = doc.data().bayId;
 
         bayUpdates[`bays/${bayId}/status`] = "waiting";
-        bayUpdates[`bays/${bayId}/currentSessionId`] = "";
+        bayUpdates[`bays/${bayId}/currentSessionId`] = null;
         bayUpdates[`bays/${bayId}/requestedPackage`] = null;
         bayUpdates[`bays/${bayId}/durationSec`] = null;
         bayUpdates[`bays/${bayId}/tokensCost`] = null;
@@ -1127,9 +1262,7 @@ cron.schedule("* * * * *", async () => {
       });
     }
 
-    // ---------------------------------------------------------
-    // 2. 60 SANİYEDİR WAITING DURUMUNDA OLANLARI AVAILABLE YAP
-    // ---------------------------------------------------------
+    // 2. 60 SANİYEDİR WAITING OLANLARI AVAILABLE YAP
     const waitingBaysSnap = await rtdb
       .ref("bays")
       .orderByChild("status")
@@ -1160,9 +1293,7 @@ cron.schedule("* * * * *", async () => {
       });
     }
 
-    // ---------------------------------------------------------
-    // 3. MQTT HEARTBEAT KONTROLÜ
-    // ---------------------------------------------------------
+    // 3. HEARTBEAT KONTROLÜ - ELEKTRİK / BAĞLANTI KESİNTİSİ
     const timeoutMs = 2 * 60 * 1000;
 
     const deadBaysSnap = await rtdb
@@ -1182,11 +1313,32 @@ cron.schedule("* * * * *", async () => {
         if (bay.status !== "offline" || bay.autoOffline !== true) {
           safeLog(`⚠️ [CRON] KOPMA TESPİT EDİLDİ: ${bayId} otomatik kapatılıyor...`);
 
-          await rtdb.ref(`bays/${bayId}`).update({
+          let refundResult = {
+            refunded: false,
+            reason: "no_active_session",
+          };
+
+          if (bay.currentSessionId) {
+            refundResult = await refundSessionIfNeeded(
+              bay.currentSessionId,
+              "bay_power_loss",
+            );
+
+            if (refundResult.refunded) {
+              safeLog(
+                `💸 JETON İADESİ: ${bayId} elektrik/bağlantı kesintisi nedeniyle ${refundResult.tokens} jeton iade edildi.`,
+              );
+            } else {
+              safeLog(
+                `ℹ️ İade yapılmadı: ${bayId} - ${refundResult.reason}`,
+              );
+            }
+          }
+
+          await clearBaySessionFields(bayId, {
             status: "offline",
             isActive: false,
             autoOffline: true,
-            updatedAt: admin.database.ServerValue.TIMESTAMP,
           });
 
           await sendAdminAlert(bayId, "down");
@@ -1194,9 +1346,7 @@ cron.schedule("* * * * *", async () => {
       }
     }
 
-    // ---------------------------------------------------------
     // 4. BAĞLANTISI GERİ GELENLERİ AÇ
-    // ---------------------------------------------------------
     const autoOfflineBaysSnap = await rtdb
       .ref("bays")
       .orderByChild("autoOffline")
@@ -1210,11 +1360,10 @@ cron.schedule("* * * * *", async () => {
         if (bay.lastSeen && now - bay.lastSeen <= timeoutMs) {
           safeLog(`✅ [CRON] İNTERNET GELDİ: ${bayId} otomatik olarak açılıyor...`);
 
-          await rtdb.ref(`bays/${bayId}`).update({
+          await clearBaySessionFields(bayId, {
             status: "available",
             isActive: true,
             autoOffline: null,
-            updatedAt: admin.database.ServerValue.TIMESTAMP,
           });
 
           await safeSendBayCommand(bayId, "AVAILABLE");
@@ -1230,7 +1379,7 @@ cron.schedule("* * * * *", async () => {
 });
 
 // =========================================================
-// 🚀 BAŞLATMA
+// START
 // =========================================================
 const PORT = process.env.PORT || 3000;
 const HOST = "0.0.0.0";

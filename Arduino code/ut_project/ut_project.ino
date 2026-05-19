@@ -58,7 +58,6 @@ bool isBayActive = true;
 String requestedPackage = "";
 int durationSec = 60;
 
-// Yeni BUSY komutu geldiğinde eski endTime kullanılmasın.
 bool yeniBusyKomutuGeldi = false;
 
 // ================= SURE =================
@@ -144,29 +143,6 @@ void islemHafizasiniTemizle() {
   resetSayacDurumu();
   yeniBusyKomutuGeldi = false;
 }
-
-
-void availableModunaDon(const char* sebep) {
-  LOG_PRINT(F("AVAILABLE moduna donuluyor. Sebep: "));
-  LOG_PRINTLN(sebep);
-
-  odemeBekleniyor = false;
-  dokunmatikKilit = false;
-  hataEkraniGosteriliyor = false;
-
-  requestedPackage = "";
-  durationSec = 60;
-
-  islemHafizasiniTemizle();
-
-  currentStatus = "available";
-  isBayActive = true;
-  durumDegisti = true;
-
-  mqttSecimYayinla("cancel");
-  mqttDurumYayinla();
-}
-
 
 void heapYaz(const char* asama) {
   LOG_PRINT(F("[HEAP] "));
@@ -411,6 +387,30 @@ void mqttSecimYayinla(const String &secilenPaket) {
   );
 }
 
+void availableModunaDon(const char* sebep, bool cancelSelectionGonder) {
+  LOG_PRINT(F("AVAILABLE moduna donuluyor. Sebep: "));
+  LOG_PRINTLN(sebep);
+
+  odemeBekleniyor = false;
+  dokunmatikKilit = false;
+  hataEkraniGosteriliyor = false;
+
+  requestedPackage = "";
+  durationSec = 60;
+
+  islemHafizasiniTemizle();
+
+  currentStatus = "available";
+  isBayActive = true;
+  durumDegisti = true;
+
+  if (cancelSelectionGonder) {
+    mqttSecimYayinla("cancel");
+  }
+
+  mqttDurumYayinla();
+}
+
 void mqttKomutUygula(const String &komut) {
   LOG_PRINT(F("MQTT Komut: "));
   LOG_PRINTLN(komut);
@@ -472,8 +472,6 @@ void mqttKomutUygula(const String &komut) {
       requestedPackage = paketNormalizeEt(gelenPaket);
       durationSec = guvenliDurationOku(gelenSure);
 
-      // Yeni BUSY komutu yeni işlem demektir.
-      // Eski süre kullanılmayacak.
       preferences.putULong("endTime", 0);
       islemBitisZamani = 0;
       resetSayacDurumu();
@@ -562,28 +560,27 @@ bool mqttBaglan() {
   heapYaz("MQTT connect sonrasi");
 
   if (baglandi) {
-  LOG_PRINTLN(F("MQTT baglandi."));
+    LOG_PRINTLN(F("MQTT baglandi."));
 
-  mqttClient.subscribe(mqttTopicCommands.c_str(), 1);
+    mqttClient.subscribe(mqttTopicCommands.c_str(), 1);
 
-  // Sadece cihaz ilk açıldığında BOOT gönder.
-  // Backend bunu görünce Firebase'deki eski session alanlarını temizleyecek.
-  if (!ilkMqttBaglantiTamamlandi) {
-    currentStatus = "available";
-    isBayActive = true;
-    islemHafizasiniTemizle();
-    durumDegisti = true;
+    if (!ilkMqttBaglantiTamamlandi) {
+      if (currentStatus == "baslangic" || currentStatus == "") {
+        currentStatus = "available";
+        isBayActive = true;
+        islemHafizasiniTemizle();
+        durumDegisti = true;
+      }
 
-    mqttBootYayinla();
+      mqttBootYayinla();
+      ilkMqttBaglantiTamamlandi = true;
+    }
 
-    ilkMqttBaglantiTamamlandi = true;
+    mqttDurumYayinla();
+    mqttHeartbeatYayinla();
+
+    return true;
   }
-
-  mqttDurumYayinla();
-  mqttHeartbeatYayinla();
-
-  return true;
-}
 
   LOG_PRINT(F("MQTT hata kodu: "));
   LOG_PRINTLN(mqttClient.state());
@@ -638,7 +635,6 @@ void ekrandaSayaciGuncelle() {
     preferences.putULong("endTime", 0);
     islemBitisZamani = 0;
 
-    // İşlem bitince busy'de kalmasın.
     currentStatus = "waiting";
     odemeBekleniyor = false;
     dokunmatikKilit = false;
@@ -811,7 +807,6 @@ void loop() {
         time_t kayitliBitis = preferences.getULong("endTime", 0);
 
         if (yeniBusyKomutuGeldi) {
-          // Yeni MQTT BUSY komutu geldiyse her zaman yeni süre başlat.
           islemBitisZamani = suAn + durationSec;
           preferences.putULong("endTime", (unsigned long)islemBitisZamani);
           yeniBusyKomutuGeldi = false;
@@ -822,7 +817,6 @@ void loop() {
           LOG_PRINTLN(durationSec);
         }
         else if (kayitliBitis > suAn && currentStatus == "busy") {
-          // Sadece elektrik kesilip cihaz busy halde açılırsa devam et.
           islemBitisZamani = kayitliBitis;
           LOG_PRINTLN(F("Kalan sure hafizadan yuklendi."));
         }
@@ -856,45 +850,44 @@ void loop() {
   if (currentStatus == "busy") {
     ekrandaSayaciGuncelle();
   }
- else if (currentStatus == "waiting" && !dokunmatikKilit) {
-  unsigned long gecenZaman = millis() - beklemeBaslangicMs;
+  else if (currentStatus == "waiting" && !dokunmatikKilit) {
+    unsigned long gecenZaman = millis() - beklemeBaslangicMs;
 
-  if (gecenZaman >= BEKLEME_SURESI_MS) {
-    availableModunaDon("waiting_timeout");
-    return;
-  }
-
-  int maxGenislik = 280;
-  int guncelGenislik = map(
-    gecenZaman,
-    0,
-    BEKLEME_SURESI_MS,
-    maxGenislik,
-    0
-  );
-
-  if (guncelGenislik != sonSeritGenisligi) {
-    tft.fillRect(20, 185, guncelGenislik, 8, TFT_GREEN);
-
-    if (maxGenislik > guncelGenislik) {
-      tft.fillRect(
-        20 + guncelGenislik,
-        185,
-        maxGenislik - guncelGenislik,
-        8,
-        TFT_BLACK
-      );
+    if (gecenZaman >= BEKLEME_SURESI_MS) {
+      availableModunaDon("waiting_timeout", false);
+      return;
     }
 
-    sonSeritGenisligi = guncelGenislik;
+    int maxGenislik = 280;
+    int guncelGenislik = map(
+      gecenZaman,
+      0,
+      BEKLEME_SURESI_MS,
+      maxGenislik,
+      0
+    );
+
+    if (guncelGenislik != sonSeritGenisligi) {
+      tft.fillRect(20, 185, guncelGenislik, 8, TFT_GREEN);
+
+      if (maxGenislik > guncelGenislik) {
+        tft.fillRect(
+          20 + guncelGenislik,
+          185,
+          maxGenislik - guncelGenislik,
+          8,
+          TFT_BLACK
+        );
+      }
+
+      sonSeritGenisligi = guncelGenislik;
+    }
   }
-}
 
   if (currentStatus == "waiting" && !dokunmatikKilit && !hataEkraniGosteriliyor) {
     String secilenPaket = "";
 
     if (digitalRead(btnKopukPin) == LOW) {
-      // Fiziksel buton köpük butonu olarak kaldı.
       secilenPaket = "foam";
     }
 
@@ -905,15 +898,13 @@ void loop() {
         if (y >= 190 && y <= 240 && x >= 90 && x <= 230) {
           secilenPaket = "cancel";
         }
-else if (y > 80 && y < 170) {
-  if (x > 20 && x < 150) {
-    // Dokunmatik X ekseni ters geldiği için burası KOPUK olarak algılanıyor.
-    secilenPaket = "foam";
-  } else if (x > 170 && x < 300) {
-    // Dokunmatik X ekseni ters geldiği için burası SU olarak algılanıyor.
-    secilenPaket = "wash";
-  }
-}
+        else if (y > 80 && y < 170) {
+          if (x > 20 && x < 150) {
+            secilenPaket = "wash";
+          } else if (x > 170 && x < 300) {
+            secilenPaket = "foam";
+          }
+        }
       }
     }
 
@@ -927,13 +918,10 @@ else if (y > 80 && y < 170) {
         tft.setTextColor(TFT_RED);
         tft.println("Iptal ediliyor...");
 
-        mqttSecimYayinla("cancel");
+        delay(300);
 
-        currentStatus = "available";
-        odemeBekleniyor = false;
-        dokunmatikKilit = false;
-        islemHafizasiniTemizle();
-        durumDegisti = true;
+        availableModunaDon("user_cancel", true);
+        return;
       } else {
         mqttSecimYayinla(secilenPaket);
 
@@ -957,10 +945,8 @@ else if (y > 80 && y < 170) {
 
   if (odemeBekleniyor && currentStatus == "waiting") {
     if (millis() - odemeBeklemeBaslangicMs >= ODEME_BEKLEME_TIMEOUT_MS) {
-      odemeBekleniyor = false;
-      dokunmatikKilit = false;
-      islemHafizasiniTemizle();
-      durumDegisti = true;
+      availableModunaDon("odeme_timeout", true);
+      return;
     }
   }
 }
