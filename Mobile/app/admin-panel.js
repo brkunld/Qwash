@@ -3,7 +3,7 @@ import {
   View,
   Text,
   TextInput,
-  TouchableOpacity,
+  Pressable,
   FlatList,
   ActivityIndicator,
   Alert,
@@ -14,7 +14,17 @@ import { BleManager } from "react-native-ble-plx";
 import base64 from "react-native-base64";
 import { signOut } from "firebase/auth";
 import { auth } from "../firebase";
-import { router } from "expo-router";
+import { useRouter } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
+
+// Kullanıcı ekranındaki (kullanici.js) renk ve tema sabitleri
+const DARK = "#1a1a2e";
+const YELLOW = "#f5a623";
+const WHITE = "#ffffff";
+const GRAY_BG = "#f2f4f7";
+const GRAY_BORDER = "#e2e6ea";
+const GRAY_TEXT = "#6b7280";
+const DARK_TEXT = "#111827";
 
 const SERVICE_UUID = "4fafc201-1fb5-459e-8fcc-c5c9c331914b";
 const CHARACTERISTIC_UUID = "beb5483e-36e1-4688-b7f5-ea07361b26a8";
@@ -22,6 +32,7 @@ const CHARACTERISTIC_UUID = "beb5483e-36e1-4688-b7f5-ea07361b26a8";
 const bleManager = new BleManager();
 
 export default function AdminPanel() {
+  const router = useRouter();
   const [sifre, setSifre] = useState("1453");
   const [taranıyor, setTaraniyor] = useState(false);
   const [cihazlar, setCihazlar] = useState([]);
@@ -134,80 +145,109 @@ export default function AdminPanel() {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" />
+      <StatusBar barStyle="light-content" backgroundColor={DARK} />
 
-      {/* Üst Bar Tasarımı */}
+      {/* Header Tasarımı (kullanici.js ile birebir aynı) */}
       <View style={styles.header}>
-        <View>
-          <Text style={styles.headerSubtitle}>Qwash Yönetim</Text>
-          <Text style={styles.headerTitle}>Admin Paneli</Text>
+        <View style={styles.headerBadge}>
+          <Text style={styles.headerBadgeText}> Admin Paneli </Text>
         </View>
-        <TouchableOpacity style={styles.logoutButton} onPress={handleCikis}>
-          <Text style={styles.logoutButtonText}>Çıkış</Text>
-        </TouchableOpacity>
+
+        <View style={styles.headerRight}>
+          <Pressable onPress={handleCikis} style={styles.headerBtn}>
+            <Ionicons name="log-out-outline" size={18} color={WHITE} />
+          </Pressable>
+        </View>
       </View>
 
-      {/* Şifre Girdi Kartı */}
-      <View style={styles.card}>
-        <Text style={styles.cardLabel}>Fabrika Sıfırlama Şifresi</Text>
-        <TextInput
-          style={styles.input}
-          value={sifre}
-          onChangeText={setSifre}
-          keyboardType="numeric"
-          placeholder="Şifre"
-          placeholderTextColor="#666"
-        />
-        <Text style={styles.cardHint}>
-          * Gönderilecek komut otomatik olarak &apos;RESET_{sifre}&apos; halini alacaktır.
-        </Text>
-      </View>
-
-      {/* Tarama Tetikleyici */}
-      <TouchableOpacity
-        style={[styles.primaryButton, taranıyor && styles.buttonDisabled]}
-        onPress={cihazlariTara}
-        disabled={taranıyor}
-      >
-        {taranıyor ? (
-          <ActivityIndicator color="#fff" />
-        ) : (
-          <Text style={styles.buttonText}>Yakındaki Peronları Ara</Text>
-        )}
-      </TouchableOpacity>
-
-      <Text style={styles.statusText}>{islemDurumu}</Text>
-
-      {/* Bulunan Donanımların Listesi */}
       <FlatList
+        style={styles.scroll}
+        contentContainerStyle={{ paddingBottom: 24 }}
         data={cihazlar}
         keyExtractor={(item) => item.id}
-        renderItem={({ item }) => (
-          <View style={styles.deviceCard}>
-            <View style={styles.deviceInfo}>
-              <Text style={styles.deviceName}>{item.name}</Text>
-              <Text style={styles.deviceId}>MAC: {item.id}</Text>
+        showsVerticalScrollIndicator={false}
+        ListHeaderComponent={
+          <>
+            {/* Şifre Kartı */}
+            <View style={styles.card}>
+              <Text style={styles.cardLabel}>⚙️ Fabrika Sıfırlama Şifresi</Text>
+              <TextInput
+                style={styles.input}
+                value={sifre}
+                onChangeText={setSifre}
+                keyboardType="numeric"
+                placeholder="Şifre"
+                placeholderTextColor={GRAY_TEXT}
+              />
+              <Text style={styles.cardHint}>
+                * Gönderilecek komut otomatik olarak &apos;RESET_{sifre}&apos; halini
+                alacaktır.
+              </Text>
             </View>
-            <TouchableOpacity
-              style={styles.deviceActionButton}
-              onPress={() => cihazaBaglanVeSifirla(item)}
-              disabled={baglanilanCihaz !== null}
+
+            {/* Tarama Butonu */}
+            <Pressable
+              style={[styles.yellowBtn, taranıyor && styles.btnDisabled]}
+              onPress={cihazlariTara}
+              disabled={taranıyor}
             >
-              {baglanilanCihaz === item.id ? (
-                <ActivityIndicator color="#fff" size="small" />
+              {taranıyor ? (
+                <ActivityIndicator color={DARK} />
               ) : (
-                <Text style={styles.deviceActionButtonText}>Sıfırla</Text>
+                <Text style={styles.yellowBtnText}>
+                  Yakındaki Peronları Ara
+                </Text>
               )}
-            </TouchableOpacity>
+            </Pressable>
+
+            <Text style={styles.statusText}>{islemDurumu}</Text>
+          </>
+        }
+        renderItem={({ item }) => (
+          <View style={styles.card}>
+            <View style={styles.cardHeaderRow}>
+              <View style={{ flexDirection: "row", alignItems: "center" }}>
+                <View style={styles.bayBadge}>
+                  <Ionicons
+                    name="bluetooth"
+                    size={14}
+                    color={DARK}
+                    style={{ marginRight: 4 }}
+                  />
+                  <Text style={styles.bayIdText}>{item.name}</Text>
+                </View>
+              </View>
+            </View>
+
+            <View style={styles.sessionBox}>
+              <Text style={styles.macAddressText}>MAC: {item.id}</Text>
+
+              <Pressable
+                style={[
+                  styles.redBtn,
+                  baglanilanCihaz !== null &&
+                    baglanilanCihaz !== item.id &&
+                    styles.btnDisabled,
+                ]}
+                onPress={() => cihazaBaglanVeSifirla(item)}
+                disabled={baglanilanCihaz !== null}
+              >
+                {baglanilanCihaz === item.id ? (
+                  <ActivityIndicator color={WHITE} size="small" />
+                ) : (
+                  <Text style={styles.redBtnText}>
+                    Sıfırla ve Kuruluma Geçir
+                  </Text>
+                )}
+              </Pressable>
+            </View>
           </View>
         )}
         ListEmptyComponent={() =>
           !taranıyor && (
-            <View style={styles.emptyContainer}>
-              <Text style={styles.emptyText}>
-                Çevrede taranmış Qwash donanımı bulunamadı.
-              </Text>
-            </View>
+            <Text style={styles.emptyText}>
+              Çevrede taranmış Qwash donanımı bulunamadı.
+            </Text>
           )
         }
       />
@@ -218,102 +258,149 @@ export default function AdminPanel() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#0b0b0c",
-    paddingHorizontal: 20,
-    paddingTop: 60,
+    backgroundColor: GRAY_BG,
+  },
+  scroll: {
+    flex: 1,
+    paddingHorizontal: 12,
+    paddingTop: 10,
   },
   header: {
+    backgroundColor: DARK,
+    paddingTop: 48,
+    paddingBottom: 10,
+    paddingHorizontal: 12,
     flexDirection: "row",
-    alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 25,
+    alignItems: "center",
   },
-  headerSubtitle: {
-    color: "#8e8e93",
-    fontSize: 13,
+  headerBadge: {
+    backgroundColor: YELLOW,
+    borderRadius: 6,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+  },
+  headerBadgeText: {
+    fontSize: 15,
+    fontWeight: "900",
+    color: DARK_TEXT,
+    letterSpacing: 0.5,
+  },
+  headerRight: {
+    flexDirection: "row",
+    gap: 6,
+  },
+  headerBtn: {
+    backgroundColor: "rgba(255,255,255,0.12)",
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  card: {
+    backgroundColor: WHITE,
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 10,
+    shadowColor: "#000",
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+    overflow: "hidden",
+  },
+  cardHeaderRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 6,
+  },
+  cardLabel: {
+    fontSize: 12,
+    color: GRAY_TEXT,
     fontWeight: "600",
+    marginBottom: 8,
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
-  headerTitle: {
-    color: "#ffffff",
-    fontSize: 28,
-    fontWeight: "700",
-    marginTop: 2,
-  },
-  logoutButton: {
-    backgroundColor: "#222224",
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 20,
-  },
-  logoutButtonText: { color: "#ff453a", fontSize: 14, fontWeight: "600" },
-  card: {
-    backgroundColor: "#1c1c1e",
-    padding: 18,
-    borderRadius: 16,
-    marginBottom: 20,
-  },
-  cardLabel: {
-    color: "#aeaeaf",
-    fontSize: 14,
-    fontWeight: "600",
-    marginBottom: 8,
-  },
   input: {
-    backgroundColor: "#2c2c2e",
-    color: "#ffffff",
-    paddingVertical: 12,
-    paddingHorizontal: 16,
+    borderWidth: 1.5,
+    borderColor: GRAY_BORDER,
     borderRadius: 12,
-    fontSize: 18,
-    fontWeight: "600",
-    letterSpacing: 1.5,
+    padding: 12,
+    fontSize: 15,
+    color: DARK_TEXT,
+    backgroundColor: GRAY_BG,
   },
   cardHint: {
-    color: "#636366",
+    color: GRAY_TEXT,
     fontSize: 12,
-    marginTop: 10,
+    marginTop: 8,
     fontStyle: "italic",
   },
-  primaryButton: {
-    backgroundColor: "#ffffff",
-    paddingVertical: 16,
-    borderRadius: 14,
+  yellowBtn: {
+    marginTop: 6,
+    backgroundColor: YELLOW,
+    padding: 14,
+    borderRadius: 12,
     alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 12,
+    marginBottom: 14,
   },
-  buttonDisabled: { backgroundColor: "#3a3a3c" },
-  buttonText: { color: "#000000", fontSize: 16, fontWeight: "700" },
+  yellowBtnText: {
+    color: DARK,
+    fontWeight: "800",
+    fontSize: 15,
+  },
+  btnDisabled: {
+    backgroundColor: "#c4c4c4",
+  },
   statusText: {
-    color: "#8e8e93",
+    color: GRAY_TEXT,
     textAlign: "center",
     fontStyle: "italic",
     fontSize: 13,
     marginBottom: 20,
   },
-  deviceCard: {
-    backgroundColor: "#1c1c1e",
-    padding: 16,
-    borderRadius: 14,
+  bayBadge: {
+    backgroundColor: YELLOW,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 12,
   },
-  deviceInfo: { flex: 1 },
-  deviceName: { color: "#ffffff", fontSize: 16, fontWeight: "600" },
-  deviceId: { color: "#8e8e93", fontSize: 12, marginTop: 4 },
-  deviceActionButton: {
-    backgroundColor: "#ff453a",
-    paddingVertical: 10,
-    paddingHorizontal: 18,
-    borderRadius: 10,
+  bayIdText: {
+    fontSize: 15,
+    fontWeight: "900",
+    color: "#000",
+  },
+  sessionBox: {
+    marginTop: 6,
+    borderTopWidth: 1,
+    borderTopColor: GRAY_BORDER,
+    paddingTop: 10,
+  },
+  macAddressText: {
+    color: GRAY_TEXT,
+    fontSize: 12,
+    marginBottom: 10,
+    fontWeight: "500",
+  },
+  redBtn: {
+    backgroundColor: "#FF3B30",
+    padding: 13,
+    borderRadius: 12,
+    alignItems: "center",
     justifyContent: "center",
-    alignItems: "center",
   },
-  deviceActionButtonText: { color: "#ffffff", fontWeight: "700", fontSize: 14 },
-  emptyContainer: { paddingVertical: 40, alignItems: "center" },
-  emptyText: { color: "#48484a", fontSize: 14, textAlign: "center" },
+  redBtnText: {
+    color: WHITE,
+    fontWeight: "700",
+    fontSize: 14,
+  },
+  emptyText: {
+    textAlign: "center",
+    color: GRAY_TEXT,
+    marginTop: 20,
+    fontSize: 14,
+  },
 });

@@ -40,11 +40,10 @@ Preferences preferences;
 time_t islemBitisZamani = 0;
 
 const int buzzerPin = 25;
-// FİZİKSEL AYAR BUTONU (32) TAMAMEN KALDIRILDI!
 
 String bayId = "";        
 String macAdresi = "";    
-String currentStatus = "baslangic";
+String currentStatus = "baslangic"; // Başlangıç durumu
 bool isBayActive = true;
 String requestedPackage = "";
 int durationSec = 60;
@@ -87,23 +86,19 @@ unsigned long sayacSonYarimSaniyeMs = 0;
 bool sayacIslemBittiCalindi = false;
 
 // ================= BLE (BLUETOOTH) AYARLARI =================
-// Mobil uygulamanın bağlanacağı evrensel benzersiz kimlikler (UUID)
 #define SERVICE_UUID        "4fafc201-1fb5-459e-8fcc-c5c9c331914b"
 #define CHARACTERISTIC_UUID "beb5483e-36e1-4688-b7f5-ea07361b26a8"
 
-bool bleResetIstendi = false; // Telefondan komut gelirse true olacak
+bool bleResetIstendi = false; 
 
-// Telefondan Bluetooth üzerinden gelen mesajları dinleyen sınıf
 class MyCallbacks: public BLECharacteristicCallbacks {
     void onWrite(BLECharacteristic *pCharacteristic) {
-      // ESP32 Sürüm 3.x ile uyumlu: Artık doğrudan Arduino String olarak okuyoruz
       String rxValue = pCharacteristic->getValue();
 
       if (rxValue.length() > 0) {
         LOG_PRINT("Bluetooth'tan gelen: ");
         LOG_PRINTLN(rxValue);
         
-        // Eğer mobilden gelen şifreli mesaj doğruysa sıfırlama bayrağını kaldır
         if (rxValue == "RESET_1453") {
           bleResetIstendi = true;
         }
@@ -135,7 +130,6 @@ void bleBaslat() {
   
   LOG_PRINTLN("BLE Baslatildi! Baglanti bekleniyor...");
 }
-// =============================================================
 
 // ================= YARDIMCI FONKSIYONLAR =================
 void makeBayPath(char *out, size_t outSize, const char *child) {
@@ -446,9 +440,7 @@ void setup() {
   macAdresi = rawMac;
   bayId = "bay_" + macAdresi; 
 
-  // ================= BLE YAYININI BAŞLAT =================
   bleBaslat(); 
-  // =======================================================
 
   if (!wifiBaglan(WIFI_TIMEOUT_MS)) {
     currentStatus = "offline";
@@ -476,7 +468,14 @@ void setup() {
       char statusPath[96];
       makeBayPath(statusPath, sizeof(statusPath), "status");
       
-      if (!Firebase.RTDB.getString(&fbdo, statusPath) || fbdo.stringData() == "null" || fbdo.stringData() == "") {
+      // HATA 1 ÇÖZÜMÜ: Eğer Firebase'de cihazın statüsü zaten varsa bunu currentStatus'e ata
+      if (Firebase.RTDB.getString(&fbdo, statusPath) && fbdo.stringData() != "null" && fbdo.stringData() != "") {
+         currentStatus = fbdo.stringData();
+      } 
+      // Yoksa yeni oluştur ve local durumu available yap
+      else {
+         currentStatus = "available";
+         
          FirebaseJson yeniCihazVerisi;
          yeniCihazVerisi.set("status", "available"); 
          yeniCihazVerisi.set("isActive", true); 
@@ -497,6 +496,7 @@ void setup() {
          makeBayPath(rootPath, sizeof(rootPath), nullptr); 
          Firebase.RTDB.updateNode(&fbdo, rootPath, &yeniCihazVerisi);
       }
+      durumDegisti = true; // Setup sonrası loop'ta arayüzün çizilmesini tetikle
 
       streamBaslatildi = streamBaslat();
 
@@ -519,9 +519,8 @@ void setup() {
 void loop() {
   static String eskiDurum = "";
 
-  // ================= BLUETOOTH UZAKTAN SIFIRLAMA KONTROLÜ =================
   if (bleResetIstendi) {
-    bleResetIstendi = false; // Bayrağı indir
+    bleResetIstendi = false; 
     
     tft.fillScreen(TFT_BLACK);
     tft.setTextColor(TFT_RED);
@@ -529,15 +528,14 @@ void loop() {
     tft.setCursor(30, 100);
     tft.println("SIFIRLANIYOR");
     
-    tone(buzzerPin, 1000, 1500); // 1.5 Saniyelik uzun bip sesi
+    tone(buzzerPin, 1000, 1500); 
     delay(1500);
     
     WiFiManager wm;
-    wm.resetSettings(); // Hafızadaki Wi-Fi silinir
+    wm.resetSettings(); 
     delay(500);
-    ESP.restart(); // Cihaz yeniden başlar ve şifre olmadığı için Kurulum Moduna girer
+    ESP.restart(); 
   }
-  // =========================================================================
 
   if (WiFi.status() != WL_CONNECTED) {
     if (millis() - sonWifiDenemeMs >= WIFI_RETRY_INTERVAL_MS) {
@@ -549,12 +547,20 @@ void loop() {
 
       if (WiFi.status() == WL_CONNECTED) {
         isBayActive = true;
-        currentStatus = "baslangic";
         durumDegisti = true;
 
         if (!firebaseBaslatildi) firebaseKurulumYap();
 
         if (firebaseHazirBekle(FIREBASE_TIMEOUT_MS)) {
+          // HATA 2 ÇÖZÜMÜ: Cihaz kopup tekrar bağlandığında status'ü "baslangic" yapmak yerine Firebase'den asıl durumu çekiyoruz.
+          char statusPath[96];
+          makeBayPath(statusPath, sizeof(statusPath), "status");
+          if (Firebase.RTDB.getString(&fbdo, statusPath) && fbdo.stringData() != "null" && fbdo.stringData() != "") {
+             currentStatus = fbdo.stringData();
+          } else {
+             currentStatus = "available";
+          }
+
           streamBaslatildi = streamBaslat();
           nabizGonder();
           sonNabizZamani = millis();
@@ -645,6 +651,13 @@ void loop() {
         }
         resetSayacDurumu();
       }
+    } else if (currentStatus == "baslangic") {
+      // Setup içindeki bekleme esnasında ekranda anlamsız hata basmasın
+      tft.fillScreen(TFT_BLACK);
+      tft.setTextColor(TFT_WHITE);
+      tft.setTextSize(2);
+      tft.setCursor(20, 100);
+      tft.println("Durum Aliniyor...");
     } else {
       tft.fillScreen(TFT_BLACK);
       tft.setTextColor(TFT_RED);
@@ -685,10 +698,11 @@ void loop() {
           secilenPaket = "cancel";
         }
         else if (y > 80 && y < 170) {
+          // HATA 3 ÇÖZÜMÜ: Koordinatlar yanlış eşleşmişti (x>20 mavi buton olan SU'dur)
           if (x > 20 && x < 150) {
-            secilenPaket = "foam"; 
+            secilenPaket = "wash"; // Eskiden foam yazıyordu
           } else if (x > 170 && x < 300) {
-            secilenPaket = "wash"; 
+            secilenPaket = "foam"; // Eskiden wash yazıyordu
           }
         }
       }

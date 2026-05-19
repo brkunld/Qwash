@@ -12,9 +12,7 @@
       "bundleIdentifier": "com.brkunld.utproject",
       "infoPlist": {
         "NFCReaderUsageDescription": "Araç yıkama peronlarına bağlanmak için NFC özelliğine ihtiyacımız var.",
-        "NSCameraUsageDescription": "QR kod okumak için kameraya erişim gereklidir.",
-        "NSBluetoothAlwaysUsageDescription": "Qwash, peronlara kablosuz bağlanmak ve onları yapılandırmak için Bluetooth'a ihtiyaç duyar.",
-        "NSBluetoothPeripheralUsageDescription": "Qwash, peronlara kablosuz bağlanmak ve onları yapılandırmak için Bluetooth'a ihtiyaç duyar."
+        "NSCameraUsageDescription": "QR kod okumak için kameraya erişim gereklidir."
       },
       "entitlements": {
         "com.apple.developer.nfc.readersession.formats": ["NDEF", "TAG"]
@@ -24,12 +22,7 @@
       "package": "com.brkunld.utproject",
       "permissions": [
         "android.permission.NFC",
-        "android.permission.CAMERA",
-        "android.permission.BLUETOOTH",
-        "android.permission.BLUETOOTH_ADMIN",
-        "android.permission.BLUETOOTH_CONNECT",
-        "android.permission.BLUETOOTH_SCAN",
-        "android.permission.ACCESS_FINE_LOCATION"
+        "android.permission.CAMERA"
       ],
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE"
@@ -59,17 +52,6 @@
         "expo-camera",
         {
           "cameraPermission": "QR kod okumak için kameraya erişim gereklidir."
-        }
-      ],
-      [
-        "react-native-ble-plx",
-        {
-          "isBackgroundEnabled": true,
-          "modes": [
-            "peripheral",
-            "central"
-          ],
-          "bluetoothAlwaysPermission": "Qwash, peronlara kablosuz bağlanmak ve onları yapılandırmak için Bluetooth'a ihtiyaç duyar."
         }
       ]
     ],
