@@ -59,7 +59,7 @@ export default function Login() {
 
       // 3. Admin (Özel Yetki - Custom Claims) Kontrolü
       // Veritabanına sormadan doğrudan kullanıcının şifreli jetonunu çözüyoruz
-      const idTokenResult = await user.getIdTokenResult();
+      const idTokenResult = await user.getIdTokenResult(true);
       const isAdmin =
         idTokenResult.claims.admin === true ||
         idTokenResult.claims.role === "admin";

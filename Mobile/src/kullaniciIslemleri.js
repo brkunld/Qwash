@@ -14,7 +14,6 @@ import {
 import {
   onValue,
   ref,
-  serverTimestamp as rtdbServerTimestamp,
   update,
 } from "firebase/database";
 
