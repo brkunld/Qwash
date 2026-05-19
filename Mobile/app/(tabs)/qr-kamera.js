@@ -18,7 +18,7 @@ import { auth } from "../../firebase";
 // Daha temiz yöntem: .env içine EXPO_PUBLIC_API_BASE_URL koymak.
 // Örnek: EXPO_PUBLIC_API_BASE_URL=https://qwash-backend.onrender.com
 const API_BASE_URL =
-  process.env.EXPO_PUBLIC_API_BASE_URL || "https://SENIN_RENDER_URL.onrender.com";
+  process.env.EXPO_PUBLIC_API_BASE_URL || "https://qwash-8q4y.onrender.com";
 
 export default function QrKamera() {
   const [permission, requestPermission] = useCameraPermissions();
@@ -201,19 +201,6 @@ export default function QrKamera() {
         barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
         onBarcodeScanned={okundu}
       />
-
-      <View style={styles.bottomContainer}>
-        <Pressable
-          onPress={() => router.back()}
-          disabled={yukleniyor}
-          style={[
-            styles.closeButton,
-            yukleniyor && styles.closeButtonDisabled,
-          ]}
-        >
-          <Text style={{ fontWeight: "700" }}>Kapat</Text>
-        </Pressable>
-      </View>
     </View>
   );
 }

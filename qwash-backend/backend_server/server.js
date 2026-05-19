@@ -173,39 +173,66 @@ mqttClient.on("message", async (topic, messageBuffer) => {
     }
 
     if (eventType === "heartbeat") {
-      const bayRef = rtdb.ref(`bays/${bayId}`);
-      const snap = await bayRef.once("value");
+  const bayRef = rtdb.ref(`bays/${bayId}`);
+  const snap = await bayRef.once("value");
 
-      if (!snap.exists()) {
-        await bayRef.update({
-          status: "available",
-          isActive: true,
-          autoOffline: null,
-          currentSessionId: "",
-          lastUserId: "",
-          requestedPackage: null,
-          hardwareSelection: "",
-          durationSec: null,
-          tokensCost: null,
-          createdAt: admin.database.ServerValue.TIMESTAMP,
-          updatedAt: admin.database.ServerValue.TIMESTAMP,
-          lastSeen: admin.database.ServerValue.TIMESTAMP,
-        });
+  const isBoot = message === "BOOT";
 
-        safeLog(`🆕 Yeni peron MQTT ile kaydedildi: ${bayId}`);
-        return;
-      }
+  if (!snap.exists()) {
+    await bayRef.update({
+      status: "available",
+      isActive: true,
+      autoOffline: null,
 
-      await bayRef.update({
-        lastSeen: admin.database.ServerValue.TIMESTAMP,
-        isActive: true,
-        autoOffline: null,
-        updatedAt: admin.database.ServerValue.TIMESTAMP,
-      });
+      // RTDB'de null yazmak alanı siler.
+      currentSessionId: null,
+      lastUserId: null,
+      requestedPackage: null,
+      hardwareSelection: "",
+      durationSec: null,
+      tokensCost: null,
 
-      safeLog(`💓 MQTT HEARTBEAT: ${bayId}`);
-      return;
-    }
+      createdAt: admin.database.ServerValue.TIMESTAMP,
+      updatedAt: admin.database.ServerValue.TIMESTAMP,
+      lastSeen: admin.database.ServerValue.TIMESTAMP,
+    });
+
+    safeLog(`🆕 Yeni peron MQTT ile kaydedildi: ${bayId}`);
+    return;
+  }
+
+  if (isBoot) {
+    await bayRef.update({
+      status: "available",
+      isActive: true,
+      autoOffline: null,
+
+      // Cihaz ilk açılış temizliği
+      currentSessionId: null,
+      lastUserId: null,
+      requestedPackage: null,
+      hardwareSelection: "",
+      durationSec: null,
+      tokensCost: null,
+
+      updatedAt: admin.database.ServerValue.TIMESTAMP,
+      lastSeen: admin.database.ServerValue.TIMESTAMP,
+    });
+
+    safeLog(`🔄 BOOT TEMİZLİĞİ: ${bayId} eski session alanları temizlendi.`);
+    return;
+  }
+
+  await bayRef.update({
+    lastSeen: admin.database.ServerValue.TIMESTAMP,
+    isActive: true,
+    autoOffline: null,
+    updatedAt: admin.database.ServerValue.TIMESTAMP,
+  });
+
+  safeLog(`💓 MQTT HEARTBEAT: ${bayId}`);
+  return;
+}
 
     if (eventType === "selection") {
       await rtdb.ref(`bays/${bayId}`).update({
