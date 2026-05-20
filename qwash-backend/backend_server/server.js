@@ -7,6 +7,16 @@ const cors = require("cors");
 const admin = require("firebase-admin");
 const cron = require("node-cron");
 const mqtt = require("mqtt");
+const Iyzipay = require("iyzipay"); // 1. Iyzico Paketi Eklendi
+
+// =========================================================
+// IYZICO SANDBOX YAPILANDIRMASI
+// =========================================================
+const iyzipay = new Iyzipay({
+  apiKey: process.env.IYZICO_API_KEY,
+  secretKey: process.env.IYZICO_SECRET_KEY,
+  uri: process.env.IYZICO_URI || "https://sandbox-api.iyzipay.com"
+});
 
 // =========================================================
 // FIREBASE SERVICE ACCOUNT
@@ -682,7 +692,7 @@ app.post("/api/start-session", verifyUser, async (req, res) => {
     if (error.message === "Paket_Bulunamadi") {
       return res
         .status(404)
-        .json({ error: "İstenilen paket sistemde bulunamadı." });
+        .json({ error: "İtenilen paket sistemde bulunamadı." });
     }
 
     if (error.message === "Gecersiz_Paket_Degerleri") {
@@ -795,17 +805,14 @@ app.post("/api/stop-session", verifyUser, async (req, res) => {
 });
 
 // ---------------------------------------------------------
-// MÜŞTERİ BAKİYE YÜKLEME
+// MÜŞTERİ BAKİYE YÜKLEME (IYZICO SANDBOX ENTEGRELİ)
 // ---------------------------------------------------------
 app.post("/api/topup", verifyUser, async (req, res) => {
-  const { uid, tokens, amountTRY, kartNo } = req.body;
+  // Yeni kurguda tüm kart bilgilerini bekliyoruz
+  const { uid, tokens, amountTRY, cardHolderName, cardNumber, expireMonth, expireYear, cvc } = req.body;
 
-  if (!uid || !tokens || !amountTRY) {
-    return res.status(400).json({ error: "Eksik parametre." });
-  }
-
-  if (!kartNo || kartNo.length < 12) {
-    return res.status(400).json({ error: "Geçersiz Kart Numarası" });
+  if (!uid || !tokens || !amountTRY || !cardHolderName || !cardNumber || !expireMonth || !expireYear || !cvc) {
+    return res.status(400).json({ error: "Eksik parametre gönderildi. Tüm kart alanları zorunludur." });
   }
 
   const eklenecekJeton = parseInt(tokens, 10);
@@ -813,7 +820,7 @@ app.post("/api/topup", verifyUser, async (req, res) => {
 
   if (!Number.isFinite(eklenecekJeton) || eklenecekJeton <= 0) {
     return res.status(400).json({
-      error: "Geçersiz jeton miktarı! Sistem manipülasyonu engellendi.",
+      error: "Geçersiz jeton miktarı!",
     });
   }
 
@@ -823,58 +830,129 @@ app.post("/api/topup", verifyUser, async (req, res) => {
 
   try {
     const userRef = db.collection("users").doc(uid);
-    const txRef = db.collection("transactions").doc();
+    const userDoc = await userRef.get();
 
-    await db.runTransaction(async (t) => {
-      const userDoc = await t.get(userRef);
-      if (!userDoc.exists) throw new Error("Kullanıcı_Bulunamadi");
-
-      if (userDoc.data().isBlocked === true) {
-        throw new Error("Engellenmis_Kullanici");
-      }
-
-      const mevcutBakiye = Number(userDoc.data().walletTokens || 0);
-
-      t.update(userRef, {
-        walletTokens: mevcutBakiye + eklenecekJeton,
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      });
-
-      t.set(txRef, {
-        type: "topup",
-        status: "success",
-        tokens: eklenecekJeton,
-        unitPriceTRY: eklenecekTutar / eklenecekJeton,
-        amountTRY: eklenecekTutar,
-        userId: uid,
-        adminId: null,
-        bayId: null,
-        packageId: null,
-        sessionId: null,
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
-      });
-    });
-
-    safeLog(
-      `✅ MÜŞTERİ ÖDEMESİ BAŞARILI: ${uid} -> ${eklenecekJeton} jeton eklendi.`,
-    );
-
-    return res.status(200).json({
-      success: true,
-      message: "Bakiye başarıyla yüklendi.",
-    });
-  } catch (error) {
-    safeLog(`❌ Müşteri ödeme hatası: ${error.message}`);
-
-    if (error.message === "Engellenmis_Kullanici") {
-      return res.status(403).json({
-        error: "Hesabınız askıya alındığı için bakiye yükleyemezsiniz.",
-      });
+    if (!userDoc.exists) {
+      return res.status(404).json({ error: "Kullanıcı bulunamadı." });
     }
 
-    return res.status(500).json({
-      error: "Sunucu hatası, yükleme yapılamadı.",
+    if (userDoc.data().isBlocked === true) {
+      return res.status(403).json({ error: "Hesabınız askıya alındığı için bakiye yükleyemezsiniz." });
+    }
+
+    // Iyzico Ödeme Talebi Objesi
+    const iyzicoRequest = {
+      locale: Iyzipay.LOCALE.TR,
+      conversationId: "QWASH_" + Date.now(),
+      price: eklenecekTutar.toString(),
+      paidPrice: eklenecekTutar.toString(),
+      currency: Iyzipay.CURRENCY.TRY,
+      installment: "1",
+      basketId: "BASKET_" + Date.now(),
+      paymentChannel: Iyzipay.PAYMENT_CHANNEL.MOBILE,
+      paymentGroup: Iyzipay.PAYMENT_GROUP.PRODUCT,
+      paymentCard: {
+        cardHolderName: cardHolderName,
+        cardNumber: cardNumber.replace(/\s+/g, ""),
+        expireMonth: expireMonth,
+        expireYear: expireYear,
+        cvc: cvc,
+        registerCard: "0"
+      },
+      buyer: {
+        id: uid,
+        name: "QWash",
+        surname: "Müşterisi",
+        gsmNumber: "+905555555555",
+        email: req.user.email || "user@qwash.com",
+        identityNumber: "11111111111",
+        lastLoginDate: "2026-01-01 12:00:00",
+        registrationDate: "2026-01-01 12:00:00",
+        registrationAddress: "QWash Mobil",
+        ip: req.ip || "85.34.78.112",
+        city: "Istanbul",
+        country: "Turkey",
+        zipCode: "34000"
+      },
+      shippingAddress: {
+        contactName: "QWash Müşterisi",
+        city: "Istanbul",
+        country: "Turkey",
+        address: "QWash Mobil Uygulaması",
+        zipCode: "34000"
+      },
+      billingAddress: {
+        contactName: "QWash Müşterisi",
+        city: "Istanbul",
+        country: "Turkey",
+        address: "QWash Mobil Uygulaması",
+        zipCode: "34000"
+      },
+      basketItems: [
+        {
+          id: "JETON_PK_" + eklenecekJeton,
+          name: `${eklenecekJeton} Adet QWash Jetonu`,
+          category1: 'Uygulama İçi Satın Alma',
+          itemType: Iyzipay.BASKET_ITEM_TYPE.VIRTUAL,
+          price: eklenecekTutar.toString()
+        }
+      ]
+    };
+
+    // Iyzico API Çağrısı
+    iyzipay.payment.create(iyzicoRequest, async (err, result) => {
+      if (err || result.status === "failure") {
+        safeLog(`❌ Iyzico Sandbox Reddedildi: ${result ? result.errorMessage : err.message}`);
+        return res.status(400).json({
+          error: "Ödeme işlemi bankanız tarafından reddedildi.",
+          details: result ? result.errorMessage : "Bağlantı hatası"
+        });
+      }
+
+      // Ödeme Başarılı, Firestore veritabanını güncelle
+      try {
+        const txRef = db.collection("transactions").doc();
+        await db.runTransaction(async (t) => {
+          const txUserDoc = await t.get(userRef);
+          const mevcutBakiye = Number(txUserDoc.data().walletTokens || 0);
+
+          t.update(userRef, {
+            walletTokens: mevcutBakiye + eklenecekJeton,
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          });
+
+          t.set(txRef, {
+            type: "topup",
+            status: "success",
+            paymentId: result.paymentId,
+            tokens: eklenecekJeton,
+            unitPriceTRY: eklenecekTutar / eklenecekJeton,
+            amountTRY: eklenecekTutar,
+            userId: uid,
+            adminId: null,
+            bayId: null,
+            packageId: null,
+            sessionId: null,
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+          });
+        });
+
+        safeLog(`✅ MÜŞTERİ ÖDEMESİ BAŞARILI (IYZICO): ${uid} -> ${eklenecekJeton} jeton eklendi. (PaymentId: ${result.paymentId})`);
+        return res.status(200).json({
+          success: true,
+          message: "Bakiye başarıyla yüklendi.",
+          paymentId: result.paymentId
+        });
+
+      } catch (dbError) {
+        safeLog(`❌ Ödeme alındı fakat DB hatası oluştu: ${dbError.message}`);
+        return res.status(500).json({ error: "Ödemeniz alındı fakat jeton eklenirken bir iç hata oluştu." });
+      }
     });
+
+  } catch (error) {
+    safeLog(`❌ Sunucu Ödeme Hatası: ${error.message}`);
+    return res.status(500).json({ error: "Sunucu hatası, yükleme yapılamadı." });
   }
 });
 
