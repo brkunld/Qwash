@@ -36,7 +36,6 @@ const BubbleIconOutlined = ({ size = 24, color = "#ffffff", style }) => {
         stroke={color}
         strokeWidth={21}
       />
-
       <Path
         d="M224 385 A86 86 0 0 1 139 459"
         fill="none"
@@ -44,7 +43,6 @@ const BubbleIconOutlined = ({ size = 24, color = "#ffffff", style }) => {
         strokeWidth={21}
         strokeLinecap="round"
       />
-
       <Circle
         cx={416}
         cy={267}
@@ -53,7 +51,6 @@ const BubbleIconOutlined = ({ size = 24, color = "#ffffff", style }) => {
         stroke={color}
         strokeWidth={21}
       />
-
       <Path
         d="M416 214 A53 53 0 0 1 469 267"
         fill="none"
@@ -61,7 +58,6 @@ const BubbleIconOutlined = ({ size = 24, color = "#ffffff", style }) => {
         strokeWidth={21}
         strokeLinecap="round"
       />
-
       <Circle
         cx={256}
         cy={75}
@@ -70,7 +66,6 @@ const BubbleIconOutlined = ({ size = 24, color = "#ffffff", style }) => {
         stroke={color}
         strokeWidth={21}
       />
-
       <Path
         d="M256 43 A32 32 0 0 0 224 75"
         fill="none"
@@ -78,7 +73,6 @@ const BubbleIconOutlined = ({ size = 24, color = "#ffffff", style }) => {
         strokeWidth={21}
         strokeLinecap="round"
       />
-
       <Circle
         cx={85}
         cy={139}
@@ -142,7 +136,6 @@ const BayBackgroundEffect = ({ type, active, stopping }) => {
 
 const FoamEffect = ({ stopping }) => {
   const bubbles = useMemo(() => createFoamBubbles(), []);
-
   return (
     <View style={StyleSheet.absoluteFillObject}>
       {bubbles.map((bubble) => (
@@ -171,11 +164,9 @@ const FoamBubble = ({ bubble, stopping }) => {
           duration: 0,
           useNativeDriver: true,
         }),
-      ])
+      ]),
     );
-
     anim.start();
-
     return () => anim.stop();
   }, [bubble.delay, bubble.duration, loop]);
 
@@ -192,27 +183,22 @@ const FoamBubble = ({ bubble, stopping }) => {
     inputRange: [0, 1],
     outputRange: [25, -105],
   });
-
   const translateX = loop.interpolate({
     inputRange: [0, 0.5, 1],
     outputRange: [0, bubble.drift, 0],
   });
-
   const pulseScale = loop.interpolate({
     inputRange: [0, 0.45, 1],
     outputRange: [0.75, 1.15, 0.85],
   });
-
   const popScale = stop.interpolate({
     inputRange: [0, 1],
     outputRange: [1, 1.8],
   });
-
   const loopOpacity = loop.interpolate({
     inputRange: [0, 0.2, 0.8, 1],
     outputRange: [0, bubble.opacity, bubble.opacity, 0],
   });
-
   const stopOpacity = stop.interpolate({
     inputRange: [0, 1],
     outputRange: [1, 0],
@@ -280,11 +266,9 @@ const WaterDrop = ({ drop }) => {
           duration: 0,
           useNativeDriver: true,
         }),
-      ])
+      ]),
     );
-
     anim.start();
-
     return () => anim.stop();
   }, [drop.delay, drop.duration, fall]);
 
@@ -292,7 +276,6 @@ const WaterDrop = ({ drop }) => {
     inputRange: [0, 1],
     outputRange: [-55, 220],
   });
-
   const opacity = fall.interpolate({
     inputRange: [0, 0.15, 0.85, 1],
     outputRange: [0, drop.opacity, drop.opacity, 0],
@@ -374,6 +357,7 @@ export default function KullaniciEkrani() {
   const [stoppingEffects, setStoppingEffects] = useState({});
   const [lastEffectTypeByBay, setLastEffectTypeByBay] = useState({});
   const effectTimersRef = useRef({});
+  // ----------------------------------------
 
   const {
     authYukleniyor,
@@ -384,10 +368,12 @@ export default function KullaniciEkrani() {
     islemdekiBaylar,
     bakiye,
     bakiyeYukleniyor,
+    bakiyeYukle,
     jetonAdet,
     setJetonAdet,
     jetonFiyat,
     fiyatYukleniyor,
+    yuklemeIslemde,
     toplamTRY,
     toplamText,
     adetNum,
@@ -403,17 +389,9 @@ export default function KullaniciEkrani() {
     setTelefon,
     yuklemeAcik,
     setYuklemeAcik,
-    yuklemeIslemde,
-    kartNo,
-    setKartNo,
-    sonKullanma,
-    setSonKullanma,
-    cvv,
-    setCvv,
     sessionBaslat,
     sessionBitir,
     perondanCik,
-    bakiyeYukle,
     profilKaydet,
     cikisYap,
   } = useKullaniciIslemleri();
@@ -438,7 +416,6 @@ export default function KullaniciEkrani() {
 
   const saveLastEffectType = (bayId, type) => {
     if (!type) return;
-
     setLastEffectTypeByBay((prev) => ({
       ...prev,
       [bayId]: type,
@@ -488,8 +465,8 @@ export default function KullaniciEkrani() {
   };
 
   const handleStopSession = (bayId, session) => {
-    const effectType = effectTypeFromSession(session) || lastEffectTypeByBay[bayId];
-
+    const effectType =
+      effectTypeFromSession(session) || lastEffectTypeByBay[bayId];
     startStoppingEffect(bayId, effectType);
     sessionBitir(bayId, session?.id, "user_stop");
   };
@@ -497,7 +474,6 @@ export default function KullaniciEkrani() {
   const handleTimeoutStart = (bayId, sessionType) => {
     const effectType =
       sessionType === "wash" || sessionType === "foam" ? sessionType : null;
-
     startStoppingEffect(bayId, effectType);
   };
 
@@ -518,7 +494,10 @@ export default function KullaniciEkrani() {
         </View>
 
         <View style={styles.headerRight}>
-          <Pressable onPress={() => setProfilAcik(true)} style={styles.headerBtn}>
+          <Pressable
+            onPress={() => setProfilAcik(true)}
+            style={styles.headerBtn}
+          >
             <Ionicons name="person-outline" size={16} color={WHITE} />
           </Pressable>
 
@@ -545,14 +524,19 @@ export default function KullaniciEkrani() {
             </Text>
           )}
 
-          <Pressable onPress={() => setYuklemeAcik(true)} style={styles.yellowBtn}>
+          <Pressable
+            onPress={() => setYuklemeAcik(true)}
+            style={styles.yellowBtn}
+          >
             <Text style={styles.yellowBtnText}>+ Bakiye Yükle</Text>
           </Pressable>
         </View>
 
         {/* Bay Listesi */}
         {aktifBayIdListesi.length === 0 ? (
-          <Text style={{ textAlign: "center", color: GRAY_TEXT, marginTop: 20 }}>
+          <Text
+            style={{ textAlign: "center", color: GRAY_TEXT, marginTop: 20 }}
+          >
             Henüz bağlanmış bir peron yok. Cihazınızı NFC etiketine okutunuz.
           </Text>
         ) : (
@@ -570,7 +554,8 @@ export default function KullaniciEkrani() {
 
             const stopping = !!stoppingEffects[bayId];
             const effectType = activeEffectType || lastEffectTypeByBay[bayId];
-            const renderEffect = !!effectType && (!!activeEffectType || stopping);
+            const renderEffect =
+              !!effectType && (!!activeEffectType || stopping);
 
             return (
               <View key={bayId} style={styles.card}>
@@ -584,7 +569,9 @@ export default function KullaniciEkrani() {
 
                 <View style={styles.cardContent}>
                   <View style={styles.cardHeaderRow}>
-                    <View style={{ flexDirection: "row", alignItems: "center" }}>
+                    <View
+                      style={{ flexDirection: "row", alignItems: "center" }}
+                    >
                       <View style={styles.bayBadge}>
                         <Text style={styles.bayIdText}>
                           {bayId.split("_").pop()}
@@ -616,7 +603,9 @@ export default function KullaniciEkrani() {
                       disabled={sessionVarMi}
                       style={[
                         styles.leaveBtn,
-                        { backgroundColor: sessionVarMi ? "#a3a3a3" : "#FF3B30" },
+                        {
+                          backgroundColor: sessionVarMi ? "#a3a3a3" : "#FF3B30",
+                        },
                       ]}
                     >
                       <Ionicons name="exit-outline" size={18} color={WHITE} />
@@ -669,7 +658,11 @@ export default function KullaniciEkrani() {
                             (islemde || bakiyeYukleniyor) && styles.btnDisabled,
                           ]}
                         >
-                          <Ionicons name="water-outline" size={28} color={WHITE} />
+                          <Ionicons
+                            name="water-outline"
+                            size={28}
+                            color={WHITE}
+                          />
                           <Text style={styles.startBtnText}>Su</Text>
                         </Pressable>
 
@@ -695,22 +688,22 @@ export default function KullaniciEkrani() {
         )}
       </ScrollView>
 
-      {/* Bakiye Yükle Modal */}
+{/* Bakiye Yükle Modal */}
       <Modal visible={yuklemeAcik} transparent animationType="slide">
         <KeyboardAvoidingView
           style={styles.modalOverlay}
           behavior={Platform.OS === "ios" ? "padding" : "height"}
         >
-          <View style={[styles.modalBox, { maxHeight: "85%" }]}>
+          <View style={[styles.modalBox, { maxHeight: "50%" }]}>
             <ScrollView
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
             >
               <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>💳 Bakiye Yükle</Text>
+                <Text style={styles.modalTitle}>💳 Güvenli Bakiye Yükle</Text>
               </View>
 
-              <Text style={styles.inputLabel}>Kaç Jeton? (1–100)</Text>
+              <Text style={styles.inputLabel}>Kaç Jeton Satın Alacaksınız? (1–100)</Text>
               <TextInput
                 value={jetonAdet}
                 onChangeText={(t) =>
@@ -728,10 +721,10 @@ export default function KullaniciEkrani() {
                 ) : jetonFiyat ? (
                   <>
                     <Text style={styles.fiyatMeta}>
-                      Birim: {jetonFiyat} ₺ / jeton
+                      Birim Jeton Fiyatı: {jetonFiyat} ₺
                     </Text>
                     <Text style={styles.fiyatTotal}>
-                      Toplam: {toplamText} ₺
+                      Ödenecek Toplam: {toplamText} ₺
                     </Text>
                   </>
                 ) : (
@@ -739,47 +732,19 @@ export default function KullaniciEkrani() {
                 )}
               </View>
 
-              <Text style={styles.inputLabel}>Kart Numarası</Text>
-              <TextInput
-                value={kartNo}
-                onChangeText={setKartNo}
-                placeholder="•••• •••• •••• ••••"
-                style={styles.input}
-                placeholderTextColor={GRAY_TEXT}
-              />
-
-              <View style={styles.row}>
-                <TextInput
-                  value={sonKullanma}
-                  onChangeText={setSonKullanma}
-                  placeholder="AA/YY"
-                  style={[styles.input, { flex: 1, marginRight: 8 }]}
-                  placeholderTextColor={GRAY_TEXT}
-                />
-
-                <TextInput
-                  value={cvv}
-                  onChangeText={(t) => setCvv(t.replace(/[^0-9]/g, ""))}
-                  placeholder="CVV"
-                  secureTextEntry
-                  style={[styles.input, { flex: 1 }]}
-                  placeholderTextColor={GRAY_TEXT}
-                />
-              </View>
-
               <Pressable
                 onPress={() => bakiyeYukle(adetNum, toplamTRY)}
-                disabled={yuklemeIslemde || fiyatYukleniyor || !jetonFiyat}
+                disabled={yuklemeIslemde || fiyatYukleniyor || !jetonFiyat || !adetNum}
                 style={[
                   styles.yellowBtn,
-                  (yuklemeIslemde || fiyatYukleniyor || !jetonFiyat) &&
+                  (yuklemeIslemde || fiyatYukleniyor || !jetonFiyat || !adetNum) &&
                     styles.btnDisabled,
                 ]}
               >
                 {yuklemeIslemde ? (
                   <ActivityIndicator color={DARK} />
                 ) : (
-                  <Text style={styles.yellowBtnText}>Öde ve Yükle</Text>
+                  <Text style={styles.yellowBtnText}>Güvenli Ödeme Ekranına Git</Text>
                 )}
               </Pressable>
 
@@ -917,20 +882,13 @@ function ProgressBar({ session }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: GRAY_BG },
-
   centered: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
     backgroundColor: GRAY_BG,
   },
-
-  scroll: {
-    flex: 1,
-    paddingHorizontal: 12,
-    paddingTop: 10,
-  },
-
+  scroll: { flex: 1, paddingHorizontal: 12, paddingTop: 10 },
   header: {
     backgroundColor: DARK,
     paddingTop: 48,
@@ -940,53 +898,38 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
   },
-
   headerBadge: {
     backgroundColor: "#f59e0b",
     borderRadius: 6,
     paddingHorizontal: 7,
     paddingVertical: 3,
   },
-
   headerBadgeText: {
     fontSize: 15,
     fontWeight: "900",
     color: "#111827",
     letterSpacing: 0.5,
   },
-
-  headerRight: {
-    flexDirection: "row",
-    gap: 6,
-  },
-
+  headerRight: { flexDirection: "row", gap: 6 },
   headerBtn: {
     backgroundColor: "rgba(255,255,255,0.12)",
     borderRadius: 8,
     paddingHorizontal: 10,
     paddingVertical: 8,
   },
-
   bayBadge: {
     backgroundColor: YELLOW,
     paddingHorizontal: 10,
     paddingVertical: 2,
     borderRadius: 6,
   },
-
-  bayIdText: {
-    fontSize: 15,
-    fontWeight: "900",
-    color: "#000000",
-  },
-
+  bayIdText: { fontSize: 15, fontWeight: "900", color: "#000000" },
   leaveBtn: {
     borderRadius: 10,
     padding: 9,
     alignItems: "center",
     justifyContent: "center",
   },
-
   card: {
     backgroundColor: WHITE,
     borderRadius: 14,
@@ -999,25 +942,18 @@ const styles = StyleSheet.create({
     elevation: 2,
     overflow: "hidden",
   },
-
-  cardContent: {
-    position: "relative",
-    zIndex: 2,
-  },
-
+  cardContent: { position: "relative", zIndex: 2 },
   effectLayer: {
     ...StyleSheet.absoluteFillObject,
     zIndex: 1,
     overflow: "hidden",
   },
-
   foamBubble: {
     position: "absolute",
     borderWidth: 1.5,
     borderColor: "rgba(255,255,255,0.9)",
     backgroundColor: "rgba(167,243,208,0.35)",
   },
-
   waterDrop: {
     position: "absolute",
     top: -55,
@@ -1025,28 +961,24 @@ const styles = StyleSheet.create({
     borderRadius: 99,
     backgroundColor: "rgba(96,165,250,0.7)",
   },
-
   cardHeaderRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     marginBottom: 6,
   },
-
   cardLabel: {
     fontSize: 12,
     color: GRAY_TEXT,
     fontWeight: "600",
     marginBottom: 3,
   },
-
   sessionBox: {
     marginTop: 10,
     borderTopWidth: 1,
     borderTopColor: GRAY_BORDER,
     paddingTop: 10,
   },
-
   sayac: {
     fontSize: 30,
     fontWeight: "900",
@@ -1055,7 +987,6 @@ const styles = StyleSheet.create({
     fontVariant: ["tabular-nums"],
     letterSpacing: 1,
   },
-
   progressBg: {
     height: 4,
     backgroundColor: GRAY_BORDER,
@@ -1064,13 +995,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
     marginBottom: 10,
   },
-
-  progressFill: {
-    height: "100%",
-    backgroundColor: YELLOW,
-    borderRadius: 2,
-  },
-
+  progressFill: { height: "100%", backgroundColor: YELLOW, borderRadius: 2 },
   durdurBtn: {
     backgroundColor: DARK,
     padding: 13,
@@ -1078,20 +1003,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-
   bakiyeNum: {
     fontSize: 34,
     fontWeight: "900",
     color: DARK_TEXT,
     marginTop: 4,
   },
-
-  bakiyeUnit: {
-    fontSize: 20,
-    fontWeight: "600",
-    color: GRAY_TEXT,
-  },
-
+  bakiyeUnit: { fontSize: 20, fontWeight: "600", color: GRAY_TEXT },
   yellowBtn: {
     marginTop: 12,
     backgroundColor: YELLOW,
@@ -1099,30 +1017,15 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: "center",
   },
-
-  yellowBtnText: {
-    color: DARK,
-    fontWeight: "800",
-    fontSize: 14,
-  },
-
-  btnDisabled: {
-    backgroundColor: "#c4c4c4",
-  },
-
+  yellowBtnText: { color: DARK, fontWeight: "800", fontSize: 14 },
+  btnDisabled: { backgroundColor: "#c4c4c4" },
   startSection: {
     marginTop: 10,
     borderTopWidth: 1,
     borderTopColor: GRAY_BORDER,
     paddingTop: 10,
   },
-
-  row: {
-    flexDirection: "row",
-    gap: 10,
-    marginBottom: 10,
-  },
-
+  row: { flexDirection: "row", gap: 10, marginBottom: 10 },
   startBtn: {
     flex: 1,
     backgroundColor: DARK,
@@ -1131,19 +1034,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 6,
   },
-
-  startBtnText: {
-    color: WHITE,
-    fontWeight: "700",
-    fontSize: 14,
-  },
-
+  startBtnText: { color: WHITE, fontWeight: "700", fontSize: 14 },
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.4)",
     justifyContent: "flex-end",
   },
-
   modalBox: {
     backgroundColor: WHITE,
     borderTopLeftRadius: 24,
@@ -1151,20 +1047,13 @@ const styles = StyleSheet.create({
     padding: 20,
     paddingBottom: 36,
   },
-
   modalHeader: {
     borderBottomWidth: 1,
     borderBottomColor: GRAY_BORDER,
     paddingBottom: 10,
     marginBottom: 14,
   },
-
-  modalTitle: {
-    fontSize: 17,
-    fontWeight: "800",
-    color: DARK_TEXT,
-  },
-
+  modalTitle: { fontSize: 17, fontWeight: "800", color: DARK_TEXT },
   inputLabel: {
     fontSize: 11,
     fontWeight: "700",
@@ -1173,7 +1062,6 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
-
   input: {
     borderWidth: 1.5,
     borderColor: GRAY_BORDER,
@@ -1184,7 +1072,6 @@ const styles = StyleSheet.create({
     backgroundColor: GRAY_BG,
     marginBottom: 10,
   },
-
   fiyatBox: {
     backgroundColor: "#fffbeb",
     borderWidth: 1,
@@ -1193,29 +1080,15 @@ const styles = StyleSheet.create({
     padding: 10,
     marginBottom: 12,
   },
-
-  fiyatMeta: {
-    color: GRAY_TEXT,
-    fontSize: 13,
-  },
-
+  fiyatMeta: { color: GRAY_TEXT, fontSize: 13 },
   fiyatTotal: {
     fontSize: 17,
     fontWeight: "800",
     color: DARK_TEXT,
     marginTop: 3,
   },
-
-  fiyatErr: {
-    color: "#b91c1c",
-    fontWeight: "700",
-  },
-
-  vazgecBtn: {
-    marginTop: 10,
-    alignItems: "center",
-  },
-
+  fiyatErr: { color: "#b91c1c", fontWeight: "700" },
+  vazgecBtn: { marginTop: 10, alignItems: "center" },
   vazgecText: {
     color: GRAY_TEXT,
     textDecorationLine: "underline",

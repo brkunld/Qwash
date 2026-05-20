@@ -57,7 +57,8 @@
         {
           "cameraPermission": "QR kod okumak için kameraya erişim gereklidir."
         }
-      ]
+      ],
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true,

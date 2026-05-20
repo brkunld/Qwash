@@ -2,6 +2,7 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert } from "react-native";
+import * as WebBrowser from "expo-web-browser"; // <-- EN ÜSTE İMPORT EDİN
 
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import {
@@ -422,29 +423,18 @@ export function useKullaniciIslemleri() {
   }
 };
 
-  const bakiyeYukle = async (tokens, amountTRYParam) => {
+const bakiyeYukle = async (tokens, amountTRYParam) => {
     if (!uid) return router.replace("/login");
     if (!jetonFiyat || fiyatYukleniyor)
       return Alert.alert("Fiyat Alınamadı", "Fiyat bilgisi alınamadı.");
 
-    const kart = String(kartNo).replace(/\s/g, "");
-    const skt = String(sonKullanma).trim();
-    const c = String(cvv).trim();
-
-    if (kart.length < 12 || kart.length > 19)
-      return Alert.alert("Hata", "Kart numarası geçersiz.");
-    if (!/^(0[1-9]|1[0-2])\/\d{2}$/.test(skt))
-      return Alert.alert("Hata", "Son kullanma formatı AA/YY olmalı.");
-    if (!/^\d{3,4}$/.test(c)) return Alert.alert("Hata", "CVV geçersiz.");
-
     setYuklemeIslemde(true);
-    const amountTRY =
-      typeof amountTRYParam === "number" ? amountTRYParam : tokens * jetonFiyat;
+    const amountTRY = typeof amountTRYParam === "number" ? amountTRYParam : tokens * jetonFiyat;
 
     try {
       const token = await auth.currentUser?.getIdToken();
-
-      const API_URL = "https://qwash-8q4y.onrender.com/api/topup";
+      const API_URL = "https://qwash-8q4y.onrender.com/api/topup"; 
+      
       const response = await fetch(API_URL, {
         method: "POST",
         headers: { 
@@ -454,29 +444,36 @@ export function useKullaniciIslemleri() {
         body: JSON.stringify({
           uid: uid,
           tokens: tokens,
-          amountTRY: amountTRY,
-          kartNo: kart,
-          sonKullanma: skt,
-          cvv: c,
+          amountTRY: amountTRY
         }),
       });
 
       const data = await response.json();
-      if (!response.ok)
-        return Alert.alert("Hata", data.error || "Bakiye yükleme başarısız.");
+      
+      if (!response.ok || !data.success) {
+        return Alert.alert("Hata", data.error || "Ödeme oturumu açılamadı.");
+      }
 
-      Alert.alert("Başarılı", `${tokens} Jeton hesabınıza eklendi!`);
-      setYuklemeAcik(false);
-      setKartNo("");
-      setSonKullanma("");
-      setCvv("");
-    } catch (_) {
+      // Gelen Iyzico ödeme linkini uygulama içi tarayıcı penceresinde (In-App Browser) açıyoruz
+      setYuklemeAcik(false); // Modalı kapat
+      
+      await WebBrowser.openBrowserAsync(data.paymentUrl, {
+        dismissButtonStyle: "close",
+        readerMode: false,
+        enableBarCollapsing: true,
+      });
+
+      // Tarayıcı kapandığında kullanıcıya hatırlatma yapalım
+      Alert.alert("Bilgi", "Ödeme işleminiz tamamlandıysa bakiyeniz birkaç saniye içinde güncellenecektir.");
+
+    } catch (error) {
+      console.error(error);
       Alert.alert("Bağlantı Hatası", "Sunucuya ulaşılamadı.");
     } finally {
       setYuklemeIslemde(false);
     }
   };
-  
+
   const profilKaydet = async () => {
     if (!uid) return router.replace("/login");
 
