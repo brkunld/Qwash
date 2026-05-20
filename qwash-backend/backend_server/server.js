@@ -53,6 +53,9 @@ const rtdb = admin.database();
 const app = express();
 app.use(cors());
 app.use(express.json());
+// Iyzico'dan dönen form verilerini okuyabilmek için AŞAĞIDAKİ SATIRI EKLEYİN:
+app.use(express.urlencoded({ extended: true }));
+
 
 // =========================================================
 // LOG
