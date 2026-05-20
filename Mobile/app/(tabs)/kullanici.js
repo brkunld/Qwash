@@ -537,7 +537,7 @@ export default function KullaniciEkrani() {
           <Text
             style={{ textAlign: "center", color: GRAY_TEXT, marginTop: 20 }}
           >
-            Henüz bağlanmış bir peron yok. Cihazınızı NFC etiketine okutunuz.
+            Henüz bağlanmış bir peron yok.  Perona bağlanmak için lütfen bir peron seçin ve QR kodunu okutun.
           </Text>
         ) : (
           aktifBayIdListesi.map((bayId) => {
@@ -694,68 +694,108 @@ export default function KullaniciEkrani() {
           style={styles.modalOverlay}
           behavior={Platform.OS === "ios" ? "padding" : "height"}
         >
-          <View style={[styles.modalBox, { maxHeight: "50%" }]}>
-            <ScrollView
-              showsVerticalScrollIndicator={false}
-              keyboardShouldPersistTaps="handled"
+          {/* DIŞARIYA TIKLANDIĞINDA MODALI KAPATAN ANA PRESSABLE */}
+          <Pressable
+            style={{ flex: 1, justifyContent: "flex-end" }}
+            onPress={() => setYuklemeAcik(false)}
+          >
+            {/* MODAL İÇİNE TIKLANDIĞINDA KAPANMAYI ENGELLEYEN İÇ PRESSABLE */}
+            <Pressable
+              style={[styles.modalBox, { maxHeight: "60%" }]}
+              onPress={(e) => e.stopPropagation()}
             >
-              <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>💳 Güvenli Bakiye Yükle</Text>
-              </View>
-
-              <Text style={styles.inputLabel}>Kaç Jeton Satın Alacaksınız? (1–100)</Text>
-              <TextInput
-                value={jetonAdet}
-                onChangeText={(t) =>
-                  setJetonAdet(String(t).replace(/[^0-9]/g, ""))
-                }
-                keyboardType="number-pad"
-                style={styles.input}
-                placeholderTextColor={GRAY_TEXT}
-                placeholder="Örn: 10"
-              />
-
-              <View style={styles.fiyatBox}>
-                {fiyatYukleniyor ? (
-                  <ActivityIndicator color={YELLOW} />
-                ) : jetonFiyat ? (
-                  <>
-                    <Text style={styles.fiyatMeta}>
-                      Birim Jeton Fiyatı: {jetonFiyat} ₺
-                    </Text>
-                    <Text style={styles.fiyatTotal}>
-                      Ödenecek Toplam: {toplamText} ₺
-                    </Text>
-                  </>
-                ) : (
-                  <Text style={styles.fiyatErr}>Fiyat bilgisi alınamadı.</Text>
-                )}
-              </View>
-
-              <Pressable
-                onPress={() => bakiyeYukle(adetNum, toplamTRY)}
-                disabled={yuklemeIslemde || fiyatYukleniyor || !jetonFiyat || !adetNum}
-                style={[
-                  styles.yellowBtn,
-                  (yuklemeIslemde || fiyatYukleniyor || !jetonFiyat || !adetNum) &&
-                    styles.btnDisabled,
-                ]}
+              <ScrollView
+                showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
               >
-                {yuklemeIslemde ? (
-                  <ActivityIndicator color={DARK} />
-                ) : (
-                  <Text style={styles.yellowBtnText}>Güvenli Ödeme Ekranına Git</Text>
-                )}
-              </Pressable>
+                <View style={styles.modalHeader}>
+                  <Text style={styles.modalTitle}>💳 Güvenli Bakiye Yükle</Text>
+                </View>
 
-              <Pressable
-                onPress={() => setYuklemeAcik(false)}
-                style={styles.vazgecBtn}
-              >
-                <Text style={styles.vazgecText}>Vazgeç</Text>
-              </Pressable>
-            </ScrollView>
-          </View>
+                <Text style={styles.inputLabel}>Kaç Jeton Satın Alacaksınız?</Text>
+                
+                <View style={styles.stepperContainer}>
+                  <Pressable
+                    style={styles.stepperBtn}
+                    onPress={() => {
+                      const current = parseInt(jetonAdet || "0", 10);
+                      if (current > 1) setJetonAdet(String(current - 1));
+                    }}
+                  >
+                    <Ionicons name="remove" size={24} color={DARK_TEXT} />
+                  </Pressable>
+
+                  <TextInput
+                    value={jetonAdet}
+                    onChangeText={(t) => {
+                      let val = t.replace(/[^0-9]/g, "");
+                      if (parseInt(val) > 100) val = "100"; // Maksimum 100 sınırı
+                      setJetonAdet(val);
+                    }}
+                    keyboardType="number-pad"
+                    style={styles.stepperInput}
+                    maxLength={3}
+                    textAlign="center"
+                    placeholder="0"
+                    placeholderTextColor={GRAY_TEXT}
+                  />
+
+                  <Pressable
+                    style={styles.stepperBtn}
+                    onPress={() => {
+                      const current = parseInt(jetonAdet || "0", 10);
+                      if (current < 100) setJetonAdet(String(current + 1));
+                    }}
+                  >
+                    <Ionicons name="add" size={24} color={DARK_TEXT} />
+                  </Pressable>
+                </View>
+
+                <View style={styles.fiyatBox}>
+                  {fiyatYukleniyor ? (
+                    <ActivityIndicator color={YELLOW} />
+                  ) : jetonFiyat ? (
+                    <View style={{ width: '100%' }}>
+                      <View style={styles.fiyatSatir}>
+                        <Text style={styles.fiyatMeta}>Birim Jeton Fiyatı</Text>
+                        <Text style={styles.fiyatMetaDeger}>{jetonFiyat} ₺</Text>
+                      </View>
+                      <View style={styles.fiyatAyrac} />
+                      <View style={styles.fiyatSatir}>
+                        <Text style={styles.fiyatTotalTitle}>Ödenecek Toplam</Text>
+                        <Text style={styles.fiyatTotal}>{toplamText} ₺</Text>
+                      </View>
+                    </View>
+                  ) : (
+                    <Text style={styles.fiyatErr}>Fiyat bilgisi alınamadı.</Text>
+                  )}
+                </View>
+
+                <Pressable
+                  onPress={() => bakiyeYukle(adetNum, toplamTRY)}
+                  disabled={yuklemeIslemde || fiyatYukleniyor || !jetonFiyat || !adetNum}
+                  style={[
+                    styles.yellowBtn,
+                    (yuklemeIslemde || fiyatYukleniyor || !jetonFiyat || !adetNum) &&
+                      styles.btnDisabled,
+                  ]}
+                >
+                  {yuklemeIslemde ? (
+                    <ActivityIndicator color={DARK} />
+                  ) : (
+                    <Text style={styles.yellowBtnText}>Güvenli Ödeme Ekranına Git</Text>
+                  )}
+                </Pressable>
+
+                <Pressable
+                  onPress={() => setYuklemeAcik(false)}
+                  style={styles.vazgecBtn}
+                >
+                  <Text style={styles.vazgecText}>İptal Et</Text>
+                </Pressable>
+              </ScrollView>
+            </Pressable>
+          </Pressable>
         </KeyboardAvoidingView>
       </Modal>
 
@@ -881,6 +921,81 @@ function ProgressBar({ session }) {
 }
 
 const styles = StyleSheet.create({
+
+  // Modaldaki Yeni Stepper (Arttır/Azalt) Stilleri
+  stepperContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: GRAY_BG,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: GRAY_BORDER,
+    marginBottom: 20,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+  },
+  stepperBtn: {
+    backgroundColor: WHITE,
+    borderRadius: 12,
+    padding: 12,
+    shadowColor: "#000",
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    shadowOffset: { width: 0, height: 1 },
+    elevation: 2,
+  },
+  stepperInput: {
+    flex: 1,
+    fontSize: 28,
+    fontWeight: "900",
+    color: DARK_TEXT,
+    paddingVertical: 10,
+  },
+
+  // Modaldaki Yeni Fiyat Fişi (Receipt) Stilleri
+  fiyatBox: {
+    backgroundColor: "#fefbed", // Hafif sarımtırak arka plan
+    borderWidth: 1.5,
+    borderColor: "#fde68a",
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 24,
+    alignItems: "center",
+  },
+  fiyatSatir: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    width: "100%",
+  },
+  fiyatMeta: {
+    color: GRAY_TEXT,
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  fiyatMetaDeger: {
+    color: DARK_TEXT,
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  fiyatAyrac: {
+    height: 1,
+    backgroundColor: "#fcd34d",
+    width: "100%",
+    marginVertical: 12,
+    opacity: 0.5,
+  },
+  fiyatTotalTitle: {
+    fontSize: 16,
+    fontWeight: "800",
+    color: DARK_TEXT,
+  },
+  fiyatTotal: {
+    fontSize: 22,
+    fontWeight: "900",
+    color: "#d97706", // Daha vurgulu bir sarı/turuncu
+  },
   container: { flex: 1, backgroundColor: GRAY_BG },
   centered: {
     flex: 1,
@@ -1072,21 +1187,7 @@ const styles = StyleSheet.create({
     backgroundColor: GRAY_BG,
     marginBottom: 10,
   },
-  fiyatBox: {
-    backgroundColor: "#fffbeb",
-    borderWidth: 1,
-    borderColor: "#fde68a",
-    borderRadius: 12,
-    padding: 10,
-    marginBottom: 12,
-  },
-  fiyatMeta: { color: GRAY_TEXT, fontSize: 13 },
-  fiyatTotal: {
-    fontSize: 17,
-    fontWeight: "800",
-    color: DARK_TEXT,
-    marginTop: 3,
-  },
+
   fiyatErr: { color: "#b91c1c", fontWeight: "700" },
   vazgecBtn: { marginTop: 10, alignItems: "center" },
   vazgecText: {
