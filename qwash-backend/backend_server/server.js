@@ -15,7 +15,7 @@ const Iyzipay = require("iyzipay"); // 1. Iyzico Paketi Eklendi
 const iyzipay = new Iyzipay({
   apiKey: process.env.IYZICO_API_KEY,
   secretKey: process.env.IYZICO_SECRET_KEY,
-  uri: process.env.IYZICO_URI || "https://sandbox-api.iyzipay.com"
+  uri: process.env.IYZICO_URI || "https://sandbox-api.iyzipay.com",
 });
 
 // =========================================================
@@ -55,7 +55,6 @@ app.use(cors());
 app.use(express.json());
 // Iyzico'dan dönen form verilerini okuyabilmek için AŞAĞIDAKİ SATIRI EKLEYİN:
 app.use(express.urlencoded({ extended: true }));
-
 
 // =========================================================
 // LOG
@@ -246,6 +245,48 @@ const refundSessionIfNeeded = async (sessionId, reason = "bay_power_loss") => {
       tokens: tokensCost,
     };
   });
+};
+
+
+const reserveBayForSession = async (bayId, uid) => {
+  const bayRef = rtdb.ref(`bays/${bayId}`);
+
+  const result = await bayRef.transaction((currentBay) => {
+    if (!currentBay) {
+      return;
+    }
+
+    const status = currentBay.status || "available";
+
+    const isReservable =
+      (status === "available" || status === "waiting") &&
+      !currentBay.currentSessionId &&
+      currentBay.isActive !== false;
+
+    if (!isReservable) {
+      return;
+    }
+
+    return {
+      ...currentBay,
+      status: "starting",
+      lastUserId: uid,
+      startingAt: admin.database.ServerValue.TIMESTAMP,
+      updatedAt: admin.database.ServerValue.TIMESTAMP,
+    };
+  });
+
+  if (!result.committed) {
+    return {
+      success: false,
+      reason: "bay_not_available",
+    };
+  }
+
+  return {
+    success: true,
+    bayData: result.snapshot.val(),
+  };
 };
 
 // =========================================================
@@ -561,31 +602,41 @@ app.post("/api/start-session", verifyUser, async (req, res) => {
     return res.status(400).json({ error: "Eksik parametre gönderildi." });
   }
 
+  let bayReserved = false;
+  let newSessionId = null;
+  let finalTokensCost = 0;
+  let finalDurationSec = 0;
+
   try {
     const userRef = db.collection("users").doc(uid);
     const rtdbBayRef = rtdb.ref(`bays/${bayId}`);
     const packageRef = db.collection("packages").doc(packageId);
 
-    let newSessionId = null;
-    let finalTokensCost = 0;
-    let finalDurationSec = 0;
+    // 1. Önce peronu atomik şekilde kilitle / rezerve et
+    const reserveResult = await reserveBayForSession(bayId, uid);
 
-    const baySnap = await rtdbBayRef.once("value");
-    const bayData = baySnap.val();
-
-    if (
-      !bayData ||
-      (bayData.status !== "available" && bayData.status !== "waiting")
-    ) {
-      return res.status(400).json({ error: "Peron şu anda kullanılıyor." });
+    if (!reserveResult.success) {
+      return res.status(409).json({
+        error:
+          "Peron şu anda başka bir kullanıcı tarafından kullanılıyor veya hazırlanıyor.",
+      });
     }
 
+    bayReserved = true;
+
+    // 2. Sadece rezervasyonu alan istek jeton düşebilir ve session oluşturabilir
     await db.runTransaction(async (t) => {
       const userDoc = await t.get(userRef);
-      if (!userDoc.exists) throw new Error("Kullanıcı_Bulunamadi");
+
+      if (!userDoc.exists) {
+        throw new Error("Kullanıcı_Bulunamadi");
+      }
 
       const packageDoc = await t.get(packageRef);
-      if (!packageDoc.exists) throw new Error("Paket_Bulunamadi");
+
+      if (!packageDoc.exists) {
+        throw new Error("Paket_Bulunamadi");
+      }
 
       finalTokensCost = Number(packageDoc.data().tokensCost || 0);
       finalDurationSec = Number(packageDoc.data().durationSec || 0);
@@ -599,7 +650,10 @@ app.post("/api/start-session", verifyUser, async (req, res) => {
       }
 
       const mevcutBakiye = Number(userDoc.data().walletTokens || 0);
-      if (mevcutBakiye < finalTokensCost) throw new Error("Yetersiz_Bakiye");
+
+      if (mevcutBakiye < finalTokensCost) {
+        throw new Error("Yetersiz_Bakiye");
+      }
 
       const sessionRef = db.collection("sessions").doc();
       newSessionId = sessionRef.id;
@@ -624,6 +678,7 @@ app.post("/api/start-session", verifyUser, async (req, res) => {
       });
     });
 
+    // 3. Peronu kesin olarak busy durumuna al
     await rtdbBayRef.update({
       status: "busy",
       requestedPackage: packageId,
@@ -632,14 +687,17 @@ app.post("/api/start-session", verifyUser, async (req, res) => {
       lastUserId: uid,
       currentSessionId: newSessionId,
       hardwareSelection: "",
+      startingAt: null,
       updatedAt: admin.database.ServerValue.TIMESTAMP,
     });
 
+    // 4. ESP32'ye MQTT komutu gönder
     const mqttOk = await safeSendBayCommand(
       bayId,
       `BUSY|${packageId}|${finalDurationSec}`,
     );
 
+    // 5. MQTT başarısızsa jetonu iade et ve peronu waiting'e geri al
     if (!mqttOk) {
       const refundResult = await refundSessionIfNeeded(
         newSessionId,
@@ -653,7 +711,11 @@ app.post("/api/start-session", verifyUser, async (req, res) => {
       safeLog(
         `💸 MQTT BAŞLATMA HATASI: ${bayId} başlatılamadı. ` +
           `Session: ${newSessionId}. ` +
-          `İade: ${refundResult.refunded ? `${refundResult.tokens} jeton` : refundResult.reason}`,
+          `İade: ${
+            refundResult.refunded
+              ? `${refundResult.tokens} jeton`
+              : refundResult.reason
+          }`,
       );
 
       return res.status(503).json({
@@ -679,36 +741,61 @@ app.post("/api/start-session", verifyUser, async (req, res) => {
       message: "Makine başlatıldı.",
     });
   } catch (error) {
+    // Session oluşmadan hata olduysa peron starting durumunda kalmasın
+    if (bayReserved && !newSessionId) {
+      try {
+        await clearBaySessionFields(bayId, {
+          status: "available",
+        });
+
+        await safeSendBayCommand(bayId, "AVAILABLE");
+      } catch (rollbackError) {
+        safeLog(`❌ Peron rollback hatası: ${rollbackError.message}`);
+      }
+    }
+
     if (error.message === "Engellenmis_Kullanici") {
       safeLog(
         `🚨 GÜVENLİK İHLALİ: Engelli kullanıcı (${uid}) işlem yapmayı denedi!`,
       );
+
       return res.status(403).json({
         error: "Hesabınız askıya alındığı için işlem yapamazsınız.",
       });
     }
 
     if (error.message === "Yetersiz_Bakiye") {
-      return res.status(400).json({ error: "Jeton bakiyeniz yetersiz." });
+      return res.status(400).json({
+        error: "Jeton bakiyeniz yetersiz.",
+      });
     }
 
     if (error.message === "Paket_Bulunamadi") {
-      return res
-        .status(404)
-        .json({ error: "İtenilen paket sistemde bulunamadı." });
+      return res.status(404).json({
+        error: "İstenilen paket sistemde bulunamadı.",
+      });
     }
 
     if (error.message === "Gecersiz_Paket_Degerleri") {
       return res.status(500).json({
-        error: "Sistemdeki paket değerleri hatalı. Lütfen yöneticiye bildirin.",
+        error:
+          "Sistemdeki paket değerleri hatalı. Lütfen yöneticiye bildirin.",
+      });
+    }
+
+    if (error.message === "Kullanıcı_Bulunamadi") {
+      return res.status(404).json({
+        error: "Kullanıcı bulunamadı.",
       });
     }
 
     safeLog(`❌ Başlatma hatası: ${error.message}`);
-    return res.status(500).json({ error: "Sunucu hatası." });
+
+    return res.status(500).json({
+      error: "Sunucu hatası.",
+    });
   }
 });
-
 
 // ---------------------------------------------------------
 // PERONDAN MANUEL ÇIKIŞ (İPTAL / CANCEL WAITING)
@@ -743,7 +830,8 @@ app.post("/api/cancel-waiting", verifyUser, async (req, res) => {
       safeLog(`🚨 YETKİSİZ İPTAL DENEMESİ: ${req.user.uid}, Peron: ${bayId}`);
 
       return res.status(403).json({
-        error: "Bu peronu iptal etme yetkiniz yok veya peron şu an iptal edilebilir durumda değil.",
+        error:
+          "Bu peronu iptal etme yetkiniz yok veya peron şu an iptal edilebilir durumda değil.",
       });
     }
 
@@ -814,7 +902,9 @@ app.post("/api/topup", verifyUser, async (req, res) => {
   const { uid, tokens, amountTRY } = req.body;
 
   if (!uid || !tokens || !amountTRY) {
-    return res.status(400).json({ error: "Eksik parametre gönderildi. uid, tokens ve amountTRY zorunludur." });
+    return res.status(400).json({
+      error: "Eksik parametre gönderildi. uid, tokens ve amountTRY zorunludur.",
+    });
   }
 
   const eklenecekJeton = parseInt(tokens, 10);
@@ -829,12 +919,14 @@ app.post("/api/topup", verifyUser, async (req, res) => {
     }
 
     if (userDoc.data().isBlocked === true) {
-      return res.status(403).json({ error: "Hesabınız askıya alındığı için bakiye yükleyemezsiniz." });
+      return res.status(403).json({
+        error: "Hesabınız askıya alındığı için bakiye yükleyemezsiniz.",
+      });
     }
 
     // Render üzerindeki canlı adresiniz
     const RENDER_URL = "https://qwash-8q4y.onrender.com";
-    
+
     // Ödeme bitince Iyzico'nun verileri göndereceği geri dönüş adresi (Query parametresi ile yükleme detaylarını taşıyoruz)
     const callbackUrl = `${RENDER_URL}/api/topup-callback?uid=${uid}&tokens=${eklenecekJeton}&amount=${eklenecekTutar}`;
 
@@ -848,7 +940,7 @@ app.post("/api/topup", verifyUser, async (req, res) => {
       basketId: "BASKET_" + Date.now(),
       paymentChannel: Iyzipay.PAYMENT_CHANNEL.MOBILE,
       // BURASI ÖNEMLİ: Checkout form başlatıyoruz
-      callbackUrl: callbackUrl, 
+      callbackUrl: callbackUrl,
       buyer: {
         id: uid,
         name: userDoc.data().ad || "QWash",
@@ -862,47 +954,48 @@ app.post("/api/topup", verifyUser, async (req, res) => {
         ip: req.ip || "85.34.78.112",
         city: "Istanbul",
         country: "Turkey",
-        zipCode: "34000"
+        zipCode: "34000",
       },
       shippingAddress: {
         contactName: "QWash Müşterisi",
         city: "Istanbul",
         country: "Turkey",
         address: "QWash Mobil Uygulaması",
-        zipCode: "34000"
+        zipCode: "34000",
       },
       billingAddress: {
         contactName: "QWash Müşterisi",
         city: "Istanbul",
         country: "Turkey",
         address: "QWash Mobil Uygulaması",
-        zipCode: "34000"
+        zipCode: "34000",
       },
       basketItems: [
         {
           id: "JETON_PK_" + eklenecekJeton,
           name: `${eklenecekJeton} Adet QWash Jetonu`,
-          category1: 'Uygulama İçi Satın Alma',
+          category1: "Uygulama İçi Satın Alma",
           itemType: Iyzipay.BASKET_ITEM_TYPE.VIRTUAL,
-          price: eklenecekTutar.toString()
-        }
-      ]
+          price: eklenecekTutar.toString(),
+        },
+      ],
     };
 
     // Checkout form oluşturma çağrısı
     iyzipay.checkoutFormInitialize.create(iyzicoRequest, (err, result) => {
       if (err || result.status === "failure") {
-        safeLog(`❌ Iyzico Form Başlatılamadı: ${result ? result.errorMessage : err.message}`);
+        safeLog(
+          `❌ Iyzico Form Başlatılamadı: ${result ? result.errorMessage : err.message}`,
+        );
         return res.status(400).json({ error: "Ödeme oturumu başlatılamadı." });
       }
 
       // Mobil uygulamaya açacağı sayfanın web linkini döndürüyoruz
       return res.status(200).json({
         success: true,
-        paymentUrl: result.paymentPageUrl
+        paymentUrl: result.paymentPageUrl,
       });
     });
-
   } catch (error) {
     safeLog(`❌ Sunucu Ödeme Hatası: ${error.message}`);
     return res.status(500).json({ error: "Sunucu hatası." });
@@ -916,7 +1009,7 @@ app.post("/api/topup-callback", async (req, res) => {
   // Iyzico arka planda bir 'token' POST eder
   const { token } = req.body;
   // URL'e iliştirdiğimiz yükleme bilgileri
-  const { uid, tokens, amount } = req.query; 
+  const { uid, tokens, amount } = req.query;
 
   if (!token) {
     return res.status(400).send("<h1>Geçersiz İstek</h1>");
@@ -927,15 +1020,20 @@ app.post("/api/topup-callback", async (req, res) => {
 
   try {
     // Iyzico'ya bu token'ın sonucunu soruyoruz (Gerçekten ödedi mi?)
-    iyzipay.checkoutForm.retrieve({
-      locale: Iyzipay.LOCALE.TR,
-      conversationId: "QWASH_CHECK_" + Date.now(),
-      token: token
-    }, async (err, result) => {
-      
-      if (err || result.status !== "success" || result.paymentStatus !== "SUCCESS") {
-        safeLog(`❌ Ödeme Başarısız veya İptal Edildi. UID: ${uid}`);
-        return res.send(`
+    iyzipay.checkoutForm.retrieve(
+      {
+        locale: Iyzipay.LOCALE.TR,
+        conversationId: "QWASH_CHECK_" + Date.now(),
+        token: token,
+      },
+      async (err, result) => {
+        if (
+          err ||
+          result.status !== "success" ||
+          result.paymentStatus !== "SUCCESS"
+        ) {
+          safeLog(`❌ Ödeme Başarısız veya İptal Edildi. UID: ${uid}`);
+          return res.send(`
           <html lang="tr">
             <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
             <body style="text-align:center; padding-top:50px; font-family:sans-serif; background-color:#fff3f3;">
@@ -945,38 +1043,40 @@ app.post("/api/topup-callback", async (req, res) => {
             </body>
           </html>
         `);
-      }
+        }
 
-      // ÖDEME ONAYLANDI -> Jetonları Firestore'a yükle
-      try {
-        const userRef = db.collection("users").doc(uid);
-        const txRef = db.collection("transactions").doc();
+        // ÖDEME ONAYLANDI -> Jetonları Firestore'a yükle
+        try {
+          const userRef = db.collection("users").doc(uid);
+          const txRef = db.collection("transactions").doc();
 
-        await db.runTransaction(async (t) => {
-          const txUserDoc = await t.get(userRef);
-          const mevcutBakiye = Number(txUserDoc.data().walletTokens || 0);
+          await db.runTransaction(async (t) => {
+            const txUserDoc = await t.get(userRef);
+            const mevcutBakiye = Number(txUserDoc.data().walletTokens || 0);
 
-          t.update(userRef, {
-            walletTokens: mevcutBakiye + eklenecekJeton,
-            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            t.update(userRef, {
+              walletTokens: mevcutBakiye + eklenecekJeton,
+              updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            });
+
+            t.set(txRef, {
+              type: "topup",
+              status: "success",
+              paymentId: result.paymentId,
+              tokens: eklenecekJeton,
+              unitPriceTRY: eklenecekTutar / eklenecekJeton,
+              amountTRY: eklenecekTutar,
+              userId: uid,
+              createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            });
           });
 
-          t.set(txRef, {
-            type: "topup",
-            status: "success",
-            paymentId: result.paymentId,
-            tokens: eklenecekJeton,
-            unitPriceTRY: eklenecekTutar / eklenecekJeton,
-            amountTRY: eklenecekTutar,
-            userId: uid,
-            createdAt: admin.firestore.FieldValue.serverTimestamp(),
-          });
-        });
+          safeLog(
+            `✅ CHECKOUT ÖDEMESİ BAŞARILI: ${uid} -> ${eklenecekJeton} jeton yüklendi.`,
+          );
 
-        safeLog(`✅ CHECKOUT ÖDEMESİ BAŞARILI: ${uid} -> ${eklenecekJeton} jeton yüklendi.`);
-        
-        // Kullanıcı ekranda şık bir başarı mesajı görsün
-        return res.send(`
+          // Kullanıcı ekranda şık bir başarı mesajı görsün
+          return res.send(`
           <html lang="tr">
             <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
             <body style="text-align:center; padding-top:50px; font-family:sans-serif; background-color:#f4fbf7;">
@@ -986,13 +1086,16 @@ app.post("/api/topup-callback", async (req, res) => {
             </body>
           </html>
         `);
-
-      } catch (dbError) {
-        safeLog(`❌ Ödeme alındı ama DB yazma hatası: ${dbError.message}`);
-        return res.status(500).send("<h1>Ödeme Alındı fakat bir veritabanı hatası oluştu. Lütfen destekle iletişime geçin.</h1>");
-      }
-    });
-
+        } catch (dbError) {
+          safeLog(`❌ Ödeme alındı ama DB yazma hatası: ${dbError.message}`);
+          return res
+            .status(500)
+            .send(
+              "<h1>Ödeme Alındı fakat bir veritabanı hatası oluştu. Lütfen destekle iletişime geçin.</h1>",
+            );
+        }
+      },
+    );
   } catch (error) {
     return res.status(500).send("<h1>Sunucu hatası oluştu.</h1>");
   }

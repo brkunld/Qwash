@@ -1731,8 +1731,20 @@
         onValue,
       } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-database.js";
 
-      const firebaseConfig =
-        window.electronAPI?.getFirebaseConfig?.() || window.FIREBASE_CONFIG;
+      const firebaseConfig = window.electronAPI?.getFirebaseConfig
+        ? await window.electronAPI.getFirebaseConfig()
+        : window.FIREBASE_CONFIG;
+
+      if (
+        !firebaseConfig ||
+        !firebaseConfig.apiKey ||
+        !firebaseConfig.databaseURL
+      ) {
+        throw new Error(
+          "Firebase config eksik. preload.js, firebase-config veya .env dosyasını kontrol edin.",
+        );
+      }
+
       const app = initializeApp(firebaseConfig);
       const auth = getAuth(app);
       const database = getDatabase(app);

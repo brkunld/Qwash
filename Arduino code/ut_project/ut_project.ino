@@ -44,7 +44,9 @@ bool ilkMqttBaglantiTamamlandi = false;
 
 // ================= HAFIZA / ZAMAN =================
 Preferences preferences;
-time_t islemBitisZamani = 0;
+unsigned long islemBaslangicMs = 0;
+unsigned long islemSuresiMs = 0;
+unsigned long sonNvsKayitMs = 0; // Flash ömrü (wear leveling) için yazma geciktirici
 
 // ================= PINLER =================
 const int buzzerPin = 25;
@@ -95,6 +97,18 @@ bool dokunmatikKilit = false;
 bool odemeBekleniyor = false;
 unsigned long odemeBeklemeBaslangicMs = 0;
 const unsigned long ODEME_BEKLEME_TIMEOUT_MS = 60000;
+// ================= NON-BLOCKING EKRAN AKIŞI =================
+enum GeciciEkranModu {
+  GECICI_YOK,
+  GECICI_IPTAL,
+  GECICI_ISTEK_ILETILIYOR
+};
+
+GeciciEkranModu geciciEkranModu = GECICI_YOK;
+unsigned long geciciEkranBaslangicMs = 0;
+const unsigned long IPTAL_EKRANI_MS = 300;
+const unsigned long ISTEK_ILETILIYOR_EKRANI_MS = 500;
+String bekleyenPaketSecimi = "";
 
 // ================= SAYAC =================
 int sayacSonEkranSaniye = -1;
@@ -106,6 +120,8 @@ unsigned long sonKopukButonMs = 0;
 const unsigned long BUTON_DEBOUNCE_MS = 200;
 bool oncekiKopukButonDurumu = HIGH;
 
+============================================================
+void availableModunaDon(const char* sebep, bool cancelSelectionGonder);
 // ================= YARDIMCI =================
 void resetSayacDurumu() {
   sayacSonEkranSaniye = -1;
@@ -150,8 +166,9 @@ String paketNormalizeEt(String paket) {
 }
 
 void islemHafizasiniTemizle() {
-  islemBitisZamani = 0;
-  preferences.putULong("endTime", 0);
+  islemBaslangicMs = 0;
+  islemSuresiMs = 0;
+  preferences.putULong("kalanSure", 0); // endTime yerine kalanSure sıfırlanıyor
   resetSayacDurumu();
   yeniBusyKomutuGeldi = false;
 }
@@ -217,6 +234,71 @@ void ekranaWaitingCiz() {
   tft.setTextColor(TFT_WHITE, TFT_RED);
   tft.setTextSize(2);
   tft.println("IPTAL");
+}
+
+void ekranaMesajYaz(const char* mesaj, uint16_t renk) {
+  // Tüm ekranı sürekli silmek yerine mesaj alanını temizle
+  tft.fillRect(0, 95, 320, 60, TFT_BLACK);
+  tft.setTextSize(2);
+  tft.setTextColor(renk, TFT_BLACK);
+  tft.setCursor(20, 110);
+  tft.println(mesaj);
+}
+
+void geciciEkranBaslat(GeciciEkranModu mod, const String& paket = "") {
+  geciciEkranModu = mod;
+  geciciEkranBaslangicMs = millis();
+  bekleyenPaketSecimi = paket;
+  dokunmatikKilit = true;
+
+  tft.fillScreen(TFT_BLACK);
+
+  if (mod == GECICI_IPTAL) {
+    ekranaMesajYaz("Iptal ediliyor...", TFT_RED);
+  }
+  else if (mod == GECICI_ISTEK_ILETILIYOR) {
+    ekranaMesajYaz("Istek iletiliyor...", TFT_YELLOW);
+  }
+}
+
+void geciciEkranKontrolEt() {
+  if (geciciEkranModu == GECICI_YOK) return;
+
+  // MQTT komutu geldiyse ve artık waiting modunda değilsek,
+  // geçici ekran akışını iptal et.
+  if (currentStatus != "waiting") {
+    geciciEkranModu = GECICI_YOK;
+    bekleyenPaketSecimi = "";
+    return;
+  }
+
+  unsigned long suAn = millis();
+
+  if (
+    geciciEkranModu == GECICI_IPTAL &&
+    suAn - geciciEkranBaslangicMs >= IPTAL_EKRANI_MS
+  ) {
+    geciciEkranModu = GECICI_YOK;
+    bekleyenPaketSecimi = "";
+    availableModunaDon("user_cancel", true);
+    return;
+  }
+
+  if (
+    geciciEkranModu == GECICI_ISTEK_ILETILIYOR &&
+    suAn - geciciEkranBaslangicMs >= ISTEK_ILETILIYOR_EKRANI_MS
+  ) {
+    geciciEkranModu = GECICI_YOK;
+
+    tft.fillScreen(TFT_BLACK);
+    ekranaMesajYaz("Odeme bekleniyor...", TFT_WHITE);
+
+    odemeBekleniyor = true;
+    odemeBeklemeBaslangicMs = millis();
+
+    bekleyenPaketSecimi = "";
+    return;
+  }
 }
 
 // ================= QR =================
@@ -403,6 +485,9 @@ void availableModunaDon(const char* sebep, bool cancelSelectionGonder) {
   LOG_PRINT(F("AVAILABLE moduna donuluyor. Sebep: "));
   LOG_PRINTLN(sebep);
 
+  geciciEkranModu = GECICI_YOK;
+  bekleyenPaketSecimi = "";
+
   odemeBekleniyor = false;
   dokunmatikKilit = false;
   hataEkraniGosteriliyor = false;
@@ -484,10 +569,10 @@ void mqttKomutUygula(const String &komut) {
       requestedPackage = paketNormalizeEt(gelenPaket);
       durationSec = guvenliDurationOku(gelenSure);
 
-      preferences.putULong("endTime", 0);
-      islemBitisZamani = 0;
+      preferences.putULong("kalanSure", 0);
+      islemBaslangicMs = 0;
+      islemSuresiMs = 0;
       resetSayacDurumu();
-
       yeniBusyKomutuGeldi = true;
       currentStatus = "busy";
       isBayActive = true;
@@ -503,17 +588,40 @@ void mqttKomutUygula(const String &komut) {
 void mqttCallback(char* topic, byte* payload, unsigned int length) {
   if (length == 0 || length > 120) return;
 
-  String mesaj = "";
+  char mesaj[121];
 
   for (unsigned int i = 0; i < length; i++) {
-    mesaj += (char)payload[i];
+    mesaj[i] = (char)payload[i];
   }
 
-  mesaj.trim();
+  mesaj[length] = '\0';
 
-  if (mesaj.length() == 0) return;
+  // Baştaki boşlukları atla
+  char* baslangic = mesaj;
+  while (*baslangic == ' ' || *baslangic == '\t' || *baslangic == '\r' || *baslangic == '\n') {
+    baslangic++;
+  }
 
-  mqttKomutUygula(mesaj);
+  // Sondaki boşlukları temizle
+  char* bitis = baslangic + strlen(baslangic);
+
+  while (
+    bitis > baslangic &&
+    (
+      *(bitis - 1) == ' ' ||
+      *(bitis - 1) == '\t' ||
+      *(bitis - 1) == '\r' ||
+      *(bitis - 1) == '\n'
+    )
+  ) {
+    bitis--;
+  }
+
+  *bitis = '\0';
+
+  if (baslangic[0] == '\0') return;
+
+  mqttKomutUygula(String(baslangic));
 }
 
 bool mqttBaglan() {
@@ -664,27 +772,39 @@ void wifiNonBlockingKontrolEt() {
 
 // ================= SAYAC =================
 void ekrandaSayaciGuncelle() {
-  time_t suAn;
-  time(&suAn);
+  unsigned long suAnMs = millis();
 
-  if (islemBitisZamani > suAn) {
-    unsigned long kalanSaniye = islemBitisZamani - suAn;
+  if (islemSuresiMs == 0) {
+    return;
+  }
+
+  unsigned long gecenMs = suAnMs - islemBaslangicMs;
+
+  if (gecenMs < islemSuresiMs) {
+    unsigned long kalanMs = islemSuresiMs - gecenMs;
+    unsigned long kalanSaniye = (kalanMs + 999) / 1000;
 
     int saniye = kalanSaniye % 60;
     int dakika = kalanSaniye / 60;
 
+    // Flash ömrünü korumak için kalan süreyi NVS'ye her 10 saniyede bir kaydet
+    if (suAnMs - sonNvsKayitMs >= 10000) {
+      preferences.putULong("kalanSure", kalanSaniye);
+      sonNvsKayitMs = suAnMs;
+    }
+
     if (kalanSaniye >= 10) {
-      if (kalanSaniye != sayacSonEkranSaniye) {
+      if ((int)kalanSaniye != sayacSonEkranSaniye) {
         tone(buzzerPin, 2000, 100);
       }
     } else {
-      if (millis() - sayacSonYarimSaniyeMs >= 500) {
+      if (suAnMs - sayacSonYarimSaniyeMs >= 500) {
         tone(buzzerPin, 2500, 100);
-        sayacSonYarimSaniyeMs = millis();
+        sayacSonYarimSaniyeMs = suAnMs;
       }
     }
 
-    if (kalanSaniye != sayacSonEkranSaniye) {
+    if ((int)kalanSaniye != sayacSonEkranSaniye) {
       tft.setTextColor(TFT_YELLOW, TFT_BLACK);
       tft.setTextSize(5);
       tft.setCursor(80, 120);
@@ -704,8 +824,9 @@ void ekrandaSayaciGuncelle() {
 
     sayacIslemBittiCalindi = true;
 
-    preferences.putULong("endTime", 0);
-    islemBitisZamani = 0;
+    preferences.putULong("kalanSure", 0);
+    islemBaslangicMs = 0;
+    islemSuresiMs = 0;
 
     currentStatus = "waiting";
     odemeBekleniyor = false;
@@ -768,7 +889,7 @@ void setup() {
   wifiWasConnected = true;
   wifiReconnectInProgress = false;
 
-  ntpBekle();
+  ntpBekle(); // Cihazın genel saatini senkronize etmek isterseniz kalabilir, sayaçlar millis'e geçti.
 
   mqttBaglan();
   wifiWasConnected = WiFi.status() == WL_CONNECTED;
@@ -800,6 +921,11 @@ void loop() {
         durumDegisti = false;
       }
     }
+  }
+
+  geciciEkranKontrolEt();
+  if (geciciEkranModu != GECICI_YOK) {
+    return;
   }
 
   if (millis() - sonNabizZamani >= nabizAraligi) {
@@ -849,7 +975,7 @@ void loop() {
       islemHafizasiniTemizle();
 
       tft.fillScreen(TFT_BLACK);
-      tft.setTextColor(TFT_ORANGE);
+      tft.setTextColor(TFT_ORANGE, TFT_BLACK);
       tft.setTextSize(3);
       tft.setCursor(40, 100);
       tft.println("BAKIM MODU");
@@ -866,7 +992,7 @@ void loop() {
 
       tft.fillScreen(TFT_BLACK);
       tft.setTextSize(3);
-      tft.setTextColor(TFT_GREEN);
+      tft.setTextColor(TFT_GREEN, TFT_BLACK);
       tft.setCursor(30, 40);
 
       if (requestedPackage == "foam") {
@@ -876,14 +1002,13 @@ void loop() {
       }
 
       if (eskiDurum != "busy") {
-        time_t suAn;
-        time(&suAn);
-
-        time_t kayitliBitis = preferences.getULong("endTime", 0);
+        unsigned long kayitliKalanSure = preferences.getULong("kalanSure", 0);
 
         if (yeniBusyKomutuGeldi) {
-          islemBitisZamani = suAn + durationSec;
-          preferences.putULong("endTime", (unsigned long)islemBitisZamani);
+          islemBaslangicMs = millis();
+          islemSuresiMs = durationSec * 1000UL;
+          preferences.putULong("kalanSure", durationSec);
+          sonNvsKayitMs = millis();
           yeniBusyKomutuGeldi = false;
 
           LOG_PRINT(F("Yeni MQTT sure baslatildi. Paket: "));
@@ -891,13 +1016,18 @@ void loop() {
           LOG_PRINT(F(" Sure: "));
           LOG_PRINTLN(durationSec);
         }
-        else if (kayitliBitis > suAn && currentStatus == "busy") {
-          islemBitisZamani = kayitliBitis;
+        else if (kayitliKalanSure > 0 && currentStatus == "busy") {
+          // Elektrik kesintisi kurtarma senaryosu
+          islemBaslangicMs = millis();
+          islemSuresiMs = kayitliKalanSure * 1000UL;
+          sonNvsKayitMs = millis();
           LOG_PRINTLN(F("Kalan sure hafizadan yuklendi."));
         }
         else {
-          islemBitisZamani = suAn + durationSec;
-          preferences.putULong("endTime", (unsigned long)islemBitisZamani);
+          islemBaslangicMs = millis();
+          islemSuresiMs = durationSec * 1000UL;
+          preferences.putULong("kalanSure", durationSec);
+          sonNvsKayitMs = millis();
           LOG_PRINTLN(F("Yeni sure baslatildi."));
         }
 
@@ -993,39 +1123,16 @@ void loop() {
     }
 
     if (secilenPaket != "") {
-      dokunmatikKilit = true;
-      tft.fillScreen(TFT_BLACK);
-
       if (secilenPaket == "cancel") {
-        tft.setCursor(30, 110);
-        tft.setTextSize(2);
-        tft.setTextColor(TFT_RED);
-        tft.println("Iptal ediliyor...");
-
-        delay(300);
-
-        availableModunaDon("user_cancel", true);
+        geciciEkranBaslat(GECICI_IPTAL);
         return;
-      } else {
-        mqttSecimYayinla(secilenPaket);
-
-        tft.setCursor(20, 110);
-        tft.setTextSize(2);
-        tft.setTextColor(TFT_YELLOW);
-        tft.println("Istek iletiliyor...");
-
-        delay(500);
-
-        tft.fillScreen(TFT_BLACK);
-        tft.setCursor(20, 110);
-        tft.setTextColor(TFT_WHITE);
-        tft.println("Odeme bekleniyor...");
-
-        odemeBekleniyor = true;
-        odemeBeklemeBaslangicMs = millis();
       }
+
+      mqttSecimYayinla(secilenPaket);
+      geciciEkranBaslat(GECICI_ISTEK_ILETILIYOR, secilenPaket);
+      return;
     }
-  }
+      }
 
   if (odemeBekleniyor && currentStatus == "waiting") {
     if (millis() - odemeBeklemeBaslangicMs >= ODEME_BEKLEME_TIMEOUT_MS) {

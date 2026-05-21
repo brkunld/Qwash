@@ -1,7 +1,13 @@
 const { contextBridge, ipcRenderer } = require("electron");
-const firebaseConfig = require("./firebase-config");
 
+// Renderer'a sadece gerekli, dar kapsamlı API'ler açılır.
+// ipcRenderer doğrudan window'a verilmez.
 contextBridge.exposeInMainWorld("electronAPI", {
-  getFirebaseConfig: () => firebaseConfig,
-  closeApp: () => ipcRenderer.send("close-app")
+  getFirebaseConfig: async () => {
+    return await ipcRenderer.invoke("firebase:get-config");
+  },
+
+  closeApp: async () => {
+    return await ipcRenderer.invoke("app:close");
+  },
 });
