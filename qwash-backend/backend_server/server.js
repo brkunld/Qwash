@@ -591,6 +591,22 @@ const verifyAdmin = async (req, res, next) => {
       ? decodedToken.email.trim().toLowerCase()
       : "";
 
+    if (!requestEmail) {
+      safeLog("🚨 ADMIN GİRİŞ DENEMESİ: Token içinde e-posta yok.");
+
+      return res.status(403).json({
+        error: "Admin erişimi için e-posta bilgisi gerekli.",
+      });
+    }
+
+    if (decodedToken.email_verified !== true) {
+      safeLog(`🚨 DOĞRULANMAMIŞ ADMIN E-POSTASI DENEMESİ: ${requestEmail}`);
+
+      return res.status(403).json({
+        error: "Admin erişimi için e-posta adresinizi doğrulamanız gerekiyor.",
+      });
+    }
+
     if (!authorizedEmails.includes(requestEmail)) {
       safeLog(`🚨 YETKİSİZ GİRİŞ DENEMESİ: ${requestEmail}`);
 
@@ -765,22 +781,21 @@ app.post("/api/start-session", verifyUser, async (req, res) => {
       });
 
       const startedAtMs = Date.now();
-      const expectedEndTimeMs = startedAtMs + finalDurationSec * 1000;
+const expectedEndTimeMs = startedAtMs + finalDurationSec * 1000;
 
-      t.set(sessionRef, {
-        bayId,
-        userId: uid,
-        type: packageId,
-        packageId,
-        tokensCost: finalTokensCost,
-        durationSec: finalDurationSec,
-        status: "running",
-        startedAt: admin.firestore.FieldValue.serverTimestamp(),
-        startedAtMs,
-        expectedEndTime:
-          admin.firestore.Timestamp.fromMillis(expectedEndTimeMs),
-        expectedEndTimeMs,
-      });
+t.set(sessionRef, {
+  bayId,
+  userId: uid,
+  type: packageId,
+  packageId,
+  tokensCost: finalTokensCost,
+  durationSec: finalDurationSec,
+  status: "running",
+  startedAt: admin.firestore.Timestamp.fromMillis(startedAtMs),
+  startedAtMs,
+  expectedEndTime: admin.firestore.Timestamp.fromMillis(expectedEndTimeMs),
+  expectedEndTimeMs,
+});
     });
 
     // 3. Peronu kesin olarak busy durumuna al
