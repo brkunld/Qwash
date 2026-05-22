@@ -1258,21 +1258,27 @@ app.post("/api/topup-callback", async (req, res) => {
           `);
         }
 
+        const toKurus = (value) => Math.round(Number(value) * 100);
+
         const expectedAmount = Number(order.amountTRY);
         const paidPrice = Number(result.paidPrice);
+        const expectedKurus = toKurus(order.amountTRY);
+        const paidKurus = toKurus(result.paidPrice);
 
         if (
           !Number.isFinite(expectedAmount) ||
           !Number.isFinite(paidPrice) ||
-          paidPrice !== expectedAmount
+          expectedKurus !== paidKurus
         ) {
           await orderRef.update({
-            status: "amount_mismatch",
-            expectedAmountTRY: expectedAmount,
-            iyzicoPaidPrice: result.paidPrice || null,
-            paymentId: result.paymentId || null,
-            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-          });
+  status: "amount_mismatch",
+  expectedAmountTRY: expectedAmount,
+  expectedKurus,
+  iyzicoPaidPrice: result.paidPrice || null,
+  iyzicoPaidKurus: paidKurus,
+  paymentId: result.paymentId || null,
+  updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+});
 
           safeLog(
             `🚨 IYZICO TUTAR UYUŞMAZLIĞI: Order=${orderId}, Expected=${expectedAmount}, Paid=${result.paidPrice}`,
@@ -1462,7 +1468,10 @@ app.post("/api/admin/update-bay", verifyAdmin, async (req, res) => {
       updatedAt: admin.database.ServerValue.TIMESTAMP,
     };
 
-    if (allowedPatch.status === "available" || allowedPatch.status === "offline") {
+    if (
+      allowedPatch.status === "available" ||
+      allowedPatch.status === "offline"
+    ) {
       guncellemeVerisi.currentSessionId = null;
       guncellemeVerisi.lastUserId = null;
       guncellemeVerisi.requestedPackage = null;
@@ -1498,7 +1507,9 @@ app.post("/api/admin/update-bay", verifyAdmin, async (req, res) => {
       mqttOk = await safeSendBayCommand(bayId, "ACTIVE_OFF");
     }
 
-    safeLog(`🛠️ Peron Güncellendi: ${bayId} -> ${JSON.stringify(allowedPatch)}`);
+    safeLog(
+      `🛠️ Peron Güncellendi: ${bayId} -> ${JSON.stringify(allowedPatch)}`,
+    );
 
     return res.status(200).json({
       success: true,
@@ -1635,16 +1646,17 @@ app.post("/api/admin/topup", verifyAdmin, async (req, res) => {
   try {
     const adet = parseInt(tokens, 10);
 
-if (
-  !Number.isFinite(adet) ||
-  !Number.isInteger(adet) ||
-  adet <= 0 ||
-  adet > 10000
-) {
-  return res.status(400).json({
-    error: "Geçerli bir jeton miktarı girin. Tek seferde en fazla 10000 jeton yüklenebilir.",
-  });
-}
+    if (
+      !Number.isFinite(adet) ||
+      !Number.isInteger(adet) ||
+      adet <= 0 ||
+      adet > 10000
+    ) {
+      return res.status(400).json({
+        error:
+          "Geçerli bir jeton miktarı girin. Tek seferde en fazla 10000 jeton yüklenebilir.",
+      });
+    }
 
     const snap = await db.collection("packages").doc("jeton").get();
     const jetonFiyat = snap.exists ? Number(snap.data().jetonFiyat || 0) : 0;
