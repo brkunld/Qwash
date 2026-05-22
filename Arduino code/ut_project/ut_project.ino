@@ -345,15 +345,13 @@ void geciciEkranKontrolEt() {
 
   unsigned long suAn = millis();
 
-  if (
-    geciciEkranModu == GECICI_IPTAL &&
-    suAn - geciciEkranBaslangicMs >= IPTAL_EKRANI_MS
-  ) {
-    geciciEkranModu = GECICI_YOK;
-    bekleyenPaketSecimi = "";
-    availableModunaDon("user_cancel", true);
-    return;
-  }
+if (
+  geciciEkranModu == GECICI_IPTAL &&
+  suAn - geciciEkranBaslangicMs >= IPTAL_EKRANI_MS
+) {
+  iptalIstegiGonder();
+  return;
+}
 
   if (
     geciciEkranModu == GECICI_ISTEK_ILETILIYOR &&
@@ -567,6 +565,35 @@ bool mqttEventYayinla(const String& eventMesaji) {
     eventMesaji.c_str(),
     false
   );
+}
+
+void iptalIstegiGonder() {
+  LOG_PRINTLN(F("Kullanici iptal istegi gonderiyor. Backend cevabi beklenecek."));
+
+  geciciEkranModu = GECICI_YOK;
+  bekleyenPaketSecimi = "";
+
+  odemeBekleniyor = false;
+  dokunmatikKilit = true;
+  hataEkraniGosteriliyor = false;
+
+  unsigned long suAn = millis();
+
+  if (suAn - sonCancelEventMs >= CANCEL_EVENT_DEBOUNCE_MS) {
+    sonCancelEventMs = suAn;
+
+    if (!mqttEventYayinla("CANCEL")) {
+      LOG_PRINTLN(F("CANCEL event gonderilemedi, selection fallback deneniyor."));
+      mqttSecimYayinla("cancel");
+    } else {
+      LOG_PRINTLN(F("CANCEL event gonderildi."));
+    }
+  } else {
+    LOG_PRINTLN(F("CANCEL event tekrar gonderilmedi debounce."));
+  }
+
+  tft.fillScreen(TFT_BLACK);
+  ekranaMesajYaz("Iptal ediliyor...", TFT_RED);
 }
 
 void availableModunaDon(const char* sebep, bool cancelEventGonder) {
@@ -1174,7 +1201,7 @@ void loop() {
     unsigned long gecenZaman = millis() - beklemeBaslangicMs;
 
     if (gecenZaman >= BEKLEME_SURESI_MS) {
-      availableModunaDon("waiting_timeout", true);
+      availableModunaDon("waiting_timeout", false);
       return;
     }
 
@@ -1254,7 +1281,7 @@ void loop() {
 
   if (odemeBekleniyor && currentStatus == "waiting") {
     if (millis() - odemeBeklemeBaslangicMs >= ODEME_BEKLEME_TIMEOUT_MS) {
-      availableModunaDon("odeme_timeout", true);
+      availableModunaDon("odeme_timeout", false);
       return;
     }
   }
