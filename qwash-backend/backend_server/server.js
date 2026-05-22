@@ -478,13 +478,31 @@ const clearWaitingBayAfterCancel = async (bayId, uid = null) => {
   if (!bayData) {
     return {
       cleared: false,
+      commandSent: false,
       reason: "bay_not_found",
+    };
+  }
+
+  const alreadyAvailable =
+    bayData.status === "available" &&
+    !bayData.currentSessionId &&
+    !bayData.lastUserId &&
+    !bayData.requestedPackage &&
+    !bayData.durationSec &&
+    !bayData.tokensCost;
+
+  if (alreadyAvailable) {
+    return {
+      cleared: false,
+      commandSent: false,
+      reason: "already_available",
     };
   }
 
   if (bayData.currentSessionId) {
     return {
       cleared: false,
+      commandSent: false,
       reason: "active_session_exists",
     };
   }
@@ -497,6 +515,7 @@ const clearWaitingBayAfterCancel = async (bayId, uid = null) => {
   ) {
     return {
       cleared: false,
+      commandSent: false,
       reason: "different_user",
     };
   }
@@ -509,16 +528,18 @@ const clearWaitingBayAfterCancel = async (bayId, uid = null) => {
       lastSeen: admin.database.ServerValue.TIMESTAMP,
     });
 
-    await safeSendBayCommand(bayId, "AVAILABLE");
+    const mqttOk = await safeSendBayCommand(bayId, "AVAILABLE");
 
     return {
       cleared: true,
+      commandSent: mqttOk,
       reason: "cancelled",
     };
   }
 
   return {
     cleared: false,
+    commandSent: false,
     reason: `not_cancelable_${bayData.status}`,
   };
 };
@@ -839,11 +860,17 @@ mqttClient.on("message", async (topic, messageBuffer) => {
       if (isCancelValue(eventMessage)) {
         const cancelResult = await clearWaitingBayAfterCancel(bayId);
 
-        safeLog(
-          `↩️ MQTT EVENT CANCEL: ${bayId} result=${JSON.stringify(
-            cancelResult,
-          )}`,
-        );
+        if (cancelResult.cleared) {
+          safeLog(
+            `↩️ MQTT EVENT CANCEL: ${bayId} result=${JSON.stringify(
+              cancelResult,
+            )}`,
+          );
+        } else {
+          safeLog(
+            `ℹ️ MQTT EVENT CANCEL yok sayıldı: ${bayId} reason=${cancelResult.reason}`,
+          );
+        }
 
         return;
       }
@@ -858,16 +885,22 @@ mqttClient.on("message", async (topic, messageBuffer) => {
       if (isCancelValue(selectionVal)) {
         const cancelResult = await clearWaitingBayAfterCancel(bayId);
 
-        safeLog(
-          `↩️ MQTT SELECTION CANCEL: ${bayId} result=${JSON.stringify(
-            cancelResult,
-          )}`,
-        );
+        if (cancelResult.cleared) {
+          safeLog(
+            `↩️ MQTT SELECTION CANCEL: ${bayId} result=${JSON.stringify(
+              cancelResult,
+            )}`,
+          );
+        } else {
+          safeLog(
+            `ℹ️ MQTT SELECTION CANCEL yok sayıldı: ${bayId} reason=${cancelResult.reason}`,
+          );
+        }
 
         return;
       }
 
-      // Eğer gelen mesaj iptal (cancel) değilse, donanım seçimidir (su/köpük vb.)
+      // Eğer gelen mesaj iptal değilse, donanım seçimidir.
       safeLog(`🧼 MQTT SEÇİM: ${bayId} -> ${selectionVal}`);
       return;
     }
@@ -1435,18 +1468,19 @@ app.post("/api/cancel-waiting", verifyUser, async (req, res) => {
       });
     }
 
-    await clearBaySessionFields(bayId, {
-      status: "available",
-    });
-
-    const mqttOk = await safeSendBayCommand(bayId, "AVAILABLE");
+    const cancelResult = await clearWaitingBayAfterCancel(bayId, req.user.uid);
 
     return res.status(200).json({
-      success: true,
-      mqttOk,
-      message: mqttOk
-        ? "Peron başarıyla serbest bırakıldı."
-        : "Peron veritabanında serbest bırakıldı ancak cihaza MQTT komutu gönderilemedi.",
+      success:
+        cancelResult.cleared || cancelResult.reason === "already_available",
+      mqttOk: cancelResult.commandSent,
+      reason: cancelResult.reason,
+      message:
+        cancelResult.reason === "already_available"
+          ? "Peron zaten serbest."
+          : cancelResult.commandSent
+            ? "Peron başarıyla serbest bırakıldı."
+            : "Peron veritabanında serbest bırakıldı ancak cihaza MQTT komutu gönderilemedi.",
     });
   } catch (error) {
     safeLog(`❌ Cancel Waiting Hatası: ${error.message}`);
