@@ -1190,6 +1190,8 @@ app.post("/api/topup-callback", async (req, res) => {
             updatedAt: admin.firestore.FieldValue.serverTimestamp(),
           });
 
+          
+
           safeLog(`❌ Ödeme Başarısız veya İptal Edildi. Order: ${orderId}`);
 
           return res.send(`
@@ -1199,6 +1201,30 @@ app.post("/api/topup-callback", async (req, res) => {
                 <h1 style="color:#d9534f;">❌ Ödeme Başarısız!</h1>
                 <p>İşlem bankanız tarafından reddedildi veya iptal edildi.</p>
                 <p>Uygulamaya güvenle geri dönebilirsiniz.</p>
+              </body>
+            </html>
+          `);
+        }
+        if (result.conversationId !== orderId || result.basketId !== orderId) {
+          await orderRef.update({
+            status: "iyzico_order_mismatch",
+            iyzicoConversationId: result.conversationId || null,
+            iyzicoBasketId: result.basketId || null,
+            paymentId: result.paymentId || null,
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          });
+
+          safeLog(
+            `🚨 IYZICO ORDER UYUŞMAZLIĞI: Order=${orderId}, Conversation=${result.conversationId}, Basket=${result.basketId}`,
+          );
+
+          return res.status(400).send(`
+            <html lang="tr">
+              <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+              <body style="text-align:center; padding-top:50px; font-family:sans-serif; background-color:#fff3f3;">
+                <h1 style="color:#d9534f;">❌ Ödeme Doğrulanamadı!</h1>
+                <p>Ödeme sipariş bilgileri sistemdeki kayıtla eşleşmedi.</p>
+                <p>Lütfen destek ile iletişime geçin.</p>
               </body>
             </html>
           `);
@@ -1266,14 +1292,16 @@ app.post("/api/topup-callback", async (req, res) => {
               updatedAt: admin.firestore.FieldValue.serverTimestamp(),
             });
 
-            t.update(orderRef, {
-              status: "success",
-              paymentId: result.paymentId || null,
-              iyzicoPaidPrice: result.paidPrice || null,
-              iyzicoPrice: result.price || null,
-              completedAt: admin.firestore.FieldValue.serverTimestamp(),
-              updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-            });
+t.update(orderRef, {
+  status: "success",
+  paymentId: result.paymentId || null,
+  iyzicoPaidPrice: result.paidPrice || null,
+  iyzicoPrice: result.price || null,
+  iyzicoConversationId: result.conversationId || null,
+  iyzicoBasketId: result.basketId || null,
+  completedAt: admin.firestore.FieldValue.serverTimestamp(),
+  updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+});
 
             t.set(db.collection("transactions").doc(), {
               type: "topup",
