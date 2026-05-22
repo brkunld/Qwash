@@ -12,11 +12,7 @@ import {
   setDoc,
 } from "firebase/firestore";
 
-import {
-  onValue,
-  ref,
-  update,
-} from "firebase/database";
+import { onValue, ref, update } from "firebase/database";
 
 import { auth, db, rtdb } from "../firebase";
 
@@ -81,7 +77,6 @@ export function useKullaniciIslemleri() {
       setAktifBayIdListesi((prev) => [...prev, pBayId]);
     }
   }, [params?.bayId]);
-
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (user) => {
@@ -179,10 +174,10 @@ export function useKullaniciIslemleri() {
           setBaylarData((prev) => ({ ...prev, [bayId]: bayData }));
 
           // Peronun kopmasını gerektiren durumları kontrol ediyoruz
-          const kopmaGerekliMi = 
-            bayData.status === "available" || 
-            bayData.status === "maintenance" || 
-            bayData.status === "offline" || 
+          const kopmaGerekliMi =
+            bayData.status === "available" ||
+            bayData.status === "maintenance" ||
+            bayData.status === "offline" ||
             bayData.isActive === false;
 
           // Otomatik Bağlantı Kesme Uyarısı
@@ -198,10 +193,13 @@ export function useKullaniciIslemleri() {
             // 2. Uyarıyı state updater'ın DIŞINDA veriyoruz
             if (!kasitliCikisRef.current[bayId]) {
               let mesaj = `${bayId} peronunda süreniz doldu veya işlem yapmadığınız için bağlantınız kesildi.`;
-              
+
               if (bayData.status === "maintenance") {
                 mesaj = `${bayId} peronu bakıma alındığı için bağlantınız kesildi.`;
-              } else if (bayData.status === "offline" || bayData.isActive === false) {
+              } else if (
+                bayData.status === "offline" ||
+                bayData.isActive === false
+              ) {
                 mesaj = `${bayId} peronu sistem tarafından kapatıldığı için bağlantınız kesildi.`;
               }
 
@@ -316,9 +314,9 @@ export function useKullaniciIslemleri() {
       const API_URL = "https://qwash-8q4y.onrender.com/api/start-session";
       const response = await fetch(API_URL, {
         method: "POST",
-        headers: { 
+        headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}` 
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
           uid: uid,
@@ -350,14 +348,13 @@ export function useKullaniciIslemleri() {
         const API_URL = "https://qwash-8q4y.onrender.com/api/stop-session";
         const response = await fetch(API_URL, {
           method: "POST",
-          headers: { 
+          headers: {
             "Content-Type": "application/json",
-            "Authorization": `Bearer ${token}`
+            Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify({
-            uid: uid,
             bayId: islemBayId,
-            sessionId: currentSessionId, 
+            sessionId: currentSessionId,
           }),
         });
 
@@ -375,88 +372,89 @@ export function useKullaniciIslemleri() {
   );
 
   const perondanCik = async (islemBayId) => {
-  const bay = baylarData[islemBayId];
-  const session = sessionsData[islemBayId];
+    const bay = baylarData[islemBayId];
+    const session = sessionsData[islemBayId];
 
-  if (bay?.currentSessionId || session?.status === "running") {
-    Alert.alert(
-      "Hata",
-      "Aktif oturum varken peronu terkedemezsiniz. Önce durdurunuz.",
-    );
-    return;
-  }
-
-  try {
-    const token = await auth.currentUser?.getIdToken();
-
-    if (!token) {
-      Alert.alert("Oturum Hatası", "Lütfen tekrar giriş yapın.");
+    if (bay?.currentSessionId || session?.status === "running") {
+      Alert.alert(
+        "Hata",
+        "Aktif oturum varken peronu terkedemezsiniz. Önce durdurunuz.",
+      );
       return;
     }
 
-    kasitliCikisRef.current[islemBayId] = true;
+    try {
+      const token = await auth.currentUser?.getIdToken();
 
-    const API_URL = "https://qwash-8q4y.onrender.com/api/cancel-waiting";
+      if (!token) {
+        Alert.alert("Oturum Hatası", "Lütfen tekrar giriş yapın.");
+        return;
+      }
 
-    const response = await fetch(API_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({ bayId: islemBayId }),
-    });
+      kasitliCikisRef.current[islemBayId] = true;
 
-    const data = await response.json();
+      const API_URL = "https://qwash-8q4y.onrender.com/api/cancel-waiting";
 
-    if (!response.ok) {
+      const response = await fetch(API_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ bayId: islemBayId }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        kasitliCikisRef.current[islemBayId] = false;
+        Alert.alert("Hata", data.error || "Çıkış yapılamadı.");
+        return;
+      }
+
+      Alert.alert("Başarılı", data.message || "Peron serbest bırakıldı.");
+    } catch (error) {
       kasitliCikisRef.current[islemBayId] = false;
-      Alert.alert("Hata", data.error || "Çıkış yapılamadı.");
-      return;
+      console.error("Çıkış hatası:", error);
+      Alert.alert("Bağlantı Hatası", "Sunucuya ulaşılamadı.");
     }
+  };
 
-    Alert.alert("Başarılı", data.message || "Peron serbest bırakıldı.");
-  } catch (error) {
-    kasitliCikisRef.current[islemBayId] = false;
-    console.error("Çıkış hatası:", error);
-    Alert.alert("Bağlantı Hatası", "Sunucuya ulaşılamadı.");
-  }
-};
-
-const bakiyeYukle = async (tokens, amountTRYParam) => {
+  const bakiyeYukle = async (tokens, amountTRYParam) => {
     if (!uid) return router.replace("/login");
     if (!jetonFiyat || fiyatYukleniyor)
       return Alert.alert("Fiyat Alınamadı", "Fiyat bilgisi alınamadı.");
 
     setYuklemeIslemde(true);
-    const amountTRY = typeof amountTRYParam === "number" ? amountTRYParam : tokens * jetonFiyat;
+    const amountTRY =
+      typeof amountTRYParam === "number" ? amountTRYParam : tokens * jetonFiyat;
 
     try {
       const token = await auth.currentUser?.getIdToken();
-      const API_URL = "https://qwash-8q4y.onrender.com/api/topup"; 
-      
+      const API_URL = "https://qwash-8q4y.onrender.com/api/topup";
+
       const response = await fetch(API_URL, {
         method: "POST",
-        headers: { 
+        headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
           uid: uid,
           tokens: tokens,
-          amountTRY: amountTRY
+          amountTRY: amountTRY,
         }),
       });
 
       const data = await response.json();
-      
+
       if (!response.ok || !data.success) {
         return Alert.alert("Hata", data.error || "Ödeme oturumu açılamadı.");
       }
 
       // Gelen Iyzico ödeme linkini uygulama içi tarayıcı penceresinde (In-App Browser) açıyoruz
       setYuklemeAcik(false); // Modalı kapat
-      
+
       await WebBrowser.openBrowserAsync(data.paymentUrl, {
         dismissButtonStyle: "close",
         readerMode: false,
@@ -464,8 +462,10 @@ const bakiyeYukle = async (tokens, amountTRYParam) => {
       });
 
       // Tarayıcı kapandığında kullanıcıya hatırlatma yapalım
-      Alert.alert("Bilgi", "Ödeme işleminiz tamamlandıysa bakiyeniz birkaç saniye içinde güncellenecektir.");
-
+      Alert.alert(
+        "Bilgi",
+        "Ödeme işleminiz tamamlandıysa bakiyeniz birkaç saniye içinde güncellenecektir.",
+      );
     } catch (error) {
       console.error(error);
       Alert.alert("Bağlantı Hatası", "Sunucuya ulaşılamadı.");

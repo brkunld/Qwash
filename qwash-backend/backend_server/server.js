@@ -862,6 +862,7 @@ app.post("/api/cancel-waiting", verifyUser, async (req, res) => {
 // ---------------------------------------------------------
 app.post("/api/stop-session", verifyUser, async (req, res) => {
   const { bayId, sessionId } = req.body;
+  const uid = req.user.uid;
 
   if (!bayId || !sessionId) {
     return res.status(400).json({ error: "Eksik parametre." });
@@ -869,6 +870,74 @@ app.post("/api/stop-session", verifyUser, async (req, res) => {
 
   try {
     const sessionRef = db.collection("sessions").doc(sessionId);
+    const bayRef = rtdb.ref(`bays/${bayId}`);
+
+    const [sessionDoc, baySnap] = await Promise.all([
+      sessionRef.get(),
+      bayRef.once("value"),
+    ]);
+
+    if (!sessionDoc.exists) {
+      return res.status(404).json({ error: "Oturum bulunamadı." });
+    }
+
+    if (!baySnap.exists()) {
+      return res.status(404).json({ error: "Peron bulunamadı." });
+    }
+
+    const session = sessionDoc.data();
+    const bayData = baySnap.val() || {};
+
+    // 1) Session gerçekten bu kullanıcıya mı ait?
+    if (session.userId !== uid) {
+      safeLog(
+        `🚨 YETKİSİZ OTURUM DURDURMA DENEMESİ: Saldırgan=${uid}, Session=${sessionId}, SessionUser=${session.userId || "yok"}`
+      );
+
+      return res.status(403).json({
+        error: "Bu oturumu durdurma yetkiniz yok.",
+      });
+    }
+
+    // 2) İstekle gelen bayId, session içindeki bayId ile eşleşiyor mu?
+    if (session.bayId !== bayId) {
+      safeLog(
+        `🚨 BAY/SESSION EŞLEŞME HATASI: User=${uid}, İstekBay=${bayId}, SessionBay=${session.bayId}, Session=${sessionId}`
+      );
+
+      return res.status(400).json({
+        error: "Oturum ve peron bilgisi eşleşmiyor.",
+      });
+    }
+
+    // 3) Session hâlâ durdurulabilir durumda mı?
+    if (session.status !== "running") {
+      return res.status(409).json({
+        error: "Bu oturum zaten aktif değil.",
+      });
+    }
+
+    // 4) RTDB tarafında bu peronda gerçekten bu session mı aktif?
+    if (bayData.currentSessionId !== sessionId) {
+      safeLog(
+        `🚨 AKTİF SESSION EŞLEŞMİYOR: User=${uid}, Bay=${bayId}, İstekSession=${sessionId}, BaySession=${bayData.currentSessionId || "yok"}`
+      );
+
+      return res.status(409).json({
+        error: "Bu peronda belirtilen oturum aktif değil.",
+      });
+    }
+
+    // 5) RTDB tarafında son kullanıcı da aynı mı? Ek savunma katmanı.
+    if (bayData.lastUserId !== uid) {
+      safeLog(
+        `🚨 BAY KULLANICI EŞLEŞMİYOR: User=${uid}, Bay=${bayId}, BayLastUser=${bayData.lastUserId || "yok"}`
+      );
+
+      return res.status(403).json({
+        error: "Bu peronu yönetme yetkiniz yok.",
+      });
+    }
 
     await sessionRef.update({
       status: "ended",
@@ -882,7 +951,7 @@ app.post("/api/stop-session", verifyUser, async (req, res) => {
 
     const mqttOk = await safeSendBayCommand(bayId, "WAITING");
 
-    safeLog(`⛔ MANUEL DURDURMA BAŞARILI: ${bayId} durduruldu.`);
+    safeLog(`⛔ MANUEL DURDURMA BAŞARILI: User=${uid}, Bay=${bayId}, Session=${sessionId}`);
 
     return res.status(200).json({
       success: true,
