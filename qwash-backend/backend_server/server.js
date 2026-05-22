@@ -1689,23 +1689,28 @@ const systemStartupClean = async () => {
     }
 
     const runningSessions = await db
-      .collection("sessions")
-      .where("status", "==", "running")
-      .get();
+  .collection("sessions")
+  .where("status", "==", "running")
+  .get();
 
-    if (!runningSessions.empty) {
-      const batch = db.batch();
+if (!runningSessions.empty) {
+  for (const doc of runningSessions.docs) {
+    const refundResult = await refundSessionIfNeeded(
+      doc.id,
+      "server_restart",
+    );
 
-      runningSessions.forEach((doc) => {
-        batch.update(doc.ref, {
-          status: "ended",
-          endedAt: admin.firestore.FieldValue.serverTimestamp(),
-          endedReason: "server_restart",
-        });
-      });
-
-      await batch.commit();
+    if (refundResult.refunded) {
+      safeLog(
+        `💸 SERVER RESTART İADESİ: Session=${doc.id}, User=${refundResult.userId}, ${refundResult.tokens} jeton iade edildi.`,
+      );
+    } else {
+      safeLog(
+        `ℹ️ SERVER RESTART sırasında iade yapılmadı: Session=${doc.id} - ${refundResult.reason}`,
+      );
     }
+  }
+}
 
     safeLog("✨ Temizlik tamamlandı! Tüm peronlar 'available' durumunda.");
   } catch (error) {
