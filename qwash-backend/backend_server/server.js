@@ -105,6 +105,7 @@ const mqttTopic = {
   status: (bayId) => `qwash/bays/${bayId}/status`,
   heartbeat: (bayId) => `qwash/bays/${bayId}/heartbeat`,
   selection: (bayId) => `qwash/bays/${bayId}/selection`,
+  event: (bayId) => `qwash/bays/${bayId}/event`,
 };
 
 const mqttPublish = (topic, payload, options = {}) => {
@@ -141,6 +142,36 @@ const safeSendBayCommand = async (bayId, command) => {
     );
     return false;
   }
+};
+
+// =========================================================
+// HELPERS
+// =========================================================
+const normalizeText = (value) => {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replaceAll("ı", "i")
+    .replaceAll("İ", "i");
+};
+
+const isCancelValue = (value) => {
+  const text = normalizeText(value);
+
+  return [
+    "",
+    "cancel",
+    "cancelled",
+    "canceled",
+    "iptal",
+    "abort",
+    "stop",
+    "back",
+    "geri",
+    "none",
+    "null",
+    "undefined",
+  ].includes(text);
 };
 
 // =========================================================
@@ -342,9 +373,7 @@ const reserveBayForSession = async (bayId, uid) => {
     const status = bay.status || "available";
 
     const canReserveFromAvailable =
-      status === "available" &&
-      !bay.currentSessionId &&
-      bay.isActive !== false;
+      status === "available" && !bay.currentSessionId && bay.isActive !== false;
 
     const canReserveFromWaiting =
       status === "waiting" &&
@@ -409,10 +438,62 @@ const clearBaySessionFields = async (bayId, extraPatch = {}) => {
     requestedPackage: null,
     durationSec: null,
     tokensCost: null,
-    hardwareSelection: "",
     updatedAt: admin.database.ServerValue.TIMESTAMP,
     ...extraPatch,
   });
+};
+
+const clearWaitingBayAfterCancel = async (bayId, uid = null) => {
+  const bayRef = rtdb.ref(`bays/${bayId}`);
+  const baySnap = await bayRef.once("value");
+  const bayData = baySnap.val();
+
+  if (!bayData) {
+    return {
+      cleared: false,
+      reason: "bay_not_found",
+    };
+  }
+
+  if (bayData.currentSessionId) {
+    return {
+      cleared: false,
+      reason: "active_session_exists",
+    };
+  }
+
+  if (
+    uid &&
+    bayData.lastUserId &&
+    bayData.lastUserId !== uid &&
+    bayData.status !== "available"
+  ) {
+    return {
+      cleared: false,
+      reason: "different_user",
+    };
+  }
+
+  if (["waiting", "starting", "available"].includes(bayData.status)) {
+    await clearBaySessionFields(bayId, {
+      status: "available",
+      isActive: true,
+      autoOffline: null,
+      lastSeen: admin.database.ServerValue.TIMESTAMP,
+    });
+
+    await safeSendBayCommand(bayId, "AVAILABLE");
+
+    return {
+      cleared: true,
+      reason: "cancelled",
+    };
+  }
+
+  return {
+    cleared: false,
+    reason: `not_cancelable_${bayData.status}`,
+  };
 };
 
 // =========================================================
@@ -533,6 +614,7 @@ mqttClient.on("connect", () => {
   mqttClient.subscribe("qwash/bays/+/status", { qos: 1 });
   mqttClient.subscribe("qwash/bays/+/heartbeat", { qos: 0 });
   mqttClient.subscribe("qwash/bays/+/selection", { qos: 1 });
+  mqttClient.subscribe("qwash/bays/+/event", { qos: 1 });
 
   safeLog("📡 MQTT topic abonelikleri aktif.");
 });
@@ -608,7 +690,6 @@ mqttClient.on("message", async (topic, messageBuffer) => {
             currentSessionId: null,
             lastUserId: null,
             requestedPackage: null,
-            hardwareSelection: "",
             durationSec: null,
             tokensCost: null,
             createdAt: admin.database.ServerValue.TIMESTAMP,
@@ -660,7 +741,6 @@ mqttClient.on("message", async (topic, messageBuffer) => {
           currentSessionId: null,
           lastUserId: null,
           requestedPackage: null,
-          hardwareSelection: "",
           durationSec: null,
           tokensCost: null,
           createdAt: admin.database.ServerValue.TIMESTAMP,
@@ -716,13 +796,60 @@ mqttClient.on("message", async (topic, messageBuffer) => {
       return;
     }
 
-    if (eventType === "selection") {
-      await rtdb.ref(`bays/${bayId}`).update({
-        hardwareSelection: message,
-        updatedAt: admin.database.ServerValue.TIMESTAMP,
-      });
+    if (eventType === "event") {
+      const eventMessage = String(message || "").trim();
 
-      safeLog(`🧼 MQTT SEÇİM: ${bayId} -> ${message}`);
+      if (isCancelValue(eventMessage)) {
+        const cancelResult = await clearWaitingBayAfterCancel(bayId);
+
+        safeLog(
+          `↩️ MQTT EVENT CANCEL: ${bayId} result=${JSON.stringify(
+            cancelResult,
+          )}`,
+        );
+
+        return;
+      }
+
+      safeLog(`ℹ️ MQTT EVENT: ${bayId} -> ${eventMessage}`);
+      return;
+    }
+
+    if (eventType === "selection") {
+      const selectionVal = String(message || "").trim();
+
+      if (isCancelValue(selectionVal)) {
+        const cancelResult = await clearWaitingBayAfterCancel(bayId);
+
+        safeLog(
+          `↩️ MQTT SELECTION CANCEL: ${bayId} result=${JSON.stringify(
+            cancelResult,
+          )}`,
+        );
+
+        return;
+      }
+
+      if (eventType === "selection") {
+        const selectionVal = String(message || "").trim();
+
+        if (isCancelValue(selectionVal)) {
+          const cancelResult = await clearWaitingBayAfterCancel(bayId);
+
+          safeLog(
+            `↩️ MQTT SELECTION CANCEL: ${bayId} result=${JSON.stringify(
+              cancelResult,
+            )}`,
+          );
+
+          return;
+        }
+
+        safeLog(`🧼 MQTT SEÇİM: ${bayId} -> ${selectionVal}`);
+        return;
+      }
+
+      safeLog(`🧼 MQTT SEÇİM: ${bayId} -> ${selectionVal}`);
       return;
     }
   } catch (error) {
@@ -866,8 +993,8 @@ app.post("/api/prepare-bay", verifyUser, async (req, res) => {
 
     safeLog(
       `🟡 PREPARE BEFORE: exists=${beforeSnap.exists()} data=${JSON.stringify(
-        beforeBay
-      )}`
+        beforeBay,
+      )}`,
     );
 
     if (!beforeSnap.exists() || !beforeBay) {
@@ -879,8 +1006,8 @@ app.post("/api/prepare-bay", verifyUser, async (req, res) => {
     const result = await bayRef.transaction((currentBay) => {
       safeLog(
         `🟡 PREPARE TX CURRENT: bayId=${bayId} data=${JSON.stringify(
-          currentBay
-        )}`
+          currentBay,
+        )}`,
       );
 
       const bay = currentBay || beforeBay;
@@ -900,7 +1027,6 @@ app.post("/api/prepare-bay", verifyUser, async (req, res) => {
           ...bay,
           status: "waiting",
           lastUserId: uid,
-          hardwareSelection: "",
           updatedAt: admin.database.ServerValue.TIMESTAMP,
         };
       }
@@ -913,7 +1039,6 @@ app.post("/api/prepare-bay", verifyUser, async (req, res) => {
       ) {
         return {
           ...bay,
-          hardwareSelection: "",
           updatedAt: admin.database.ServerValue.TIMESTAMP,
         };
       }
@@ -923,15 +1048,15 @@ app.post("/api/prepare-bay", verifyUser, async (req, res) => {
 
     safeLog(
       `🟡 PREPARE RESULT: committed=${result.committed} snapshot=${JSON.stringify(
-        result.snapshot?.val()
-      )}`
+        result.snapshot?.val(),
+      )}`,
     );
 
     if (!result.committed) {
       const bayData = result.snapshot?.val() || beforeBay;
 
       safeLog(
-        `🟠 PREPARE REDDEDİLDİ: bayId=${bayId} data=${JSON.stringify(bayData)}`
+        `🟠 PREPARE REDDEDİLDİ: bayId=${bayId} data=${JSON.stringify(bayData)}`,
       );
 
       if (!bayData) {
@@ -995,8 +1120,35 @@ app.post("/api/start-session", verifyUser, async (req, res) => {
   const uid = req.user.uid;
   const { bayId, packageId } = req.body;
 
-  if (!bayId || !packageId) {
-    return res.status(400).json({ error: "Eksik parametre gönderildi." });
+  if (!bayId) {
+    return res.status(400).json({ error: "Peron bilgisi eksik." });
+  }
+
+  if (!packageId || isCancelValue(packageId)) {
+    safeLog(
+      `ℹ️ START SESSION İPTAL SAYILDI: User=${uid}, Bay=${bayId}, packageId=${packageId}`,
+    );
+
+    try {
+      const cancelResult = await clearWaitingBayAfterCancel(bayId, uid);
+
+      safeLog(
+        `ℹ️ START SESSION İPTAL TEMİZLİĞİ: ${bayId} result=${JSON.stringify(
+          cancelResult,
+        )}`,
+      );
+    } catch (cancelCleanupError) {
+      safeLog(
+        `ℹ️ İptal temizliği yapılamadı ama hata sayılmadı: ${cancelCleanupError.message}`,
+      );
+    }
+
+    return res.status(200).json({
+      success: false,
+      cancelled: true,
+      code: "operation_cancelled",
+      message: "İşlem kullanıcı veya cihaz tarafından iptal edildi.",
+    });
   }
 
   let bayReserved = false;
@@ -1096,7 +1248,6 @@ app.post("/api/start-session", verifyUser, async (req, res) => {
       tokensCost: finalTokensCost,
       lastUserId: uid,
       currentSessionId: newSessionId,
-      hardwareSelection: "",
       startingAt: null,
       updatedAt: admin.database.ServerValue.TIMESTAMP,
     });
@@ -1178,6 +1329,26 @@ app.post("/api/start-session", verifyUser, async (req, res) => {
     }
 
     if (error.message === "Paket_Bulunamadi") {
+      const baySnap = await rtdb.ref(`bays/${bayId}`).once("value");
+      const bayData = baySnap.val();
+
+      if (
+        !bayData ||
+        (!bayData.currentSessionId &&
+          ["available", "waiting", "starting"].includes(bayData.status))
+      ) {
+        safeLog(
+          `ℹ️ Paket bulunamadı ama akış iptal sayıldı: User=${uid}, Bay=${bayId}, packageId=${packageId}`,
+        );
+
+        return res.status(200).json({
+          success: false,
+          cancelled: true,
+          code: "operation_cancelled",
+          message: "İşlem iptal edildi.",
+        });
+      }
+
       return res.status(404).json({
         error: "İstenilen paket sistemde bulunamadı.",
       });
@@ -1845,7 +2016,6 @@ app.post("/api/admin/update-bay", verifyAdmin, async (req, res) => {
       guncellemeVerisi.requestedPackage = null;
       guncellemeVerisi.durationSec = null;
       guncellemeVerisi.tokensCost = null;
-      guncellemeVerisi.hardwareSelection = "";
     }
 
     await rtdb.ref(`bays/${bayId}`).update(guncellemeVerisi);
@@ -2106,7 +2276,6 @@ const systemStartupClean = async () => {
         updates[`bays/${bayId}/durationSec`] = null;
         updates[`bays/${bayId}/tokensCost`] = null;
         updates[`bays/${bayId}/lastUserId`] = null;
-        updates[`bays/${bayId}/hardwareSelection`] = "";
         updates[`bays/${bayId}/updatedAt`] =
           admin.database.ServerValue.TIMESTAMP;
       });
@@ -2187,7 +2356,6 @@ cron.schedule("* * * * *", async () => {
         bayUpdates[`bays/${bayId}/requestedPackage`] = null;
         bayUpdates[`bays/${bayId}/durationSec`] = null;
         bayUpdates[`bays/${bayId}/tokensCost`] = null;
-        bayUpdates[`bays/${bayId}/hardwareSelection`] = "";
         bayUpdates[`bays/${bayId}/updatedAt`] =
           admin.database.ServerValue.TIMESTAMP;
 
@@ -2228,7 +2396,6 @@ cron.schedule("* * * * *", async () => {
           waitingUpdates[`bays/${bayId}/requestedPackage`] = null;
           waitingUpdates[`bays/${bayId}/durationSec`] = null;
           waitingUpdates[`bays/${bayId}/tokensCost`] = null;
-          waitingUpdates[`bays/${bayId}/hardwareSelection`] = "";
           waitingUpdates[`bays/${bayId}/updatedAt`] =
             admin.database.ServerValue.TIMESTAMP;
           mqttAvailableCommands.push(bayId);

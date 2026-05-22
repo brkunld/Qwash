@@ -31,11 +31,13 @@
         --radius-card: 18px;
         --radius-inner: 12px;
       }
+
       * {
         box-sizing: border-box;
         margin: 0;
         padding: 0;
       }
+
       body {
         font-family: var(--font-ui);
         background: var(--bg-main);
@@ -46,25 +48,23 @@
         align-items: flex-start;
         padding: 28px 20px;
       }
+
       .app {
         width: 100%;
         max-width: 1140px;
         display: grid;
         grid-template-columns: 400px minmax(0, 1fr);
         gap: 20px;
-        /* YENİ: Kartların dikeyde birbirine eşitlenerek esnemesini sağlar */
-        align-items: stretch; 
+        align-items: stretch;
       }
 
-      /* ─── SOL SÜTUN ─── */
       .device-col {
         display: flex;
         flex-direction: column;
         gap: 16px;
-        height: 100%; /* YENİ: Sütunun boyunu Grid esnemesiyle birleştirir */
+        height: 100%;
       }
 
-      /* YENİ: Sol sütundaki kartın tam esnemesini sağlar */
       .device-col .card {
         height: 100%;
         display: flex;
@@ -91,6 +91,7 @@
         align-items: center;
         gap: 8px;
       }
+
       .device-label::before {
         content: "";
         width: 7px;
@@ -106,6 +107,7 @@
         padding: 10px;
         box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.4);
       }
+
       .screen {
         width: 100%;
         aspect-ratio: 4/3;
@@ -115,13 +117,13 @@
         overflow: hidden;
         min-height: 220px;
       }
+
       .screen-content {
         width: 100%;
         height: 100%;
         position: relative;
       }
 
-      /* Ekran İçi */
       .center {
         display: flex;
         align-items: center;
@@ -131,17 +133,20 @@
         flex-direction: column;
         gap: 10px;
       }
+
       .big-text {
         font-family: var(--font-ui);
         font-size: 30px;
         font-weight: 900;
         line-height: 1.2;
       }
+
       .medium-text {
         font-family: var(--font-ui);
         font-size: 18px;
         font-weight: 700;
       }
+
       .timer {
         font-family: var(--font-mono);
         font-size: 52px;
@@ -150,6 +155,7 @@
         letter-spacing: 0.04em;
         text-align: center;
       }
+
       .package-title {
         font-family: var(--font-ui);
         font-size: 24px;
@@ -157,6 +163,7 @@
         text-align: center;
         margin-top: 26px;
       }
+
       .qr-wrap {
         background: white;
         width: 100%;
@@ -167,6 +174,7 @@
         flex-direction: column;
         gap: 6px;
       }
+
       .select-title {
         position: absolute;
         top: 14px;
@@ -179,41 +187,60 @@
         letter-spacing: 0.8px;
         text-transform: uppercase;
       }
+
       .touch-btn {
         position: absolute;
-        top: 62px;
-        width: 116px;
-        height: 76px;
         border-radius: 10px;
         border: none;
         font-family: var(--font-ui);
-        font-size: 14px;
+        font-size: 13px;
         font-weight: 900;
         cursor: pointer;
         letter-spacing: 0.8px;
         transition: transform 0.12s;
         text-transform: uppercase;
       }
+
       .touch-btn:hover:not(:disabled) {
         transform: scale(1.05);
       }
+
       .touch-btn:active:not(:disabled) {
         transform: scale(0.95);
       }
+
       .touch-btn:disabled {
         opacity: 0.5;
         cursor: not-allowed;
       }
+
       .btn-water {
         left: 16px;
+        top: 60px;
+        width: 104px;
+        height: 70px;
         background: #3b82f6;
         color: white;
       }
+
       .btn-foam {
-        left: 148px;
+        left: 132px;
+        top: 60px;
+        width: 104px;
+        height: 70px;
         background: #10b981;
         color: white;
       }
+
+      .btn-cancel {
+        right: 16px;
+        top: 60px;
+        width: 86px;
+        height: 70px;
+        background: #ef4444;
+        color: white;
+      }
+
       .progress-bg {
         position: absolute;
         left: 16px;
@@ -224,6 +251,7 @@
         border-radius: 999px;
         overflow: hidden;
       }
+
       .progress-fill {
         height: 100%;
         background: var(--warning);
@@ -236,10 +264,10 @@
         display: grid;
         grid-template-columns: 1fr 1fr;
         gap: 10px;
-        /* YENİ: Kartlar eşitlendiğinde fiziksel butonları her zaman ekranın en altına hizalar */
-        margin-top: auto; 
+        margin-top: auto;
         padding-top: 14px;
       }
+
       .physical-btn {
         background: #f9fafb;
         border: 1.5px solid var(--border);
@@ -254,9 +282,16 @@
         text-transform: uppercase;
         letter-spacing: 0.5px;
       }
+
       .physical-btn:hover {
         border-color: var(--accent-dark);
         background: #fff;
+      }
+
+      .physical-btn.danger {
+        border-color: rgba(239, 68, 68, 0.35);
+        color: #ef4444;
+        background: rgba(239, 68, 68, 0.06);
       }
 
       .buzzer {
@@ -274,17 +309,21 @@
         justify-content: center;
         gap: 6px;
         transition: all 0.15s;
+        grid-column: 1 / -1;
       }
+
       .buzzer::before {
         content: "◉";
         font-size: 13px;
       }
+
       .buzzer.active {
         background: var(--warning-dim);
         border-color: var(--warning);
         color: var(--warning);
         animation: bpulse 0.25s infinite alternate;
       }
+
       @keyframes bpulse {
         from {
           box-shadow: none;
@@ -294,10 +333,10 @@
         }
       }
 
-      /* ─── SAĞ SÜTUN ─── */
       .panel-header {
         margin-bottom: 22px;
       }
+
       .panel-eyebrow {
         font-family: var(--font-mono);
         font-size: 10px;
@@ -307,6 +346,7 @@
         text-transform: uppercase;
         margin-bottom: 6px;
       }
+
       .panel-header h1 {
         font-size: 22px;
         font-weight: 900;
@@ -331,11 +371,13 @@
         gap: 12px;
         margin-bottom: 14px;
       }
+
       .field-group {
         display: flex;
         flex-direction: column;
         gap: 5px;
       }
+
       .field-group label {
         font-size: 11px;
         font-weight: 700;
@@ -343,8 +385,8 @@
         text-transform: uppercase;
         letter-spacing: 0.5px;
       }
-      .field-group input,
-      .field-group select {
+
+      .field-group input {
         background: #f9fafb;
         border: 1.5px solid var(--border);
         border-radius: 9px;
@@ -356,25 +398,19 @@
         width: 100%;
         transition: all 0.18s;
         outline: none;
-        appearance: none;
       }
-      .field-group input:focus,
-      .field-group select:focus {
+
+      .field-group input:focus {
         border-color: var(--accent-yellow);
         background: #fff;
         box-shadow: 0 0 0 3px rgba(245, 166, 35, 0.12);
       }
+
       .field-group input[readonly] {
         color: var(--text-muted);
         background: var(--bg-main);
         cursor: default;
         border-color: transparent;
-      }
-      .field-group select {
-        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%236b7280' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
-        background-repeat: no-repeat;
-        background-position: right 12px center;
-        padding-right: 32px;
       }
 
       .btn-connect {
@@ -393,18 +429,31 @@
         letter-spacing: 0.8px;
         margin-bottom: 22px;
       }
+
       .btn-connect:hover {
         background: #1f2937;
         transform: translateY(-1px);
       }
+
       .btn-connect:active {
         transform: translateY(0);
+      }
+
+      .note {
+        font-size: 12px;
+        color: var(--text-muted);
+        line-height: 1.55;
+        background: #f9fafb;
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 12px;
       }
 
       @media (max-width: 860px) {
         .app {
           grid-template-columns: 1fr;
         }
+
         .device-col {
           max-width: 420px;
           margin: auto;
@@ -413,20 +462,28 @@
       }
     </style>
   </head>
+
   <body>
     <div class="app">
       <div class="device-col">
         <div class="card">
           <div class="device-label">ESP32 · TFT Ekran · Donanım Sim.</div>
+
           <div class="screen-bezel">
             <div class="screen">
               <div id="screen" class="screen-content"></div>
             </div>
           </div>
+
           <div class="hardware-row">
             <button class="physical-btn" onclick="physicalFoamButton()">
               🔘 Fiziksel Köpük Btn
             </button>
+
+            <button class="physical-btn danger" onclick="physicalCancelButton()">
+              ⛔ Fiziksel İptal Btn
+            </button>
+
             <div id="buzzer" class="buzzer">BUZZER: PASİF</div>
           </div>
         </div>
@@ -440,27 +497,40 @@
 
         <div style="margin-bottom: 20px">
           <div class="section-label">Yetkilendirme</div>
+
           <div class="fields-grid">
             <div class="field-group">
               <label>Firebase Email</label>
               <input id="email" type="email" placeholder="ornek@email.com" />
             </div>
+
             <div class="field-group">
               <label>Şifre</label>
               <input id="password" type="password" placeholder="••••••••" />
             </div>
+
             <div class="field-group">
               <label>Bay ID</label>
               <input id="bayId" value="bay_42060_01_02" />
             </div>
+
             <div class="field-group">
               <label>Sistem Durumu</label>
               <input id="connectionState" value="Bağlı değil" readonly />
             </div>
           </div>
+
           <button class="btn-connect" onclick="connectFirebase()">
             Sisteme Bağlan
           </button>
+
+          <div class="note">
+            Bu panel Firebase RTDB üzerinden ESP ekranını simüle eder.
+            </b> İptal testi için peron
+            doğrudan <b>available</b> yapılır ve session alanları temizlenir.
+            Gerçek cihazda kalıcı çözüm: MQTT
+            <b>qwash/bays/{bayId}/event → CANCEL</b>.
+          </div>
         </div>
       </div>
     </div>
@@ -477,42 +547,49 @@
         getDatabase,
         ref,
         onValue,
-        set,
         update,
         serverTimestamp,
       } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-database.js";
 
       const defaultSecrets = window.SECRETS || {};
+
       const firebaseConfig = {
         apiKey: defaultSecrets.API_KEY || "",
         databaseURL: defaultSecrets.DATABASE_URL || "",
       };
+
       const app = initializeApp(firebaseConfig);
       const auth = getAuth(app);
       const db = getDatabase(app);
 
-      let bayRef = null,
-        unsubscribeBay = null,
-        connected = false;
-      let currentStatus = "baslangic",
-        isBayActive = true;
-      let requestedPackage = "wash",
-        durationSec = 60;
-      let bitisZamaniMs = 0,
-        dokunmatikKilit = false;
-      let beklemeBaslangicMs = 0,
-        BEKLEME_SURESI_MS = 60000;
-      let waitingTimeoutHandled = false,
-        sonNabizZamani = 0;
+      let bayRef = null;
+      let unsubscribeBay = null;
+      let connected = false;
+
+      let currentStatus = "baslangic";
+      let isBayActive = true;
+      let requestedPackage = "wash";
+      let durationSec = 60;
+
+      let bitisZamaniMs = 0;
+      let dokunmatikKilit = false;
+
+      let beklemeBaslangicMs = 0;
+      let BEKLEME_SURESI_MS = 60000;
+      let waitingTimeoutHandled = false;
+
+      let sonNabizZamani = 0;
       const nabizAraligi = 30000;
-      let audioCtx = null,
-        lastShownSecond = -1,
-        lastHalfSecondBeep = 0;
+
+      let audioCtx = null;
+      let lastShownSecond = -1;
+      let lastHalfSecondBeep = 0;
       let finishPlayed = false;
-      let lastRenderedStatus = null,
-        lastRenderedActive = null;
-      let lastRenderedPackage = null,
-        lastRenderedDuration = null;
+
+      let lastRenderedStatus = null;
+      let lastRenderedActive = null;
+      let lastRenderedPackage = null;
+      let lastRenderedDuration = null;
 
       const screen = document.getElementById("screen");
       const buzzerEl = document.getElementById("buzzer");
@@ -527,26 +604,35 @@
         screen.style.background = bg;
         screen.innerHTML = html;
       }
+
       function setConnectionState(text) {
         document.getElementById("connectionState").value = text;
       }
 
       function beep(freq = 2000, duration = 100) {
         try {
-          if (!audioCtx)
-            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+          if (!audioCtx) {
+            audioCtx = new (window.AudioContext ||
+              window.webkitAudioContext)();
+          }
+
           const osc = audioCtx.createOscillator();
           const gain = audioCtx.createGain();
+
           osc.type = "square";
           osc.frequency.value = freq;
           gain.gain.value = 0.08;
+
           osc.connect(gain);
           gain.connect(audioCtx.destination);
+
           osc.start();
           setTimeout(() => osc.stop(), duration);
         } catch (e) {}
+
         buzzerEl.classList.add("active");
         buzzerEl.textContent = `BUZZER: ${freq}Hz`;
+
         setTimeout(
           () => {
             buzzerEl.classList.remove("active");
@@ -558,18 +644,32 @@
 
       function showBaslangic() {
         setScreen(
-          `<div class="center"><div class="medium-text" style="color:#6b7280">Sistem Hazır</div><div class="medium-text" style="color:#6b7280">Bekleniyor...</div><div style="margin-top:12px;font-family:'Space Mono',monospace;font-size:11px;color:#9ca3af">Sağ panelden giriş yapın</div></div>`,
+          `<div class="center">
+            <div class="medium-text" style="color:#6b7280">Sistem Hazır</div>
+            <div class="medium-text" style="color:#6b7280">Bekleniyor...</div>
+            <div style="margin-top:12px;font-family:'Space Mono',monospace;font-size:11px;color:#9ca3af">
+              Sağ panelden giriş yapın
+            </div>
+          </div>`,
         );
       }
 
       function drawQR() {
         const bayId =
           document.getElementById("bayId").value.trim() || "bay_42060_01_02";
+
         setScreen(
-          `<div class="qr-wrap"><canvas id="qrCanvas" width="190" height="190"></canvas><div style="color:#111827;font-family:'Space Mono',monospace;font-size:11px;font-weight:700;margin-top:4px">${bayId}</div></div>`,
+          `<div class="qr-wrap">
+            <canvas id="qrCanvas" width="190" height="190"></canvas>
+            <div style="color:#111827;font-family:'Space Mono',monospace;font-size:11px;font-weight:700;margin-top:4px">
+              ${bayId}
+            </div>
+          </div>`,
           "white",
         );
+
         const canvas = document.getElementById("qrCanvas");
+
         if (window.QRCode && typeof window.QRCode.toCanvas === "function") {
           window.QRCode.toCanvas(
             canvas,
@@ -577,13 +677,18 @@
             {
               width: 190,
               margin: 1,
-              color: { dark: "#000000", light: "#ffffff" },
+              color: {
+                dark: "#000000",
+                light: "#ffffff",
+              },
             },
             (err) => {
               if (err) {
                 log("❌ QR hatası: " + err.message);
                 showQrFallback(bayId);
-              } else log(`QR çizildi: ${bayId}`);
+              } else {
+                log(`QR çizildi: ${bayId}`);
+              }
             },
           );
         } else {
@@ -595,22 +700,36 @@
         const url =
           "https://api.qrserver.com/v1/create-qr-code/?size=190x190&data=" +
           encodeURIComponent(bayId);
+
         setScreen(
-          `<div class="qr-wrap"><img src="${url}" width="190" height="190"/><div style="color:#111;font-size:11px;font-family:monospace;font-weight:700">${bayId}</div></div>`,
+          `<div class="qr-wrap">
+            <img src="${url}" width="190" height="190"/>
+            <div style="color:#111;font-size:11px;font-family:monospace;font-weight:700">
+              ${bayId}
+            </div>
+          </div>`,
           "white",
         );
       }
 
       function ekranaKapaliYaz() {
         setScreen(
-          `<div class="center"><div class="big-text" style="color:#ef4444">BU PERON</div><div class="big-text" style="color:#ef4444">KAPALIDIR</div></div>`,
+          `<div class="center">
+            <div class="big-text" style="color:#ef4444">BU PERON</div>
+            <div class="big-text" style="color:#ef4444">KAPALIDIR</div>
+          </div>`,
         );
+
         log("DURUM: PERON KAPALI");
       }
+
       function showMaintenance() {
         setScreen(
-          `<div class="center"><div class="big-text" style="color:#f5a623">BAKIM MODU</div></div>`,
+          `<div class="center">
+            <div class="big-text" style="color:#f5a623">BAKIM MODU</div>
+          </div>`,
         );
+
         log("DURUM: BAKIM MODU");
       }
 
@@ -619,9 +738,17 @@
         waitingTimeoutHandled = false;
         beklemeBaslangicMs = nowMs();
         BEKLEME_SURESI_MS = 60000;
+
         setScreen(
-          `<div class="select-title">Lütfen Paket Seçiniz</div><button class="touch-btn btn-water" onclick="selectPackage('wash')">SU</button><button class="touch-btn btn-foam" onclick="selectPackage('foam')">KÖPÜK</button><div class="progress-bg"><div id="progressFill" class="progress-fill"></div></div>`,
+          `<div class="select-title">Lütfen Paket Seçiniz</div>
+          <button class="touch-btn btn-water" onclick="selectPackage('wash')">SU</button>
+          <button class="touch-btn btn-foam" onclick="selectPackage('foam')">KÖPÜK</button>
+          <button class="touch-btn btn-cancel" onclick="cancelFromDevice()">İPTAL</button>
+          <div class="progress-bg">
+            <div id="progressFill" class="progress-fill"></div>
+          </div>`,
         );
+
         log("DURUM: waiting / Paket seçimi bekleniyor");
       }
 
@@ -631,11 +758,15 @@
         bitisZamaniMs = nowMs() + durationSec * 1000;
         lastShownSecond = -1;
         finishPlayed = false;
+
         const color = requestedPackage === "foam" ? "#10b981" : "#3b82f6";
         const title = requestedPackage === "foam" ? "KÖPÜK MODU" : "SU MODU";
+
         setScreen(
-          `<div class="package-title" style="color:${color}">${title}</div><div id="timer" class="timer">00:00</div>`,
+          `<div class="package-title" style="color:${color}">${title}</div>
+          <div id="timer" class="timer">00:00</div>`,
         );
+
         log(`DURUM: busy / ${requestedPackage} / ${durationSec} sn`);
       }
 
@@ -646,43 +777,53 @@
           lastRenderedActive !== isBayActive ||
           lastRenderedPackage !== requestedPackage ||
           lastRenderedDuration !== durationSec;
+
         if (!should) return;
+
         lastRenderedStatus = currentStatus;
         lastRenderedActive = isBayActive;
         lastRenderedPackage = requestedPackage;
         lastRenderedDuration = durationSec;
-        if (!isBayActive || currentStatus === "offline")
+
+        if (!isBayActive || currentStatus === "offline") {
           return ekranaKapaliYaz();
-        if (currentStatus === "available") drawQR();
-        else if (currentStatus === "waiting") showWaiting();
-        else if (currentStatus === "busy") showBusy();
-        else if (currentStatus === "maintenance") showMaintenance();
-        else showBaslangic();
+        }
+
+        if (currentStatus === "available") {
+          drawQR();
+        } else if (currentStatus === "waiting") {
+          showWaiting();
+        } else if (currentStatus === "busy") {
+          showBusy();
+        } else if (currentStatus === "maintenance") {
+          showMaintenance();
+        } else {
+          showBaslangic();
+        }
       }
 
       function syncPanelFromData(data) {
         if (!data) return;
-        const oldStatus = currentStatus,
-          oldActive = isBayActive,
-          oldPackage = requestedPackage,
-          oldDuration = durationSec;
+
+        const oldStatus = currentStatus;
+        const oldActive = isBayActive;
+        const oldPackage = requestedPackage;
+        const oldDuration = durationSec;
+
         if (typeof data.status === "string") currentStatus = data.status;
         if (typeof data.isActive === "boolean") isBayActive = data.isActive;
-        if (typeof data.requestedPackage === "string")
+        if (typeof data.requestedPackage === "string") {
           requestedPackage = data.requestedPackage;
-        if (typeof data.durationSec === "number")
+        }
+        if (typeof data.durationSec === "number") {
           durationSec = data.durationSec;
+        }
+
         data.__meaningfulChanged =
           oldStatus !== currentStatus ||
           oldActive !== isBayActive ||
           oldPackage !== requestedPackage ||
           oldDuration !== durationSec;
-
-        const statusDOM = document.getElementById("status");
-        if (statusDOM) statusDOM.value = currentStatus;
-
-        const isActiveDOM = document.getElementById("isActive");
-        if (isActiveDOM) isActiveDOM.value = String(isBayActive);
       }
 
       async function connectFirebase() {
@@ -690,25 +831,41 @@
         const password = document.getElementById("password").value;
         const bayId =
           document.getElementById("bayId").value.trim() || "bay_42060_01_02";
-        if (!email || !password) return log("❌ Email ve şifre gerekli.");
+
+        if (!email || !password) {
+          return log("❌ Email ve şifre gerekli.");
+        }
+
         try {
           setConnectionState("Bağlanıyor...");
+
           await signInWithEmailAndPassword(auth, email, password);
+
           connected = true;
           bayRef = ref(db, `/bays/${bayId}`);
+
           if (unsubscribeBay) unsubscribeBay();
+
           unsubscribeBay = onValue(
             bayRef,
             (snapshot) => {
               const data = snapshot.val();
               log("Firebase stream: " + JSON.stringify(data));
+
               const liveData = data || {};
               syncPanelFromData(liveData);
-              if (liveData.__meaningfulChanged) applyStatusChange();
+
+              if (liveData.__meaningfulChanged) {
+                applyStatusChange();
+              }
             },
             (err) => log("❌ Stream hatası: " + err.message),
           );
-          await update(bayRef, { lastSeen: serverTimestamp() });
+
+          await update(bayRef, {
+            lastSeen: serverTimestamp(),
+          });
+
           setConnectionState("Sisteme Bağlandı");
           log("✅ Firebase bağlandı: /bays/" + bayId);
         } catch (err) {
@@ -719,46 +876,112 @@
       }
 
       async function writeBayPatch(patch) {
-        if (!connected || !bayRef) return log("❌ Önce Firebase'e bağlan.");
+        if (!connected || !bayRef) {
+          return log("❌ Önce Firebase'e bağlan.");
+        }
+
         try {
-          await update(bayRef, { ...patch, updatedAt: serverTimestamp() });
+          await update(bayRef, {
+            ...patch,
+            updatedAt: serverTimestamp(),
+          });
         } catch (err) {
           log("❌ Yazma hatası: " + err.message);
         }
       }
 
+      async function clearBayForCancel(extraPatch = {}) {
+        await writeBayPatch({
+          status: "available",
+          isActive: true,
+          autoOffline: null,
+          currentSessionId: null,
+          lastUserId: null,
+          requestedPackage: null,
+          durationSec: null,
+          tokensCost: null,
+          lastSeen: serverTimestamp(),
+          ...extraPatch,
+        });
+      }
+
       async function writeStatus(status) {
         currentStatus = status;
-        const statusDOM = document.getElementById("status");
-        if (statusDOM) statusDOM.value = status;
-        await writeBayPatch({ status });
+
+        await writeBayPatch({
+          status,
+        });
+
         applyStatusChange();
       }
-      
+
       async function writeActive(active) {
         isBayActive = active;
-        const isActiveDOM = document.getElementById("isActive");
-        if (isActiveDOM) isActiveDOM.value = String(active);
-        await writeBayPatch({ isActive: active });
+
+        await writeBayPatch({
+          isActive: active,
+        });
+
         applyStatusChange();
       }
 
       async function selectPackage(pkg) {
         if (currentStatus !== "waiting" || dokunmatikKilit) return;
+
         dokunmatikKilit = true;
         requestedPackage = pkg;
+
         setScreen(
-          `<div class="center medium-text" style="color:#f5a623">İstek iletiliyor...</div>`,
+          `<div class="center medium-text" style="color:#f5a623">
+            Seçim simüle edildi...
+          </div>`,
         );
-        log(`hardwareSelection gönderiliyor: ${pkg}`);
-        await writeBayPatch({ hardwareSelection: pkg });
+
+        log(
+          `Paket seçildi: ${pkg}.`,
+        );
+
         setTimeout(
           () =>
             setScreen(
-              `<div class="center medium-text" style="color:#9ca3af">Ödeme bekleniyor...</div>`,
+              `<div class="center medium-text" style="color:#9ca3af">
+                Mobil uygulamadan paket başlatma bekleniyor...
+              </div>`,
             ),
           400,
         );
+      }
+
+      async function cancelFromDevice() {
+        if (currentStatus !== "waiting" && currentStatus !== "starting") {
+          log(`İptal yok sayıldı. Mevcut durum: ${currentStatus}`);
+          return;
+        }
+
+        if (dokunmatikKilit && currentStatus === "waiting") {
+          log("İptal yok sayıldı. Dokunmatik kilit aktif.");
+          return;
+        }
+
+        dokunmatikKilit = true;
+
+        setScreen(
+          `<div class="center">
+            <div class="big-text" style="color:#ef4444">İPTAL</div>
+            <div class="medium-text" style="color:#9ca3af">Peron boşa çıkarılıyor...</div>
+          </div>`,
+        );
+
+        beep(700, 180);
+
+        log("ESP iptal simülasyonu: peron available yapılıyor...");
+
+        await clearBayForCancel();
+
+        setTimeout(() => {
+          currentStatus = "available";
+          applyStatusChange(true);
+        }, 300);
       }
 
       function physicalFoamButton() {
@@ -766,42 +989,61 @@
         selectPackage("foam");
       }
 
+      function physicalCancelButton() {
+        log("Fiziksel İPTAL butonuna basıldı");
+        cancelFromDevice();
+      }
+
       function updateWaitingProgress() {
         if (currentStatus !== "waiting" || dokunmatikKilit) return;
+
         const elapsed = nowMs() - beklemeBaslangicMs;
         const ratio = Math.max(0, 1 - elapsed / BEKLEME_SURESI_MS);
+
         const fill = document.getElementById("progressFill");
         if (fill) fill.style.width = `${ratio * 100}%`;
+
         if (elapsed >= BEKLEME_SURESI_MS && !waitingTimeoutHandled) {
           waitingTimeoutHandled = true;
           dokunmatikKilit = true;
+
           log("Bekleme süresi bitti. Durum available yapılıyor...");
-          writeBayPatch({ status: "available", hardwareSelection: null });
         }
       }
 
       function updateBusyTimer() {
         if (currentStatus !== "busy") return;
+
         const timer = document.getElementById("timer");
         if (!timer) return;
+
         const kalanMs = bitisZamaniMs - nowMs();
+
         if (kalanMs > 0) {
           const toplamSaniye = Math.floor(kalanMs / 1000);
           const saniye = toplamSaniye % 60;
           const dakika = Math.floor(toplamSaniye / 60);
-          timer.textContent = `${String(dakika).padStart(2, "0")}:${String(saniye).padStart(2, "0")}`;
+
+          timer.textContent = `${String(dakika).padStart(2, "0")}:${String(
+            saniye,
+          ).padStart(2, "0")}`;
+
           if (toplamSaniye >= 10) {
             if (toplamSaniye !== lastShownSecond) beep(2000, 100);
           } else if (nowMs() - lastHalfSecondBeep >= 500) {
             beep(2500, 100);
             lastHalfSecondBeep = nowMs();
           }
+
           lastShownSecond = toplamSaniye;
           finishPlayed = false;
         } else if (!finishPlayed) {
           setScreen(
-            `<div class="center big-text" style="color:#ef4444">İŞLEM BİTTİ</div>`,
+            `<div class="center big-text" style="color:#ef4444">
+              İŞLEM BİTTİ
+            </div>`,
           );
+
           beep(1000, 3000);
           log("İŞLEM BİTTİ");
           finishPlayed = true;
@@ -810,8 +1052,11 @@
 
       async function nabizGonder() {
         if (!connected || !bayRef) return;
+
         try {
-          await update(bayRef, { lastSeen: serverTimestamp() });
+          await update(bayRef, {
+            lastSeen: serverTimestamp(),
+          });
         } catch (err) {
           log("❌ Nabız gönderilemedi: " + err.message);
         }
@@ -820,6 +1065,7 @@
       function tick() {
         updateWaitingProgress();
         updateBusyTimer();
+
         if (nowMs() - sonNabizZamani >= nabizAraligi) {
           sonNabizZamani = nowMs();
           nabizGonder();
@@ -830,17 +1076,25 @@
       window.writeStatus = writeStatus;
       window.writeActive = writeActive;
       window.selectPackage = selectPackage;
+      window.cancelFromDevice = cancelFromDevice;
       window.physicalFoamButton = physicalFoamButton;
+      window.physicalCancelButton = physicalCancelButton;
 
       function fillInputsFromSecrets() {
         if (!window.SECRETS) return;
-        if (window.SECRETS.USER_EMAIL)
+
+        if (window.SECRETS.USER_EMAIL) {
           document.getElementById("email").value = window.SECRETS.USER_EMAIL;
-        if (window.SECRETS.USER_PASSWORD)
+        }
+
+        if (window.SECRETS.USER_PASSWORD) {
           document.getElementById("password").value =
             window.SECRETS.USER_PASSWORD;
-        if (window.SECRETS.BAY_ID)
+        }
+
+        if (window.SECRETS.BAY_ID) {
           document.getElementById("bayId").value = window.SECRETS.BAY_ID;
+        }
       }
 
       fillInputsFromSecrets();

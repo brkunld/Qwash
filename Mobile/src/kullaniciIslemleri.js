@@ -12,7 +12,7 @@ import {
   setDoc,
 } from "firebase/firestore";
 
-import { onValue, ref, update } from "firebase/database";
+import { onValue, ref } from "firebase/database";
 
 import { auth, db, rtdb } from "../firebase";
 import { getApiUrl } from "./config/api";
@@ -193,6 +193,7 @@ export function useKullaniciIslemleri() {
 
             // 2. Uyarıyı state updater'ın DIŞINDA veriyoruz
             if (!kasitliCikisRef.current[bayId]) {
+              let baslik = "Bağlantı Kesildi";
               let mesaj = `${bayId} peronunda süreniz doldu veya işlem yapmadığınız için bağlantınız kesildi.`;
 
               if (bayData.status === "maintenance") {
@@ -202,10 +203,15 @@ export function useKullaniciIslemleri() {
                 bayData.isActive === false
               ) {
                 mesaj = `${bayId} peronu sistem tarafından kapatıldığı için bağlantınız kesildi.`;
+              } else if (bayData.status === "available") {
+                // ESP veya ekran iptali sonrası available geldiyse gereksiz korkutucu uyarı verme.
+                baslik = "İşlem İptal Edildi";
+                mesaj = "İşlem iptal edildi veya peron boşa çıkarıldı.";
               }
 
-              Alert.alert("Bağlantı Kesildi", mesaj);
+              Alert.alert(baslik, mesaj);
             }
+
             delete kasitliCikisRef.current[bayId];
 
             // 3. React render çakışmasını engellemek için Router işlemini 10ms erteliyoruz
@@ -279,82 +285,25 @@ export function useKullaniciIslemleri() {
     return () => unsubs.forEach((u) => u());
   }, [baylarData]);
 
-  // ESP32 FİZİKSEL DOKUNMATİK EKRAN SİNYALİ DİNLEME
-  useEffect(() => {
-    Object.entries(baylarData).forEach(([id, data]) => {
-      if (data?.hardwareSelection) {
-        const secilenPaket = data.hardwareSelection;
-        const rtdbBayRef = ref(rtdb, `bays/${id}`);
-        update(rtdbBayRef, { hardwareSelection: null })
-          .then(() => {
-            sessionBaslat(id, secilenPaket);
-          })
-          .catch((err) =>
-            console.error("Donanım seçimini temizleme hatası:", err),
-          );
-      }
-    });
-  }, [baylarData]);
+  // =========================================================
+  // FIREBASE CONFIG KONTROLÜ
+  // Renderer'a sadece gerekli config verilir.
 
   const sessionBaslat = async (islemBayId, packageId) => {
-  if (!uid) return router.replace("/login");
-
-  const bay = baylarData[islemBayId];
-
-  if (
-    (bay?.status !== "available" && bay?.status !== "waiting") ||
-    bay?.currentSessionId
-  ) {
-    return Alert.alert("Peron Dolu", "Bu peron şu anda kullanımda.");
-  }
-
-  setIslemdekiBaylar((prev) => ({ ...prev, [islemBayId]: true }));
-
-  try {
-    const token = await auth.currentUser?.getIdToken();
-
-    if (!token) {
-      Alert.alert("Oturum Hatası", "Lütfen tekrar giriş yapın.");
-      router.replace("/login");
-      return;
-    }
-
-    const API_URL = getApiUrl("/api/start-session");
-
-    const response = await fetch(API_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({
-        uid,
-        bayId: islemBayId,
-        packageId,
-      }),
-    });
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      Alert.alert("Hata", data.error || "İşlem yapılamadı.");
-    }
-  } catch (error) {
-    if (error.message === "API_BASE_URL_MISSING") {
-      Alert.alert("Yapılandırma Hatası", "API adresi tanımlı değil.");
-      return;
-    }
-
-    Alert.alert("Sunucu Hatası", "Sunucuya ulaşılamadı.");
-  } finally {
-    setIslemdekiBaylar((prev) => ({ ...prev, [islemBayId]: false }));
-  }
-};
-
-  const sessionBitir = useCallback(
-  async (islemBayId, currentSessionId, reason = "user_stop") => {
     if (!uid) return router.replace("/login");
-    if (!currentSessionId) return;
+
+    if (!packageId) {
+      return;
+    }
+
+    const bay = baylarData[islemBayId];
+
+    if (
+      (bay?.status !== "available" && bay?.status !== "waiting") ||
+      bay?.currentSessionId
+    ) {
+      return Alert.alert("Peron Dolu", "Bu peron şu anda kullanımda.");
+    }
 
     setIslemdekiBaylar((prev) => ({ ...prev, [islemBayId]: true }));
 
@@ -367,7 +316,7 @@ export function useKullaniciIslemleri() {
         return;
       }
 
-      const API_URL = getApiUrl("/api/stop-session");
+      const API_URL = getApiUrl("/api/start-session");
 
       const response = await fetch(API_URL, {
         method: "POST",
@@ -376,15 +325,29 @@ export function useKullaniciIslemleri() {
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
+          uid,
           bayId: islemBayId,
-          sessionId: currentSessionId,
+          packageId,
         }),
       });
 
       const data = await response.json();
 
+      if (data?.cancelled || data?.code === "operation_cancelled") {
+        kasitliCikisRef.current[islemBayId] = true;
+
+        setAktifBayIdListesi((prev) => prev.filter((id) => id !== islemBayId));
+
+        setTimeout(() => {
+          router.setParams({ bayId: "" });
+        }, 10);
+
+        return;
+      }
+
       if (!response.ok) {
-        Alert.alert("Hata", data.error || "Oturum durdurulamadı.");
+        Alert.alert("Hata", data.error || "İşlem yapılamadı.");
+        return;
       }
     } catch (error) {
       if (error.message === "API_BASE_URL_MISSING") {
@@ -396,133 +359,180 @@ export function useKullaniciIslemleri() {
     } finally {
       setIslemdekiBaylar((prev) => ({ ...prev, [islemBayId]: false }));
     }
-  },
-  [uid, router],
-);
+  };
+
+  const sessionBitir = useCallback(
+    async (islemBayId, currentSessionId, reason = "user_stop") => {
+      if (!uid) return router.replace("/login");
+      if (!currentSessionId) return;
+
+      setIslemdekiBaylar((prev) => ({ ...prev, [islemBayId]: true }));
+
+      try {
+        const token = await auth.currentUser?.getIdToken();
+
+        if (!token) {
+          Alert.alert("Oturum Hatası", "Lütfen tekrar giriş yapın.");
+          router.replace("/login");
+          return;
+        }
+
+        const API_URL = getApiUrl("/api/stop-session");
+
+        const response = await fetch(API_URL, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            bayId: islemBayId,
+            sessionId: currentSessionId,
+          }),
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          Alert.alert("Hata", data.error || "Oturum durdurulamadı.");
+        }
+      } catch (error) {
+        if (error.message === "API_BASE_URL_MISSING") {
+          Alert.alert("Yapılandırma Hatası", "API adresi tanımlı değil.");
+          return;
+        }
+
+        Alert.alert("Sunucu Hatası", "Sunucuya ulaşılamadı.");
+      } finally {
+        setIslemdekiBaylar((prev) => ({ ...prev, [islemBayId]: false }));
+      }
+    },
+    [uid, router],
+  );
 
   const perondanCik = async (islemBayId) => {
-  const bay = baylarData[islemBayId];
-  const session = sessionsData[islemBayId];
+    const bay = baylarData[islemBayId];
+    const session = sessionsData[islemBayId];
 
-  if (bay?.currentSessionId || session?.status === "running") {
-    Alert.alert(
-      "Hata",
-      "Aktif oturum varken peronu terkedemezsiniz. Önce durdurunuz.",
-    );
-    return;
-  }
-
-  try {
-    const token = await auth.currentUser?.getIdToken();
-
-    if (!token) {
-      Alert.alert("Oturum Hatası", "Lütfen tekrar giriş yapın.");
-      router.replace("/login");
+    if (bay?.currentSessionId || session?.status === "running") {
+      Alert.alert(
+        "Hata",
+        "Aktif oturum varken peronu terkedemezsiniz. Önce durdurunuz.",
+      );
       return;
     }
 
-    kasitliCikisRef.current[islemBayId] = true;
+    try {
+      const token = await auth.currentUser?.getIdToken();
 
-    const API_URL = getApiUrl("/api/cancel-waiting");
+      if (!token) {
+        Alert.alert("Oturum Hatası", "Lütfen tekrar giriş yapın.");
+        router.replace("/login");
+        return;
+      }
 
-    const response = await fetch(API_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({
-        bayId: islemBayId,
-      }),
-    });
+      kasitliCikisRef.current[islemBayId] = true;
 
-    const data = await response.json();
+      const API_URL = getApiUrl("/api/cancel-waiting");
 
-    if (!response.ok) {
+      const response = await fetch(API_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          bayId: islemBayId,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        kasitliCikisRef.current[islemBayId] = false;
+        Alert.alert("Hata", data.error || "Çıkış yapılamadı.");
+        return;
+      }
+
+      Alert.alert("Başarılı", data.message || "Peron serbest bırakıldı.");
+    } catch (error) {
       kasitliCikisRef.current[islemBayId] = false;
-      Alert.alert("Hata", data.error || "Çıkış yapılamadı.");
-      return;
+
+      if (error.message === "API_BASE_URL_MISSING") {
+        Alert.alert("Yapılandırma Hatası", "API adresi tanımlı değil.");
+        return;
+      }
+
+      console.error("Çıkış hatası:", error);
+      Alert.alert("Bağlantı Hatası", "Sunucuya ulaşılamadı.");
     }
-
-    Alert.alert("Başarılı", data.message || "Peron serbest bırakıldı.");
-  } catch (error) {
-    kasitliCikisRef.current[islemBayId] = false;
-
-    if (error.message === "API_BASE_URL_MISSING") {
-      Alert.alert("Yapılandırma Hatası", "API adresi tanımlı değil.");
-      return;
-    }
-
-    console.error("Çıkış hatası:", error);
-    Alert.alert("Bağlantı Hatası", "Sunucuya ulaşılamadı.");
-  }
-};
+  };
 
   const bakiyeYukle = async (tokens, amountTRYParam) => {
-  if (!uid) return router.replace("/login");
+    if (!uid) return router.replace("/login");
 
-  if (!jetonFiyat || fiyatYukleniyor) {
-    return Alert.alert("Fiyat Alınamadı", "Fiyat bilgisi alınamadı.");
-  }
-
-  setYuklemeIslemde(true);
-
-  const amountTRY =
-    typeof amountTRYParam === "number" ? amountTRYParam : tokens * jetonFiyat;
-
-  try {
-    const token = await auth.currentUser?.getIdToken();
-
-    if (!token) {
-      Alert.alert("Oturum Hatası", "Lütfen tekrar giriş yapın.");
-      router.replace("/login");
-      return;
+    if (!jetonFiyat || fiyatYukleniyor) {
+      return Alert.alert("Fiyat Alınamadı", "Fiyat bilgisi alınamadı.");
     }
 
-    const API_URL = getApiUrl("/api/topup");
+    setYuklemeIslemde(true);
 
-    const response = await fetch(API_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({
-        tokens,
-        amountTRY,
-      }),
-    });
+    const amountTRY =
+      typeof amountTRYParam === "number" ? amountTRYParam : tokens * jetonFiyat;
 
-    const data = await response.json();
+    try {
+      const token = await auth.currentUser?.getIdToken();
 
-    if (!response.ok || !data.success) {
-      return Alert.alert("Hata", data.error || "Ödeme oturumu açılamadı.");
+      if (!token) {
+        Alert.alert("Oturum Hatası", "Lütfen tekrar giriş yapın.");
+        router.replace("/login");
+        return;
+      }
+
+      const API_URL = getApiUrl("/api/topup");
+
+      const response = await fetch(API_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          tokens,
+          amountTRY,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        return Alert.alert("Hata", data.error || "Ödeme oturumu açılamadı.");
+      }
+
+      setYuklemeAcik(false);
+
+      await WebBrowser.openBrowserAsync(data.paymentUrl, {
+        dismissButtonStyle: "close",
+        readerMode: false,
+        enableBarCollapsing: true,
+      });
+
+      Alert.alert(
+        "Bilgi",
+        "Ödeme işleminiz tamamlandıysa bakiyeniz birkaç saniye içinde güncellenecektir.",
+      );
+    } catch (error) {
+      if (error.message === "API_BASE_URL_MISSING") {
+        Alert.alert("Yapılandırma Hatası", "API adresi tanımlı değil.");
+        return;
+      }
+
+      console.error(error);
+      Alert.alert("Bağlantı Hatası", "Sunucuya ulaşılamadı.");
+    } finally {
+      setYuklemeIslemde(false);
     }
-
-    setYuklemeAcik(false);
-
-    await WebBrowser.openBrowserAsync(data.paymentUrl, {
-      dismissButtonStyle: "close",
-      readerMode: false,
-      enableBarCollapsing: true,
-    });
-
-    Alert.alert(
-      "Bilgi",
-      "Ödeme işleminiz tamamlandıysa bakiyeniz birkaç saniye içinde güncellenecektir.",
-    );
-  } catch (error) {
-    if (error.message === "API_BASE_URL_MISSING") {
-      Alert.alert("Yapılandırma Hatası", "API adresi tanımlı değil.");
-      return;
-    }
-
-    console.error(error);
-    Alert.alert("Bağlantı Hatası", "Sunucuya ulaşılamadı.");
-  } finally {
-    setYuklemeIslemde(false);
-  }
-};
+  };
 
   const profilKaydet = async () => {
     if (!uid) return router.replace("/login");
