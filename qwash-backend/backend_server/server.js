@@ -1863,9 +1863,11 @@ cron.schedule("* * * * *", async () => {
 
         bayUpdates[`bays/${bayId}/status`] = "waiting";
         bayUpdates[`bays/${bayId}/currentSessionId`] = null;
+        bayUpdates[`bays/${bayId}/lastUserId`] = null;
         bayUpdates[`bays/${bayId}/requestedPackage`] = null;
         bayUpdates[`bays/${bayId}/durationSec`] = null;
         bayUpdates[`bays/${bayId}/tokensCost`] = null;
+        bayUpdates[`bays/${bayId}/hardwareSelection`] = "";
         bayUpdates[`bays/${bayId}/updatedAt`] =
           admin.database.ServerValue.TIMESTAMP;
 
@@ -1902,8 +1904,14 @@ cron.schedule("* * * * *", async () => {
       for (const [bayId, bay] of Object.entries(waitingBays)) {
         if (bay.updatedAt && now - bay.updatedAt > 60000) {
           waitingUpdates[`bays/${bayId}/status`] = "available";
-          waitingUpdates[`bays/${bayId}/updatedAt`] =
-            admin.database.ServerValue.TIMESTAMP;
+waitingUpdates[`bays/${bayId}/currentSessionId`] = null;
+waitingUpdates[`bays/${bayId}/lastUserId`] = null;
+waitingUpdates[`bays/${bayId}/requestedPackage`] = null;
+waitingUpdates[`bays/${bayId}/durationSec`] = null;
+waitingUpdates[`bays/${bayId}/tokensCost`] = null;
+waitingUpdates[`bays/${bayId}/hardwareSelection`] = "";
+waitingUpdates[`bays/${bayId}/updatedAt`] =
+  admin.database.ServerValue.TIMESTAMP;
           mqttAvailableCommands.push(bayId);
 
           safeLog(
