@@ -371,6 +371,7 @@ const reserveBayForSession = async (bayId, uid) => {
     }
 
     const status = bay.status || "available";
+    const nowMs = Date.now(); // <-- YENİ EKLENDİ
 
     const canReserveFromAvailable =
       status === "available" && !bay.currentSessionId && bay.isActive !== false;
@@ -389,8 +390,8 @@ const reserveBayForSession = async (bayId, uid) => {
       ...bay,
       status: "starting",
       lastUserId: uid,
-      startingAt: admin.database.ServerValue.TIMESTAMP,
-      updatedAt: admin.database.ServerValue.TIMESTAMP,
+      startingAt: nowMs, // <-- DEĞİŞTİRİLDİ
+      updatedAt: nowMs,  // <-- DEĞİŞTİRİLDİ
     };
   });
 
@@ -519,7 +520,7 @@ const sendAdminAlert = async (bayId, type) => {
 
     return {
       lastSent: now,
-      updatedAt: admin.database.ServerValue.TIMESTAMP,
+      updatedAt: now, // <-- DEĞİŞTİRİLDİ: ServerValue.TIMESTAMP yerine 'now' kullanıyoruz.
     };
   });
 
@@ -677,7 +678,8 @@ mqttClient.on("message", async (topic, messageBuffer) => {
           status: "offline",
           isActive: false,
           autoOffline: true,
-          lastSeen: admin.database.ServerValue.TIMESTAMP,
+          // Update içinde ServerValue.TIMESTAMP kullanmak güvenlidir, sorun çıkarmaz.
+          lastSeen: admin.database.ServerValue.TIMESTAMP, 
         });
 
         await sendAdminAlert(bayId, "down");
@@ -687,6 +689,8 @@ mqttClient.on("message", async (topic, messageBuffer) => {
       }
 
       await bayRef.transaction((currentBay) => {
+        const nowMs = Date.now(); // <-- DEĞİŞİKLİK BURADA: Transaction içinde Date.now() kullanıyoruz
+
         if (!currentBay) {
           return {
             status: nextStatus || "available",
@@ -701,9 +705,9 @@ mqttClient.on("message", async (topic, messageBuffer) => {
             pendingPackageSource: null,
             pendingSelectionId: null,
             pendingPackageAt: null,
-            createdAt: admin.database.ServerValue.TIMESTAMP,
-            updatedAt: admin.database.ServerValue.TIMESTAMP,
-            lastSeen: admin.database.ServerValue.TIMESTAMP,
+            createdAt: nowMs, // <-- DEĞİŞTİRİLDİ
+            updatedAt: nowMs, // <-- DEĞİŞTİRİLDİ
+            lastSeen: nowMs,  // <-- DEĞİŞTİRİLDİ
           };
         }
 
@@ -718,8 +722,8 @@ mqttClient.on("message", async (topic, messageBuffer) => {
             ...currentBay,
             isActive: true,
             autoOffline: null,
-            lastSeen: admin.database.ServerValue.TIMESTAMP,
-            updatedAt: admin.database.ServerValue.TIMESTAMP,
+            lastSeen: nowMs,  // <-- DEĞİŞTİRİLDİ
+            updatedAt: nowMs, // <-- DEĞİŞTİRİLDİ
           };
         }
 
@@ -728,8 +732,8 @@ mqttClient.on("message", async (topic, messageBuffer) => {
           status: nextStatus || currentStatus,
           isActive: true,
           autoOffline: null,
-          lastSeen: admin.database.ServerValue.TIMESTAMP,
-          updatedAt: admin.database.ServerValue.TIMESTAMP,
+          lastSeen: nowMs,  // <-- DEĞİŞTİRİLDİ
+          updatedAt: nowMs, // <-- DEĞİŞTİRİLDİ
         };
       });
 
@@ -1012,6 +1016,7 @@ app.post("/api/prepare-bay", verifyUser, async (req, res) => {
       }
 
       const status = bay.status || "available";
+      const nowMs = Date.now(); // <-- DEĞİŞİKLİK BURADA: TIMESTAMP yerine Date.now() kullanıyoruz
 
       if (
         status === "available" &&
@@ -1022,7 +1027,7 @@ app.post("/api/prepare-bay", verifyUser, async (req, res) => {
           ...bay,
           status: "waiting",
           lastUserId: uid,
-          updatedAt: admin.database.ServerValue.TIMESTAMP,
+          updatedAt: nowMs, // <-- DEĞİŞTİRİLDİ
         };
       }
 
@@ -1034,7 +1039,7 @@ app.post("/api/prepare-bay", verifyUser, async (req, res) => {
       ) {
         return {
           ...bay,
-          updatedAt: admin.database.ServerValue.TIMESTAMP,
+          updatedAt: nowMs, // <-- DEĞİŞTİRİLDİ
         };
       }
 
