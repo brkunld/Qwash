@@ -28,6 +28,38 @@
 // ================= EKRAN =================
 TFT_eSPI tft = TFT_eSPI();
 
+// ================= DOKUNMATIK BUTON ALANLARI =================
+struct TouchButton {
+  uint16_t x1;
+  uint16_t y1;
+  uint16_t x2;
+  uint16_t y2;
+};
+
+const TouchButton BTN_SU = {
+  20, 80,
+  150, 170,
+};
+
+const TouchButton BTN_KOPUK = {
+  170, 80,
+  300, 170,
+};
+
+const TouchButton BTN_IPTAL = {
+  100, 200,
+  220, 235,
+};
+
+bool dokunmaButonIcindeMi(uint16_t x, uint16_t y, const TouchButton& button) {
+  return (
+    x >= button.x1 &&
+    x <= button.x2 &&
+    y >= button.y1 &&
+    y <= button.y2
+  );
+}
+
 // ================= MQTT =================
 WiFiClientSecure mqttSecureClient;
 PubSubClient mqttClient(mqttSecureClient);
@@ -46,7 +78,8 @@ bool ilkMqttBaglantiTamamlandi = false;
 Preferences preferences;
 unsigned long islemBaslangicMs = 0;
 unsigned long islemSuresiMs = 0;
-unsigned long sonNvsKayitMs = 0; // Flash ömrü (wear leveling) için yazma geciktirici
+unsigned long sonNvsKayitMs = 0; // Flash ömrü için yazma geciktirici
+const unsigned long NVS_KAYIT_INTERVAL_MS = 60000; // 1 dakikada bir NVS yaz
 
 // ================= PINLER =================
 const int buzzerPin = 25;
@@ -97,6 +130,7 @@ bool dokunmatikKilit = false;
 bool odemeBekleniyor = false;
 unsigned long odemeBeklemeBaslangicMs = 0;
 const unsigned long ODEME_BEKLEME_TIMEOUT_MS = 60000;
+
 // ================= NON-BLOCKING EKRAN AKIŞI =================
 enum GeciciEkranModu {
   GECICI_YOK,
@@ -120,13 +154,19 @@ unsigned long sonKopukButonMs = 0;
 const unsigned long BUTON_DEBOUNCE_MS = 200;
 bool oncekiKopukButonDurumu = HIGH;
 
-============================================================
+// ============================================================
 void availableModunaDon(const char* sebep, bool cancelSelectionGonder);
+
 // ================= YARDIMCI =================
 void resetSayacDurumu() {
   sayacSonEkranSaniye = -1;
   sayacSonYarimSaniyeMs = 0;
   sayacIslemBittiCalindi = false;
+}
+
+void kalanSureKaydet(unsigned long kalanSure) {
+  preferences.putULong("kalanSure", kalanSure);
+  sonNvsKayitMs = millis();
 }
 
 int guvenliDurationOku(int gelenSure) {
@@ -139,36 +179,37 @@ int guvenliDurationOku(int gelenSure) {
   return gelenSure;
 }
 
-String paketNormalizeEt(String paket) {
-  paket.trim();
-  paket.toLowerCase();
+String paketNormalizeEt(const String& paket) {
+  String temizPaket = paket;
+  temizPaket.trim();
+  temizPaket.toLowerCase();
 
   if (
-    paket == "foam" ||
-    paket == "kopuk" ||
-    paket == "köpük" ||
-    paket == "kopup"
+    temizPaket == "foam" ||
+    temizPaket == "kopuk" ||
+    temizPaket == "köpük" ||
+    temizPaket == "kopup"
   ) {
     return "foam";
   }
 
   if (
-    paket == "wash" ||
-    paket == "su" ||
-    paket == "water" ||
-    paket == "yikama" ||
-    paket == "yıkama"
+    temizPaket == "wash" ||
+    temizPaket == "su" ||
+    temizPaket == "water" ||
+    temizPaket == "yikama" ||
+    temizPaket == "yıkama"
   ) {
     return "wash";
   }
 
-  return paket;
+  return temizPaket;
 }
 
 void islemHafizasiniTemizle() {
   islemBaslangicMs = 0;
   islemSuresiMs = 0;
-  preferences.putULong("kalanSure", 0); // endTime yerine kalanSure sıfırlanıyor
+  kalanSureKaydet(0);
   resetSayacDurumu();
   yeniBusyKomutuGeldi = false;
 }
@@ -217,19 +258,41 @@ void ekranaWaitingCiz() {
   tft.println("Lutfen Paket Seciniz");
 
   // SOL BUTON: SU
-  tft.fillRoundRect(20, 80, 130, 90, 10, TFT_BLUE);
+  tft.fillRoundRect(
+    BTN_SU.x1,
+    BTN_SU.y1,
+    BTN_SU.x2 - BTN_SU.x1,
+    BTN_SU.y2 - BTN_SU.y1,
+    10,
+    TFT_BLUE
+  );
   tft.setCursor(65, 115);
   tft.setTextColor(TFT_WHITE, TFT_BLUE);
   tft.setTextSize(3);
   tft.println("SU");
 
   // SAG BUTON: KOPUK
-  tft.fillRoundRect(170, 80, 130, 90, 10, TFT_CYAN);
+  tft.fillRoundRect(
+    BTN_KOPUK.x1,
+    BTN_KOPUK.y1,
+    BTN_KOPUK.x2 - BTN_KOPUK.x1,
+    BTN_KOPUK.y2 - BTN_KOPUK.y1,
+    10,
+    TFT_CYAN
+  );
   tft.setCursor(185, 115);
   tft.setTextColor(TFT_BLACK, TFT_CYAN);
   tft.println("KOPUK");
 
-  tft.fillRoundRect(100, 200, 120, 35, 8, TFT_RED);
+  // IPTAL BUTONU
+  tft.fillRoundRect(
+    BTN_IPTAL.x1,
+    BTN_IPTAL.y1,
+    BTN_IPTAL.x2 - BTN_IPTAL.x1,
+    BTN_IPTAL.y2 - BTN_IPTAL.y1,
+    8,
+    TFT_RED
+  );
   tft.setCursor(125, 210);
   tft.setTextColor(TFT_WHITE, TFT_RED);
   tft.setTextSize(2);
@@ -237,7 +300,6 @@ void ekranaWaitingCiz() {
 }
 
 void ekranaMesajYaz(const char* mesaj, uint16_t renk) {
-  // Tüm ekranı sürekli silmek yerine mesaj alanını temizle
   tft.fillRect(0, 95, 320, 60, TFT_BLACK);
   tft.setTextSize(2);
   tft.setTextColor(renk, TFT_BLACK);
@@ -264,8 +326,6 @@ void geciciEkranBaslat(GeciciEkranModu mod, const String& paket = "") {
 void geciciEkranKontrolEt() {
   if (geciciEkranModu == GECICI_YOK) return;
 
-  // MQTT komutu geldiyse ve artık waiting modunda değilsek,
-  // geçici ekran akışını iptal et.
   if (currentStatus != "waiting") {
     geciciEkranModu = GECICI_YOK;
     bekleyenPaketSecimi = "";
@@ -471,7 +531,7 @@ void mqttBootYayinla() {
   );
 }
 
-void mqttSecimYayinla(const String &secilenPaket) {
+void mqttSecimYayinla(const String& secilenPaket) {
   if (!mqttClient.connected()) return;
 
   mqttClient.publish(
@@ -508,7 +568,7 @@ void availableModunaDon(const char* sebep, bool cancelSelectionGonder) {
   mqttDurumYayinla();
 }
 
-void mqttKomutUygula(const String &komut) {
+void mqttKomutUygula(const String& komut) {
   LOG_PRINT(F("MQTT Komut: "));
   LOG_PRINTLN(komut);
 
@@ -569,7 +629,7 @@ void mqttKomutUygula(const String &komut) {
       requestedPackage = paketNormalizeEt(gelenPaket);
       durationSec = guvenliDurationOku(gelenSure);
 
-      preferences.putULong("kalanSure", 0);
+      kalanSureKaydet(0);
       islemBaslangicMs = 0;
       islemSuresiMs = 0;
       resetSayacDurumu();
@@ -596,13 +656,11 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
 
   mesaj[length] = '\0';
 
-  // Baştaki boşlukları atla
   char* baslangic = mesaj;
   while (*baslangic == ' ' || *baslangic == '\t' || *baslangic == '\r' || *baslangic == '\n') {
     baslangic++;
   }
 
-  // Sondaki boşlukları temizle
   char* bitis = baslangic + strlen(baslangic);
 
   while (
@@ -725,21 +783,17 @@ void wifiNonBlockingKontrolEt() {
 
       mqttBaglan();
 
-      // WiFi geri gelince ekran mevcut duruma göre yenilensin.
       durumDegisti = true;
     }
 
     return;
   }
 
-  // WiFi bağlı değilse, kopma anını sadece bir kez yakala.
   if (wifiWasConnected) {
     LOG_PRINTLN(F("WiFi baglantisi koptu."));
 
     wifiWasConnected = false;
 
-    // Busy sırasında sayaç ekranını bozma.
-    // Busy değilse bağlantı hatası ekranına geçmek için ekran yenile.
     if (currentStatus != "busy") {
       durumDegisti = true;
     }
@@ -787,10 +841,9 @@ void ekrandaSayaciGuncelle() {
     int saniye = kalanSaniye % 60;
     int dakika = kalanSaniye / 60;
 
-    // Flash ömrünü korumak için kalan süreyi NVS'ye her 10 saniyede bir kaydet
-    if (suAnMs - sonNvsKayitMs >= 10000) {
-      preferences.putULong("kalanSure", kalanSaniye);
-      sonNvsKayitMs = suAnMs;
+    // Flash ömrünü korumak için kalan süreyi NVS'ye 1 dakikada bir kaydet
+    if (suAnMs - sonNvsKayitMs >= NVS_KAYIT_INTERVAL_MS) {
+      kalanSureKaydet(kalanSaniye);
     }
 
     if (kalanSaniye >= 10) {
@@ -824,7 +877,7 @@ void ekrandaSayaciGuncelle() {
 
     sayacIslemBittiCalindi = true;
 
-    preferences.putULong("kalanSure", 0);
+    kalanSureKaydet(0);
     islemBaslangicMs = 0;
     islemSuresiMs = 0;
 
@@ -889,7 +942,7 @@ void setup() {
   wifiWasConnected = true;
   wifiReconnectInProgress = false;
 
-  ntpBekle(); // Cihazın genel saatini senkronize etmek isterseniz kalabilir, sayaçlar millis'e geçti.
+  ntpBekle();
 
   mqttBaglan();
   wifiWasConnected = WiFi.status() == WL_CONNECTED;
@@ -913,8 +966,6 @@ void loop() {
       mqttClient.loop();
     }
   } else {
-    // Busy sirasinda WiFi koparsa loop devam etmeli.
-    // Boylece ekran sayaci ve buzzer donmaz.
     if (currentStatus != "busy" && !hataEkraniGosteriliyor && durumDegisti) {
       if (durumDegisti) {
         ekranaBaglantiHatasiYaz();
@@ -1007,8 +1058,7 @@ void loop() {
         if (yeniBusyKomutuGeldi) {
           islemBaslangicMs = millis();
           islemSuresiMs = durationSec * 1000UL;
-          preferences.putULong("kalanSure", durationSec);
-          sonNvsKayitMs = millis();
+          kalanSureKaydet(durationSec);
           yeniBusyKomutuGeldi = false;
 
           LOG_PRINT(F("Yeni MQTT sure baslatildi. Paket: "));
@@ -1017,7 +1067,6 @@ void loop() {
           LOG_PRINTLN(durationSec);
         }
         else if (kayitliKalanSure > 0 && currentStatus == "busy") {
-          // Elektrik kesintisi kurtarma senaryosu
           islemBaslangicMs = millis();
           islemSuresiMs = kayitliKalanSure * 1000UL;
           sonNvsKayitMs = millis();
@@ -1026,8 +1075,7 @@ void loop() {
         else {
           islemBaslangicMs = millis();
           islemSuresiMs = durationSec * 1000UL;
-          preferences.putULong("kalanSure", durationSec);
-          sonNvsKayitMs = millis();
+          kalanSureKaydet(durationSec);
           LOG_PRINTLN(F("Yeni sure baslatildi."));
         }
 
@@ -1109,15 +1157,14 @@ void loop() {
       uint16_t x, y;
 
       if (tft.getTouch(&x, &y)) {
-        if (y >= 190 && y <= 240 && x >= 90 && x <= 230) {
+        if (dokunmaButonIcindeMi(x, y, BTN_IPTAL)) {
           secilenPaket = "cancel";
         }
-        else if (y > 80 && y < 170) {
-          if (x > 20 && x < 150) {
-            secilenPaket = "foam";
-          } else if (x > 170 && x < 300) {
-            secilenPaket = "wash";
-          }
+        else if (dokunmaButonIcindeMi(x, y, BTN_KOPUK)) {
+          secilenPaket = "foam";
+        }
+        else if (dokunmaButonIcindeMi(x, y, BTN_SU)) {
+          secilenPaket = "wash";
         }
       }
     }
@@ -1132,7 +1179,7 @@ void loop() {
       geciciEkranBaslat(GECICI_ISTEK_ILETILIYOR, secilenPaket);
       return;
     }
-      }
+  }
 
   if (odemeBekleniyor && currentStatus == "waiting") {
     if (millis() - odemeBeklemeBaslangicMs >= ODEME_BEKLEME_TIMEOUT_MS) {
