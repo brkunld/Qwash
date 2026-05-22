@@ -16,16 +16,7 @@ import {
   Image,
 } from "react-native";
 import { auth, db } from "../firebase";
-
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL;
-
-const getApiUrl = (path = "") => {
-  if (!API_BASE_URL) {
-    throw new Error("API_BASE_URL_MISSING");
-  }
-
-  return `${API_BASE_URL.replace(/\/$/, "")}${path}`;
-};
+import { getApiUrl } from "../src/config/api";
 
 export default function Login() {
   const [email, setEmail] = useState("");

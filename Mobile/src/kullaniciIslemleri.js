@@ -15,16 +15,7 @@ import {
 import { onValue, ref, update } from "firebase/database";
 
 import { auth, db, rtdb } from "../firebase";
-
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL;
-
-const getApiUrl = (path) => {
-  if (!API_BASE_URL) {
-    throw new Error("API_BASE_URL_MISSING");
-  }
-
-  return `${API_BASE_URL.replace(/\/$/, "")}${path}`;
-};
+import { getApiUrl } from "./config/api";
 
 export function useKullaniciIslemleri() {
   const params = useLocalSearchParams();
