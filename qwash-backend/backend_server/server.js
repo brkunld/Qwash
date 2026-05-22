@@ -968,16 +968,28 @@ app.post("/api/stop-session", verifyUser, async (req, res) => {
 // 1. IYZICO CHECKOUT FORM BAŞLATMA ENDPOINT'İ
 // ---------------------------------------------------------
 app.post("/api/topup", verifyUser, async (req, res) => {
-  const { uid, tokens, amountTRY } = req.body;
+  const uid = req.user.uid;
+  const { tokens, amountTRY } = req.body;
 
-  if (!uid || !tokens || !amountTRY) {
+  if (!tokens || !amountTRY) {
     return res.status(400).json({
-      error: "Eksik parametre gönderildi. uid, tokens ve amountTRY zorunludur.",
+      error: "Eksik parametre gönderildi. tokens ve amountTRY zorunludur.",
     });
   }
 
   const eklenecekJeton = parseInt(tokens, 10);
   const eklenecekTutar = Number(amountTRY);
+
+  if (
+    !Number.isFinite(eklenecekJeton) ||
+    !Number.isFinite(eklenecekTutar) ||
+    eklenecekJeton <= 0 ||
+    eklenecekTutar <= 0
+  ) {
+    return res.status(400).json({
+      error: "Geçersiz jeton veya tutar.",
+    });
+  }
 
   try {
     const userRef = db.collection("users").doc(uid);
@@ -993,23 +1005,31 @@ app.post("/api/topup", verifyUser, async (req, res) => {
       });
     }
 
-    // Render üzerindeki canlı adresiniz
+    const orderRef = db.collection("topupOrders").doc();
+
+    await orderRef.set({
+      userId: uid,
+      tokens: eklenecekJeton,
+      amountTRY: eklenecekTutar,
+      status: "pending",
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
     const RENDER_URL = "https://qwash-8q4y.onrender.com";
 
-    // Ödeme bitince Iyzico'nun verileri göndereceği geri dönüş adresi (Query parametresi ile yükleme detaylarını taşıyoruz)
-    const callbackUrl = `${RENDER_URL}/api/topup-callback?uid=${uid}&tokens=${eklenecekJeton}&amount=${eklenecekTutar}`;
+    const callbackUrl = `${RENDER_URL}/api/topup-callback?orderId=${orderRef.id}`;
 
     const iyzicoRequest = {
       locale: Iyzipay.LOCALE.TR,
-      conversationId: "QWASH_" + Date.now(),
+      conversationId: orderRef.id,
       price: eklenecekTutar.toString(),
       paidPrice: eklenecekTutar.toString(),
       currency: Iyzipay.CURRENCY.TRY,
       installment: "1",
-      basketId: "BASKET_" + Date.now(),
+      basketId: orderRef.id,
       paymentChannel: Iyzipay.PAYMENT_CHANNEL.MOBILE,
-      // BURASI ÖNEMLİ: Checkout form başlatıyoruz
-      callbackUrl: callbackUrl,
+      callbackUrl,
+
       buyer: {
         id: uid,
         name: userDoc.data().ad || "QWash",
@@ -1025,6 +1045,7 @@ app.post("/api/topup", verifyUser, async (req, res) => {
         country: "Turkey",
         zipCode: "34000",
       },
+
       shippingAddress: {
         contactName: "QWash Müşterisi",
         city: "Istanbul",
@@ -1032,6 +1053,7 @@ app.post("/api/topup", verifyUser, async (req, res) => {
         address: "QWash Mobil Uygulaması",
         zipCode: "34000",
       },
+
       billingAddress: {
         contactName: "QWash Müşterisi",
         city: "Istanbul",
@@ -1039,6 +1061,7 @@ app.post("/api/topup", verifyUser, async (req, res) => {
         address: "QWash Mobil Uygulaması",
         zipCode: "34000",
       },
+
       basketItems: [
         {
           id: "JETON_PK_" + eklenecekJeton,
@@ -1050,16 +1073,30 @@ app.post("/api/topup", verifyUser, async (req, res) => {
       ],
     };
 
-    // Checkout form oluşturma çağrısı
-    iyzipay.checkoutFormInitialize.create(iyzicoRequest, (err, result) => {
+    iyzipay.checkoutFormInitialize.create(iyzicoRequest, async (err, result) => {
       if (err || result.status === "failure") {
+        await orderRef.update({
+          status: "init_failed",
+          errorMessage: result ? result.errorMessage : err.message,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+
         safeLog(
-          `❌ Iyzico Form Başlatılamadı: ${result ? result.errorMessage : err.message}`,
+          `❌ Iyzico Form Başlatılamadı: ${
+            result ? result.errorMessage : err.message
+          }`,
         );
-        return res.status(400).json({ error: "Ödeme oturumu başlatılamadı." });
+
+        return res.status(400).json({
+          error: "Ödeme oturumu başlatılamadı.",
+        });
       }
 
-      // Mobil uygulamaya açacağı sayfanın web linkini döndürüyoruz
+      await orderRef.update({
+        iyzicoCheckoutToken: result.token || null,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+
       return res.status(200).json({
         success: true,
         paymentUrl: result.paymentPageUrl,
@@ -1075,25 +1112,44 @@ app.post("/api/topup", verifyUser, async (req, res) => {
 // 2. IYZICO GERİ DÖNÜŞ (CALLBACK) ENDPOINT'İ
 // ---------------------------------------------------------
 app.post("/api/topup-callback", async (req, res) => {
-  // Iyzico arka planda bir 'token' POST eder
   const { token } = req.body;
-  // URL'e iliştirdiğimiz yükleme bilgileri
-  const { uid, tokens, amount } = req.query;
+  const { orderId } = req.query;
 
-  if (!token) {
+  if (!token || !orderId) {
     return res.status(400).send("<h1>Geçersiz İstek</h1>");
   }
 
-  const eklenecekJeton = parseInt(tokens, 10);
-  const eklenecekTutar = Number(amount);
+  const orderRef = db.collection("topupOrders").doc(orderId);
 
   try {
-    // Iyzico'ya bu token'ın sonucunu soruyoruz (Gerçekten ödedi mi?)
+    const orderDoc = await orderRef.get();
+
+    if (!orderDoc.exists) {
+      safeLog(`🚨 Geçersiz ödeme callback orderId: ${orderId}`);
+      return res.status(404).send("<h1>Sipariş bulunamadı.</h1>");
+    }
+
+    const order = orderDoc.data();
+
+    if (order.status !== "pending") {
+      safeLog(`ℹ️ Tekrarlanan callback engellendi. Order: ${orderId}`);
+
+      return res.send(`
+        <html lang="tr">
+          <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+          <body style="text-align:center; padding-top:50px; font-family:sans-serif;">
+            <h1>Bu ödeme daha önce işlendi.</h1>
+            <p>Uygulamaya geri dönebilirsiniz.</p>
+          </body>
+        </html>
+      `);
+    }
+
     iyzipay.checkoutForm.retrieve(
       {
         locale: Iyzipay.LOCALE.TR,
-        conversationId: "QWASH_CHECK_" + Date.now(),
-        token: token,
+        conversationId: orderId,
+        token,
       },
       async (err, result) => {
         if (
@@ -1101,75 +1157,152 @@ app.post("/api/topup-callback", async (req, res) => {
           result.status !== "success" ||
           result.paymentStatus !== "SUCCESS"
         ) {
-          safeLog(`❌ Ödeme Başarısız veya İptal Edildi. UID: ${uid}`);
+          await orderRef.update({
+            status: "failed",
+            iyzicoStatus: result?.status || null,
+            iyzicoPaymentStatus: result?.paymentStatus || null,
+            errorMessage: result?.errorMessage || err?.message || null,
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          });
+
+          safeLog(`❌ Ödeme Başarısız veya İptal Edildi. Order: ${orderId}`);
+
           return res.send(`
-          <html lang="tr">
-            <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
-            <body style="text-align:center; padding-top:50px; font-family:sans-serif; background-color:#fff3f3;">
-              <h1 style="color:#d9534f;">❌ Ödeme Başarısız!</h1>
-              <p>İşlem bankanız tarafından reddedildi veya iptal edildi.</p>
-              <p>Uygulamaya güvenle geri dönebilirsiniz.</p>
-            </body>
-          </html>
-        `);
+            <html lang="tr">
+              <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+              <body style="text-align:center; padding-top:50px; font-family:sans-serif; background-color:#fff3f3;">
+                <h1 style="color:#d9534f;">❌ Ödeme Başarısız!</h1>
+                <p>İşlem bankanız tarafından reddedildi veya iptal edildi.</p>
+                <p>Uygulamaya güvenle geri dönebilirsiniz.</p>
+              </body>
+            </html>
+          `);
         }
 
-        // ÖDEME ONAYLANDI -> Jetonları Firestore'a yükle
-        try {
-          const userRef = db.collection("users").doc(uid);
-          const txRef = db.collection("transactions").doc();
+        const expectedAmount = Number(order.amountTRY);
+        const paidPrice = Number(result.paidPrice);
 
+        if (
+          !Number.isFinite(expectedAmount) ||
+          !Number.isFinite(paidPrice) ||
+          paidPrice !== expectedAmount
+        ) {
+          await orderRef.update({
+            status: "amount_mismatch",
+            expectedAmountTRY: expectedAmount,
+            iyzicoPaidPrice: result.paidPrice || null,
+            paymentId: result.paymentId || null,
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          });
+
+          safeLog(
+            `🚨 IYZICO TUTAR UYUŞMAZLIĞI: Order=${orderId}, Expected=${expectedAmount}, Paid=${result.paidPrice}`,
+          );
+
+          return res.status(400).send(`
+            <html lang="tr">
+              <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+              <body style="text-align:center; padding-top:50px; font-family:sans-serif; background-color:#fff3f3;">
+                <h1 style="color:#d9534f;">❌ Ödeme Doğrulanamadı!</h1>
+                <p>Ödeme tutarı sistemdeki siparişle eşleşmedi.</p>
+                <p>Lütfen destek ile iletişime geçin.</p>
+              </body>
+            </html>
+          `);
+        }
+
+        try {
           await db.runTransaction(async (t) => {
-            const txUserDoc = await t.get(userRef);
-            const mevcutBakiye = Number(txUserDoc.data().walletTokens || 0);
+            const freshOrderDoc = await t.get(orderRef);
+
+            if (!freshOrderDoc.exists) {
+              throw new Error("Order_Bulunamadi");
+            }
+
+            const freshOrder = freshOrderDoc.data();
+
+            if (freshOrder.status !== "pending") {
+              throw new Error("Order_Zaten_Islendi");
+            }
+
+            const userRef = db.collection("users").doc(freshOrder.userId);
+            const userDoc = await t.get(userRef);
+
+            if (!userDoc.exists) {
+              throw new Error("Kullanici_Bulunamadi");
+            }
+
+            const tokensToAdd = Number(freshOrder.tokens);
+            const amountTRY = Number(freshOrder.amountTRY);
+            const mevcutBakiye = Number(userDoc.data().walletTokens || 0);
 
             t.update(userRef, {
-              walletTokens: mevcutBakiye + eklenecekJeton,
+              walletTokens: mevcutBakiye + tokensToAdd,
               updatedAt: admin.firestore.FieldValue.serverTimestamp(),
             });
 
-            t.set(txRef, {
+            t.update(orderRef, {
+              status: "success",
+              paymentId: result.paymentId || null,
+              iyzicoPaidPrice: result.paidPrice || null,
+              iyzicoPrice: result.price || null,
+              completedAt: admin.firestore.FieldValue.serverTimestamp(),
+              updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            });
+
+            t.set(db.collection("transactions").doc(), {
               type: "topup",
               status: "success",
-              paymentId: result.paymentId,
-              tokens: eklenecekJeton,
-              unitPriceTRY: eklenecekTutar / eklenecekJeton,
-              amountTRY: eklenecekTutar,
-              userId: uid,
+              paymentId: result.paymentId || null,
+              orderId,
+              tokens: tokensToAdd,
+              unitPriceTRY: amountTRY / tokensToAdd,
+              amountTRY,
+              userId: freshOrder.userId,
               createdAt: admin.firestore.FieldValue.serverTimestamp(),
             });
           });
 
           safeLog(
-            `✅ CHECKOUT ÖDEMESİ BAŞARILI: ${uid} -> ${eklenecekJeton} jeton yüklendi.`,
+            `✅ CHECKOUT ÖDEMESİ BAŞARILI: Order=${orderId}, ${order.userId} -> ${order.tokens} jeton yüklendi.`,
           );
 
-          // Kullanıcı ekranda şık bir başarı mesajı görsün
           return res.send(`
-          <html lang="tr">
-            <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
-            <body style="text-align:center; padding-top:50px; font-family:sans-serif; background-color:#f4fbf7;">
-              <h1 style="color:#5cb85c;">✅ Ödeme Başarılı!</h1>
-              <p><b>${eklenecekJeton} Jeton</b> hesabınıza başarıyla tanımlandı.</p>
-              <p>Uygulamaya geri dönüp bakiyenizi kontrol edebilirsiniz.</p>
-            </body>
-          </html>
-        `);
+            <html lang="tr">
+              <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+              <body style="text-align:center; padding-top:50px; font-family:sans-serif; background-color:#f4fbf7;">
+                <h1 style="color:#5cb85c;">✅ Ödeme Başarılı!</h1>
+                <p><b>${order.tokens} Jeton</b> hesabınıza başarıyla tanımlandı.</p>
+                <p>Uygulamaya geri dönüp bakiyenizi kontrol edebilirsiniz.</p>
+              </body>
+            </html>
+          `);
         } catch (dbError) {
+          if (dbError.message === "Order_Zaten_Islendi") {
+            return res.send(`
+              <html lang="tr">
+                <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+                <body style="text-align:center; padding-top:50px; font-family:sans-serif;">
+                  <h1>Bu ödeme daha önce işlendi.</h1>
+                  <p>Uygulamaya geri dönebilirsiniz.</p>
+                </body>
+              </html>
+            `);
+          }
+
           safeLog(`❌ Ödeme alındı ama DB yazma hatası: ${dbError.message}`);
-          return res
-            .status(500)
-            .send(
-              "<h1>Ödeme Alındı fakat bir veritabanı hatası oluştu. Lütfen destekle iletişime geçin.</h1>",
-            );
+
+          return res.status(500).send(
+            "<h1>Ödeme Alındı fakat bir veritabanı hatası oluştu. Lütfen destekle iletişime geçin.</h1>",
+          );
         }
       },
     );
   } catch (error) {
+    safeLog(`❌ Callback sunucu hatası: ${error.message}`);
     return res.status(500).send("<h1>Sunucu hatası oluştu.</h1>");
   }
 });
-
 // ---------------------------------------------------------
 // ADMIN BAY LISTESI
 // ---------------------------------------------------------

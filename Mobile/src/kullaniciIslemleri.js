@@ -310,6 +310,11 @@ export function useKullaniciIslemleri() {
 
     try {
       const token = await auth.currentUser?.getIdToken();
+      if (!token) {
+  Alert.alert("Oturum Hatası", "Lütfen tekrar giriş yapın.");
+  router.replace("/login");
+  return;
+}
 
       const API_URL = "https://qwash-8q4y.onrender.com/api/start-session";
       const response = await fetch(API_URL, {
@@ -440,7 +445,6 @@ export function useKullaniciIslemleri() {
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          uid: uid,
           tokens: tokens,
           amountTRY: amountTRY,
         }),
