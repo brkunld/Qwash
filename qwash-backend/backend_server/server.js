@@ -1459,8 +1459,30 @@ app.post("/api/cancel-waiting", verifyUser, async (req, res) => {
       });
     }
 
-    if (bayData.status !== "waiting" || bayData.lastUserId !== req.user.uid) {
-      safeLog(`🚨 YETKİSİZ İPTAL DENEMESİ: ${req.user.uid}, Peron: ${bayId}`);
+    const alreadyAvailable =
+      bayData.status === "available" &&
+      !bayData.currentSessionId &&
+      !bayData.lastUserId &&
+      !bayData.requestedPackage;
+
+    if (alreadyAvailable) {
+      return res.status(200).json({
+        success: true,
+        mqttOk: false,
+        reason: "already_available",
+        message: "Peron zaten serbest.",
+      });
+    }
+
+    const canCancel =
+      !bayData.currentSessionId &&
+      ["waiting", "starting", "available"].includes(bayData.status) &&
+      (!bayData.lastUserId || bayData.lastUserId === req.user.uid);
+
+    if (!canCancel) {
+      safeLog(
+        `🚨 YETKİSİZ İPTAL DENEMESİ: ${req.user.uid}, Peron: ${bayId}, status=${bayData.status}, lastUserId=${bayData.lastUserId || "yok"}`,
+      );
 
       return res.status(403).json({
         error:
@@ -1473,14 +1495,14 @@ app.post("/api/cancel-waiting", verifyUser, async (req, res) => {
     return res.status(200).json({
       success:
         cancelResult.cleared || cancelResult.reason === "already_available",
-      mqttOk: cancelResult.commandSent,
+      mqttOk: cancelResult.commandSent || false,
       reason: cancelResult.reason,
       message:
         cancelResult.reason === "already_available"
           ? "Peron zaten serbest."
           : cancelResult.commandSent
             ? "Peron başarıyla serbest bırakıldı."
-            : "Peron veritabanında serbest bırakıldı ancak cihaza MQTT komutu gönderilemedi.",
+            : "Peron veritabanında serbest bırakıldı.",
     });
   } catch (error) {
     safeLog(`❌ Cancel Waiting Hatası: ${error.message}`);

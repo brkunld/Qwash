@@ -133,6 +133,9 @@ unsigned long odemeBeklemeBaslangicMs = 0;
 const unsigned long ODEME_BEKLEME_TIMEOUT_MS = 60000;
 unsigned long sonCancelEventMs = 0;
 const unsigned long CANCEL_EVENT_DEBOUNCE_MS = 2000;
+bool cancelBackendCevabiBekleniyor = false;
+unsigned long cancelBackendBeklemeBaslangicMs = 0;
+const unsigned long CANCEL_BACKEND_TIMEOUT_MS = 1500;
 
 // ================= NON-BLOCKING EKRAN AKISI =================
 enum GeciciEkranModu {
@@ -576,6 +579,8 @@ void iptalIstegiGonder() {
   odemeBekleniyor = false;
   dokunmatikKilit = true;
   hataEkraniGosteriliyor = false;
+  cancelBackendCevabiBekleniyor = true;
+  cancelBackendBeklemeBaslangicMs = millis();
 
   unsigned long suAn = millis();
 
@@ -641,8 +646,11 @@ void mqttKomutUygula(const String& komut) {
   LOG_PRINTLN(komut);
 
 if (komut == "AVAILABLE") {
+  cancelBackendCevabiBekleniyor = false;
+
   if (currentStatus == "available" && !odemeBekleniyor) {
     LOG_PRINTLN(F("AVAILABLE zaten aktif, tekrar islenmedi."));
+    dokunmatikKilit = false;
     return;
   }
 
@@ -650,10 +658,14 @@ if (komut == "AVAILABLE") {
   isBayActive = true;
   odemeBekleniyor = false;
   dokunmatikKilit = false;
+  hataEkraniGosteriliyor = false;
+  geciciEkranModu = GECICI_YOK;
+  bekleyenPaketSecimi = "";
   islemHafizasiniTemizle();
   durumDegisti = true;
 }
   else if (komut == "WAITING") {
+    cancelBackendCevabiBekleniyor = false;
     currentStatus = "waiting";
     isBayActive = true;
     odemeBekleniyor = false;
@@ -1071,6 +1083,27 @@ void loop() {
   if (geciciEkranModu != GECICI_YOK) {
     return;
   }
+
+  if (
+  cancelBackendCevabiBekleniyor &&
+  millis() - cancelBackendBeklemeBaslangicMs >= CANCEL_BACKEND_TIMEOUT_MS
+) {
+  LOG_PRINTLN(F("CANCEL backend cevabi gelmedi, lokal AVAILABLE moduna geciliyor."));
+
+  cancelBackendCevabiBekleniyor = false;
+  dokunmatikKilit = false;
+  odemeBekleniyor = false;
+  hataEkraniGosteriliyor = false;
+  geciciEkranModu = GECICI_YOK;
+  bekleyenPaketSecimi = "";
+
+  currentStatus = "available";
+  isBayActive = true;
+  islemHafizasiniTemizle();
+  durumDegisti = true;
+
+  mqttDurumYayinla();
+}
 
   if (millis() - sonNabizZamani >= nabizAraligi) {
     sonNabizZamani = millis();
