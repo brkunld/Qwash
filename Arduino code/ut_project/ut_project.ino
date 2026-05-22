@@ -1213,10 +1213,10 @@ void loop() {
           secilenPaket = "cancel";
         }
         else if (dokunmaButonIcindeMi(x, y, BTN_KOPUK)) {
-          secilenPaket = "foam";
+          secilenPaket = "wash";
         }
         else if (dokunmaButonIcindeMi(x, y, BTN_SU)) {
-          secilenPaket = "wash";
+          secilenPaket = "foam";
         }
       }
     }

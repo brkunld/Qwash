@@ -378,7 +378,7 @@ const reserveBayForSession = async (bayId, uid) => {
 
     const canReserveFromWaiting =
       status === "waiting" &&
-      bay.lastUserId === uid &&
+      (!bay.lastUserId || bay.lastUserId === uid) &&
       !bay.currentSessionId &&
       bay.isActive !== false;
 
@@ -1046,11 +1046,15 @@ app.post("/api/prepare-bay", verifyUser, async (req, res) => {
 
       if (
         status === "waiting" &&
-        bay.lastUserId === uid &&
+        (!bay.lastUserId || bay.lastUserId === uid) &&
         !bay.currentSessionId &&
         bay.isActive !== false
       ) {
-        return bay;
+        return {
+          ...bay,
+          lastUserId: uid,
+          updatedAt: Date.now(),
+        };
       }
 
       return;
@@ -1091,7 +1095,11 @@ app.post("/api/prepare-bay", verifyUser, async (req, res) => {
         });
       }
 
-      if (bayData.status === "waiting" && bayData.lastUserId !== uid) {
+      if (
+        bayData.status === "waiting" &&
+        bayData.lastUserId &&
+        bayData.lastUserId !== uid
+      ) {
         return res.status(409).json({
           error: "Peron şu anda başka bir kullanıcı tarafından hazırlanıyor.",
         });
@@ -2361,209 +2369,214 @@ const acquireCronLock = async () => {
 };
 
 if (ENABLE_CRON) {
-cron.schedule("* * * * *", async () => {
-  if (isHeartbeatCronRunning) {
-    safeLog("⏭️ [CRON] Önceki kontrol hâlâ çalışıyor, bu tur atlandı.");
-    return;
-  }
-
-  const lockOk = await acquireCronLock();
-
-  if (!lockOk) {
-    safeLog("⏭️ [CRON] Başka instance çalıştırıyor, bu tur atlandı.");
-    return;
-  }
-
-  isHeartbeatCronRunning = true;
-  safeLog("🔍 [CRON] Sistem kontrolü çalışıyor...");
-
-  try {
-    const now = Date.now();
-
-    const expiredSessions = await db
-      .collection("sessions")
-      .where("status", "==", "running")
-      .where("expectedEndTime", "<=", admin.firestore.Timestamp.fromMillis(now))
-      .get();
-
-    if (!expiredSessions.empty) {
-      const batch = db.batch();
-      const bayUpdates = {};
-      const mqttWaitingCommands = [];
-
-      expiredSessions.forEach((doc) => {
-        batch.update(doc.ref, {
-          status: "ended",
-          endedAt: admin.firestore.FieldValue.serverTimestamp(),
-          endedReason: "time_up",
-        });
-
-        const bayId = doc.data().bayId;
-
-        bayUpdates[`bays/${bayId}/status`] = "waiting";
-        bayUpdates[`bays/${bayId}/currentSessionId`] = null;
-        bayUpdates[`bays/${bayId}/lastUserId`] = null;
-        bayUpdates[`bays/${bayId}/requestedPackage`] = null;
-        bayUpdates[`bays/${bayId}/durationSec`] = null;
-        bayUpdates[`bays/${bayId}/tokensCost`] = null;
-        bayUpdates[`bays/${bayId}/updatedAt`] =
-          admin.database.ServerValue.TIMESTAMP;
-
-        mqttWaitingCommands.push(bayId);
-
-        safeLog(
-          `🏁 [CRON] OTOMATİK KAPATMA: ${bayId} süresi doldu, bekleme moduna alındı.`,
-        );
-      });
-
-      await batch.commit();
-
-      if (Object.keys(bayUpdates).length > 0) {
-        await rtdb.ref().update(bayUpdates);
-      }
-
-      mqttWaitingCommands.forEach((bayId) => {
-        safeSendBayCommand(bayId, "WAITING");
-      });
+  cron.schedule("* * * * *", async () => {
+    if (isHeartbeatCronRunning) {
+      safeLog("⏭️ [CRON] Önceki kontrol hâlâ çalışıyor, bu tur atlandı.");
+      return;
     }
 
-    const waitingBaysSnap = await rtdb
-      .ref("bays")
-      .orderByChild("status")
-      .equalTo("waiting")
-      .once("value");
+    const lockOk = await acquireCronLock();
 
-    if (waitingBaysSnap.exists()) {
-      const waitingBays = waitingBaysSnap.val();
-      const waitingUpdates = {};
-      const mqttAvailableCommands = [];
+    if (!lockOk) {
+      safeLog("⏭️ [CRON] Başka instance çalıştırıyor, bu tur atlandı.");
+      return;
+    }
 
-      for (const [bayId, bay] of Object.entries(waitingBays)) {
-        if (bay.updatedAt && now - bay.updatedAt > 60000) {
-          waitingUpdates[`bays/${bayId}/status`] = "available";
-          waitingUpdates[`bays/${bayId}/currentSessionId`] = null;
-          waitingUpdates[`bays/${bayId}/lastUserId`] = null;
-          waitingUpdates[`bays/${bayId}/requestedPackage`] = null;
-          waitingUpdates[`bays/${bayId}/durationSec`] = null;
-          waitingUpdates[`bays/${bayId}/tokensCost`] = null;
-          waitingUpdates[`bays/${bayId}/updatedAt`] =
+    isHeartbeatCronRunning = true;
+    safeLog("🔍 [CRON] Sistem kontrolü çalışıyor...");
+
+    try {
+      const now = Date.now();
+
+      const expiredSessions = await db
+        .collection("sessions")
+        .where("status", "==", "running")
+        .where(
+          "expectedEndTime",
+          "<=",
+          admin.firestore.Timestamp.fromMillis(now),
+        )
+        .get();
+
+      if (!expiredSessions.empty) {
+        const batch = db.batch();
+        const bayUpdates = {};
+        const mqttWaitingCommands = [];
+
+        expiredSessions.forEach((doc) => {
+          batch.update(doc.ref, {
+            status: "ended",
+            endedAt: admin.firestore.FieldValue.serverTimestamp(),
+            endedReason: "time_up",
+          });
+
+          const bayId = doc.data().bayId;
+
+          bayUpdates[`bays/${bayId}/status`] = "waiting";
+          bayUpdates[`bays/${bayId}/currentSessionId`] = null;
+          bayUpdates[`bays/${bayId}/lastUserId`] = null;
+          bayUpdates[`bays/${bayId}/requestedPackage`] = null;
+          bayUpdates[`bays/${bayId}/durationSec`] = null;
+          bayUpdates[`bays/${bayId}/tokensCost`] = null;
+          bayUpdates[`bays/${bayId}/updatedAt`] =
             admin.database.ServerValue.TIMESTAMP;
-          mqttAvailableCommands.push(bayId);
+
+          mqttWaitingCommands.push(bayId);
 
           safeLog(
-            `⏳ [CRON] ZAMAN AŞIMI: ${bayId} 60sn işlem yapılmadığı için boşa çıkarıldı.`,
+            `🏁 [CRON] OTOMATİK KAPATMA: ${bayId} süresi doldu, bekleme moduna alındı.`,
           );
+        });
+
+        await batch.commit();
+
+        if (Object.keys(bayUpdates).length > 0) {
+          await rtdb.ref().update(bayUpdates);
         }
+
+        mqttWaitingCommands.forEach((bayId) => {
+          safeSendBayCommand(bayId, "WAITING");
+        });
       }
 
-      if (Object.keys(waitingUpdates).length > 0) {
-        await rtdb.ref().update(waitingUpdates);
+      const waitingBaysSnap = await rtdb
+        .ref("bays")
+        .orderByChild("status")
+        .equalTo("waiting")
+        .once("value");
+
+      if (waitingBaysSnap.exists()) {
+        const waitingBays = waitingBaysSnap.val();
+        const waitingUpdates = {};
+        const mqttAvailableCommands = [];
+
+        for (const [bayId, bay] of Object.entries(waitingBays)) {
+          if (bay.updatedAt && now - bay.updatedAt > 60000) {
+            waitingUpdates[`bays/${bayId}/status`] = "available";
+            waitingUpdates[`bays/${bayId}/currentSessionId`] = null;
+            waitingUpdates[`bays/${bayId}/lastUserId`] = null;
+            waitingUpdates[`bays/${bayId}/requestedPackage`] = null;
+            waitingUpdates[`bays/${bayId}/durationSec`] = null;
+            waitingUpdates[`bays/${bayId}/tokensCost`] = null;
+            waitingUpdates[`bays/${bayId}/updatedAt`] =
+              admin.database.ServerValue.TIMESTAMP;
+            mqttAvailableCommands.push(bayId);
+
+            safeLog(
+              `⏳ [CRON] ZAMAN AŞIMI: ${bayId} 60sn işlem yapılmadığı için boşa çıkarıldı.`,
+            );
+          }
+        }
+
+        if (Object.keys(waitingUpdates).length > 0) {
+          await rtdb.ref().update(waitingUpdates);
+        }
+
+        mqttAvailableCommands.forEach((bayId) => {
+          safeSendBayCommand(bayId, "AVAILABLE");
+        });
       }
 
-      mqttAvailableCommands.forEach((bayId) => {
-        safeSendBayCommand(bayId, "AVAILABLE");
-      });
-    }
+      const timeoutMs = 2 * 60 * 1000;
 
-    const timeoutMs = 2 * 60 * 1000;
+      const presenceSnap = await rtdb.ref("bayPresence").once("value");
 
-    const presenceSnap = await rtdb.ref("bayPresence").once("value");
+      if (presenceSnap.exists()) {
+        const presenceData = presenceSnap.val();
 
-    if (presenceSnap.exists()) {
-      const presenceData = presenceSnap.val();
+        for (const [bayId, presence] of Object.entries(presenceData)) {
+          const lastSeen = Number(presence.lastSeen || 0);
 
-      for (const [bayId, presence] of Object.entries(presenceData)) {
-        const lastSeen = Number(presence.lastSeen || 0);
-
-        if (!lastSeen) {
-          continue;
-        }
-
-        const bayRef = rtdb.ref(`bays/${bayId}`);
-        const baySnap = await bayRef.once("value");
-        const bay = baySnap.val();
-
-        if (!bay) {
-          continue;
-        }
-
-        const isTimedOut = now - lastSeen > timeoutMs;
-        const isBackOnline = presence.autoOffline === true && !isTimedOut;
-
-        if (isTimedOut) {
-          if (
-            (bay.status === "offline" && presence.autoOffline !== true) ||
-            bay.status === "maintenance"
-          ) {
+          if (!lastSeen) {
             continue;
           }
 
-          if (bay.status !== "offline" || presence.autoOffline !== true) {
-            safeLog(
-              `⚠️ [CRON] KOPMA TESPİT EDİLDİ: ${bayId} otomatik kapatılıyor...`,
-            );
+          const bayRef = rtdb.ref(`bays/${bayId}`);
+          const baySnap = await bayRef.once("value");
+          const bay = baySnap.val();
 
-            let refundResult = {
-              refunded: false,
-              reason: "no_active_session",
-            };
+          if (!bay) {
+            continue;
+          }
 
-            if (bay.currentSessionId) {
-              refundResult = await refundSessionIfNeeded(
-                bay.currentSessionId,
-                "bay_power_loss",
-              );
+          const isTimedOut = now - lastSeen > timeoutMs;
+          const isBackOnline = presence.autoOffline === true && !isTimedOut;
 
-              if (refundResult.refunded) {
-                safeLog(
-                  `💸 JETON İADESİ: ${bayId} elektrik/bağlantı kesintisi nedeniyle ${refundResult.tokens} jeton iade edildi.`,
-                );
-              } else {
-                safeLog(`ℹ️ İade yapılmadı: ${bayId} - ${refundResult.reason}`);
-              }
+          if (isTimedOut) {
+            if (
+              (bay.status === "offline" && presence.autoOffline !== true) ||
+              bay.status === "maintenance"
+            ) {
+              continue;
             }
 
+            if (bay.status !== "offline" || presence.autoOffline !== true) {
+              safeLog(
+                `⚠️ [CRON] KOPMA TESPİT EDİLDİ: ${bayId} otomatik kapatılıyor...`,
+              );
+
+              let refundResult = {
+                refunded: false,
+                reason: "no_active_session",
+              };
+
+              if (bay.currentSessionId) {
+                refundResult = await refundSessionIfNeeded(
+                  bay.currentSessionId,
+                  "bay_power_loss",
+                );
+
+                if (refundResult.refunded) {
+                  safeLog(
+                    `💸 JETON İADESİ: ${bayId} elektrik/bağlantı kesintisi nedeniyle ${refundResult.tokens} jeton iade edildi.`,
+                  );
+                } else {
+                  safeLog(
+                    `ℹ️ İade yapılmadı: ${bayId} - ${refundResult.reason}`,
+                  );
+                }
+              }
+
+              await clearBaySessionFields(bayId, {
+                status: "offline",
+              });
+
+              await setBayPresence(bayId, {
+                isActive: false,
+                autoOffline: true,
+              });
+
+              await sendAdminAlert(bayId, "down");
+            }
+
+            continue;
+          }
+
+          if (isBackOnline) {
+            safeLog(
+              `✅ [CRON] İNTERNET GELDİ: ${bayId} otomatik olarak açılıyor...`,
+            );
+
             await clearBaySessionFields(bayId, {
-              status: "offline",
+              status: "available",
             });
 
             await setBayPresence(bayId, {
-              isActive: false,
-              autoOffline: true,
+              isActive: true,
+              autoOffline: null,
             });
 
-            await sendAdminAlert(bayId, "down");
+            await safeSendBayCommand(bayId, "AVAILABLE");
+            await sendAdminAlert(bayId, "up");
           }
-
-          continue;
-        }
-
-        if (isBackOnline) {
-          safeLog(
-            `✅ [CRON] İNTERNET GELDİ: ${bayId} otomatik olarak açılıyor...`,
-          );
-
-          await clearBaySessionFields(bayId, {
-            status: "available",
-          });
-
-          await setBayPresence(bayId, {
-            isActive: true,
-            autoOffline: null,
-          });
-
-          await safeSendBayCommand(bayId, "AVAILABLE");
-          await sendAdminAlert(bayId, "up");
         }
       }
+    } catch (error) {
+      safeLog(`❌ Cron Job Hatası: ${error.message}`);
+    } finally {
+      isHeartbeatCronRunning = false;
     }
-
-  } catch (error) {
-    safeLog(`❌ Cron Job Hatası: ${error.message}`);
-  } finally {
-    isHeartbeatCronRunning = false;
-  }
-});
+  });
 } else {
   safeLog("ℹ️ Cron devre dışı. ENABLE_CRON=false.");
 }
