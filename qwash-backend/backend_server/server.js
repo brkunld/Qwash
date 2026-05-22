@@ -391,7 +391,7 @@ const reserveBayForSession = async (bayId, uid) => {
       status: "starting",
       lastUserId: uid,
       startingAt: nowMs, // <-- DEĞİŞTİRİLDİ
-      updatedAt: nowMs,  // <-- DEĞİŞTİRİLDİ
+      updatedAt: nowMs, // <-- DEĞİŞTİRİLDİ
     };
   });
 
@@ -432,7 +432,18 @@ const reserveBayForSession = async (bayId, uid) => {
 // =========================================================
 // RTDB BAY TEMIZLIK
 // =========================================================
+const setBayPresence = async (bayId, patch = {}) => {
+  await rtdb.ref(`bayPresence/${bayId}`).update({
+    updatedAt: admin.database.ServerValue.TIMESTAMP,
+    ...patch,
+  });
+};
+
 const clearBaySessionFields = async (bayId, extraPatch = {}) => {
+  // Heartbeat / connection fields are intentionally kept outside bays/{bayId}.
+  // This prevents RTDB transaction maxretry errors while users prepare/start sessions.
+  const { isActive, autoOffline, lastSeen, ...bayPatch } = extraPatch || {};
+
   await rtdb.ref(`bays/${bayId}`).update({
     currentSessionId: null,
     lastUserId: null,
@@ -445,8 +456,18 @@ const clearBaySessionFields = async (bayId, extraPatch = {}) => {
     pendingSelectionId: null,
     pendingPackageAt: null,
     updatedAt: admin.database.ServerValue.TIMESTAMP,
-    ...extraPatch,
+    ...bayPatch,
   });
+
+  const presencePatch = {};
+
+  if (isActive !== undefined) presencePatch.isActive = isActive;
+  if (autoOffline !== undefined) presencePatch.autoOffline = autoOffline;
+  if (lastSeen !== undefined) presencePatch.lastSeen = lastSeen;
+
+  if (Object.keys(presencePatch).length > 0) {
+    await setBayPresence(bayId, presencePatch);
+  }
 };
 
 const clearWaitingBayAfterCancel = async (bayId, uid = null) => {
@@ -651,6 +672,7 @@ mqttClient.on("message", async (topic, messageBuffer) => {
   try {
     if (eventType === "status") {
       const bayRef = rtdb.ref(`bays/${bayId}`);
+      const presenceRef = rtdb.ref(`bayPresence/${bayId}`);
       const nextStatus = String(message || "").trim();
 
       if (nextStatus === "offline") {
@@ -676,10 +698,13 @@ mqttClient.on("message", async (topic, messageBuffer) => {
 
         await clearBaySessionFields(bayId, {
           status: "offline",
+        });
+
+        await presenceRef.update({
           isActive: false,
           autoOffline: true,
-          // Update içinde ServerValue.TIMESTAMP kullanmak güvenlidir, sorun çıkarmaz.
-          lastSeen: admin.database.ServerValue.TIMESTAMP, 
+          lastSeen: admin.database.ServerValue.TIMESTAMP,
+          updatedAt: admin.database.ServerValue.TIMESTAMP,
         });
 
         await sendAdminAlert(bayId, "down");
@@ -688,53 +713,45 @@ mqttClient.on("message", async (topic, messageBuffer) => {
         return;
       }
 
-      await bayRef.transaction((currentBay) => {
-        const nowMs = Date.now(); // <-- DEĞİŞİKLİK BURADA: Transaction içinde Date.now() kullanıyoruz
+      const baySnap = await bayRef.once("value");
+      const currentBay = baySnap.val();
 
-        if (!currentBay) {
-          return {
-            status: nextStatus || "available",
-            isActive: true,
-            autoOffline: null,
-            currentSessionId: null,
-            lastUserId: null,
-            requestedPackage: null,
-            durationSec: null,
-            tokensCost: null,
-            pendingPackage: null,
-            pendingPackageSource: null,
-            pendingSelectionId: null,
-            pendingPackageAt: null,
-            createdAt: nowMs, // <-- DEĞİŞTİRİLDİ
-            updatedAt: nowMs, // <-- DEĞİŞTİRİLDİ
-            lastSeen: nowMs,  // <-- DEĞİŞTİRİLDİ
-          };
-        }
-
+      if (!currentBay) {
+        await bayRef.update({
+          status: nextStatus || "available",
+          currentSessionId: null,
+          lastUserId: null,
+          requestedPackage: null,
+          durationSec: null,
+          tokensCost: null,
+          pendingPackage: null,
+          pendingPackageSource: null,
+          pendingSelectionId: null,
+          pendingPackageAt: null,
+          createdAt: admin.database.ServerValue.TIMESTAMP,
+          updatedAt: admin.database.ServerValue.TIMESTAMP,
+        });
+      } else {
         const currentStatus = currentBay.status || "available";
 
-        if (
+        const hardwareTryingToFreeActiveSession =
           currentBay.currentSessionId &&
           ["busy", "starting"].includes(currentStatus) &&
-          ["available", "waiting"].includes(nextStatus)
-        ) {
-          return {
-            ...currentBay,
-            isActive: true,
-            autoOffline: null,
-            lastSeen: nowMs,  // <-- DEĞİŞTİRİLDİ
-            updatedAt: nowMs, // <-- DEĞİŞTİRİLDİ
-          };
-        }
+          ["available", "waiting"].includes(nextStatus);
 
-        return {
-          ...currentBay,
-          status: nextStatus || currentStatus,
-          isActive: true,
-          autoOffline: null,
-          lastSeen: nowMs,  // <-- DEĞİŞTİRİLDİ
-          updatedAt: nowMs, // <-- DEĞİŞTİRİLDİ
-        };
+        if (!hardwareTryingToFreeActiveSession) {
+          await bayRef.update({
+            status: nextStatus || currentStatus,
+            updatedAt: admin.database.ServerValue.TIMESTAMP,
+          });
+        }
+      }
+
+      await presenceRef.update({
+        isActive: true,
+        autoOffline: null,
+        lastSeen: admin.database.ServerValue.TIMESTAMP,
+        updatedAt: admin.database.ServerValue.TIMESTAMP,
       });
 
       safeLog(`📥 MQTT STATUS: ${bayId} -> ${nextStatus}`);
@@ -747,10 +764,10 @@ mqttClient.on("message", async (topic, messageBuffer) => {
       const isBoot = message === "BOOT";
 
       if (!snap.exists()) {
+        const now = admin.database.ServerValue.TIMESTAMP;
+
         await bayRef.update({
           status: "available",
-          isActive: true,
-          autoOffline: null,
           currentSessionId: null,
           lastUserId: null,
           requestedPackage: null,
@@ -760,9 +777,13 @@ mqttClient.on("message", async (topic, messageBuffer) => {
           pendingPackageSource: null,
           pendingSelectionId: null,
           pendingPackageAt: null,
-          createdAt: admin.database.ServerValue.TIMESTAMP,
-          updatedAt: admin.database.ServerValue.TIMESTAMP,
-          lastSeen: admin.database.ServerValue.TIMESTAMP,
+          createdAt: now,
+        });
+
+        await setBayPresence(bayId, {
+          lastSeen: now,
+          isActive: true,
+          autoOffline: null,
         });
 
         safeLog(`🆕 Yeni peron MQTT ile kaydedildi: ${bayId}`);
@@ -802,11 +823,10 @@ mqttClient.on("message", async (topic, messageBuffer) => {
         return;
       }
 
-      await bayRef.update({
+      await setBayPresence(bayId, {
         lastSeen: admin.database.ServerValue.TIMESTAMP,
         isActive: true,
         autoOffline: null,
-        updatedAt: admin.database.ServerValue.TIMESTAMP,
       });
 
       safeLog(`💓 MQTT HEARTBEAT: ${bayId}`);
@@ -1004,19 +1024,13 @@ app.post("/api/prepare-bay", verifyUser, async (req, res) => {
 
     const result = await bayRef.transaction((currentBay) => {
       safeLog(
-        `🟡 PREPARE TX CURRENT: bayId=${bayId} data=${JSON.stringify(
-          currentBay,
-        )}`,
+        `🟡 PREPARE TX CURRENT: bayId=${bayId} data=${JSON.stringify(currentBay)}`,
       );
 
       const bay = currentBay || beforeBay;
-
-      if (!bay) {
-        return;
-      }
+      if (!bay) return;
 
       const status = bay.status || "available";
-      const nowMs = Date.now(); // <-- DEĞİŞİKLİK BURADA: TIMESTAMP yerine Date.now() kullanıyoruz
 
       if (
         status === "available" &&
@@ -1027,7 +1041,6 @@ app.post("/api/prepare-bay", verifyUser, async (req, res) => {
           ...bay,
           status: "waiting",
           lastUserId: uid,
-          updatedAt: nowMs, // <-- DEĞİŞTİRİLDİ
         };
       }
 
@@ -1037,10 +1050,7 @@ app.post("/api/prepare-bay", verifyUser, async (req, res) => {
         !bay.currentSessionId &&
         bay.isActive !== false
       ) {
-        return {
-          ...bay,
-          updatedAt: nowMs, // <-- DEĞİŞTİRİLDİ
-        };
+        return bay;
       }
 
       return;
@@ -2274,8 +2284,8 @@ const systemStartupClean = async () => {
 
       Object.keys(bays).forEach((bayId) => {
         updates[`bays/${bayId}/status`] = "available";
-        updates[`bays/${bayId}/isActive`] = true;
-        updates[`bays/${bayId}/autoOffline`] = null;
+        updates[`bayPresence/${bayId}/isActive`] = true;
+        updates[`bayPresence/${bayId}/autoOffline`] = null;
         updates[`bays/${bayId}/currentSessionId`] = null;
         updates[`bays/${bayId}/requestedPackage`] = null;
         updates[`bays/${bayId}/durationSec`] = null;
@@ -2323,9 +2333,44 @@ const systemStartupClean = async () => {
 // =========================================================
 let isHeartbeatCronRunning = false;
 
+const ENABLE_CRON = process.env.ENABLE_CRON !== "false";
+
+const acquireCronLock = async () => {
+  const lockRef = rtdb.ref("systemLocks/heartbeatCron");
+  const now = Date.now();
+  const owner =
+    process.env.RENDER_INSTANCE_ID ||
+    process.env.RENDER_SERVICE_ID ||
+    String(process.pid);
+
+  const result = await lockRef.transaction((lock) => {
+    const lockedUntil = Number(lock?.lockedUntil || 0);
+
+    if (lockedUntil > now) {
+      return;
+    }
+
+    return {
+      owner,
+      lockedAt: now,
+      lockedUntil: now + 55 * 1000,
+    };
+  });
+
+  return result.committed;
+};
+
+if (ENABLE_CRON) {
 cron.schedule("* * * * *", async () => {
   if (isHeartbeatCronRunning) {
     safeLog("⏭️ [CRON] Önceki kontrol hâlâ çalışıyor, bu tur atlandı.");
+    return;
+  }
+
+  const lockOk = await acquireCronLock();
+
+  if (!lockOk) {
+    safeLog("⏭️ [CRON] Başka instance çalıştırıyor, bu tur atlandı.");
     return;
   }
 
@@ -2422,76 +2467,87 @@ cron.schedule("* * * * *", async () => {
 
     const timeoutMs = 2 * 60 * 1000;
 
-    const deadBaysSnap = await rtdb
-      .ref("bays")
-      .orderByChild("lastSeen")
-      .endAt(now - timeoutMs)
-      .once("value");
+    const presenceSnap = await rtdb.ref("bayPresence").once("value");
 
-    if (deadBaysSnap.exists()) {
-      const deadBays = deadBaysSnap.val();
+    if (presenceSnap.exists()) {
+      const presenceData = presenceSnap.val();
 
-      for (const [bayId, bay] of Object.entries(deadBays)) {
-        if (
-          (bay.status === "offline" && !bay.autoOffline) ||
-          bay.status === "maintenance"
-        ) {
+      for (const [bayId, presence] of Object.entries(presenceData)) {
+        const lastSeen = Number(presence.lastSeen || 0);
+
+        if (!lastSeen) {
           continue;
         }
 
-        if (bay.status !== "offline" || bay.autoOffline !== true) {
-          safeLog(
-            `⚠️ [CRON] KOPMA TESPİT EDİLDİ: ${bayId} otomatik kapatılıyor...`,
-          );
+        const bayRef = rtdb.ref(`bays/${bayId}`);
+        const baySnap = await bayRef.once("value");
+        const bay = baySnap.val();
 
-          let refundResult = {
-            refunded: false,
-            reason: "no_active_session",
-          };
+        if (!bay) {
+          continue;
+        }
 
-          if (bay.currentSessionId) {
-            refundResult = await refundSessionIfNeeded(
-              bay.currentSessionId,
-              "bay_power_loss",
-            );
+        const isTimedOut = now - lastSeen > timeoutMs;
+        const isBackOnline = presence.autoOffline === true && !isTimedOut;
 
-            if (refundResult.refunded) {
-              safeLog(
-                `💸 JETON İADESİ: ${bayId} elektrik/bağlantı kesintisi nedeniyle ${refundResult.tokens} jeton iade edildi.`,
-              );
-            } else {
-              safeLog(`ℹ️ İade yapılmadı: ${bayId} - ${refundResult.reason}`);
-            }
+        if (isTimedOut) {
+          if (
+            (bay.status === "offline" && presence.autoOffline !== true) ||
+            bay.status === "maintenance"
+          ) {
+            continue;
           }
 
-          await clearBaySessionFields(bayId, {
-            status: "offline",
-            isActive: false,
-            autoOffline: true,
-          });
+          if (bay.status !== "offline" || presence.autoOffline !== true) {
+            safeLog(
+              `⚠️ [CRON] KOPMA TESPİT EDİLDİ: ${bayId} otomatik kapatılıyor...`,
+            );
 
-          await sendAdminAlert(bayId, "down");
+            let refundResult = {
+              refunded: false,
+              reason: "no_active_session",
+            };
+
+            if (bay.currentSessionId) {
+              refundResult = await refundSessionIfNeeded(
+                bay.currentSessionId,
+                "bay_power_loss",
+              );
+
+              if (refundResult.refunded) {
+                safeLog(
+                  `💸 JETON İADESİ: ${bayId} elektrik/bağlantı kesintisi nedeniyle ${refundResult.tokens} jeton iade edildi.`,
+                );
+              } else {
+                safeLog(`ℹ️ İade yapılmadı: ${bayId} - ${refundResult.reason}`);
+              }
+            }
+
+            await clearBaySessionFields(bayId, {
+              status: "offline",
+            });
+
+            await setBayPresence(bayId, {
+              isActive: false,
+              autoOffline: true,
+            });
+
+            await sendAdminAlert(bayId, "down");
+          }
+
+          continue;
         }
-      }
-    }
 
-    const autoOfflineBaysSnap = await rtdb
-      .ref("bays")
-      .orderByChild("autoOffline")
-      .equalTo(true)
-      .once("value");
-
-    if (autoOfflineBaysSnap.exists()) {
-      const autoOfflineBays = autoOfflineBaysSnap.val();
-
-      for (const [bayId, bay] of Object.entries(autoOfflineBays)) {
-        if (bay.lastSeen && now - bay.lastSeen <= timeoutMs) {
+        if (isBackOnline) {
           safeLog(
             `✅ [CRON] İNTERNET GELDİ: ${bayId} otomatik olarak açılıyor...`,
           );
 
           await clearBaySessionFields(bayId, {
             status: "available",
+          });
+
+          await setBayPresence(bayId, {
             isActive: true,
             autoOffline: null,
           });
@@ -2501,12 +2557,16 @@ cron.schedule("* * * * *", async () => {
         }
       }
     }
+
   } catch (error) {
     safeLog(`❌ Cron Job Hatası: ${error.message}`);
   } finally {
     isHeartbeatCronRunning = false;
   }
 });
+} else {
+  safeLog("ℹ️ Cron devre dışı. ENABLE_CRON=false.");
+}
 
 // =========================================================
 // START
