@@ -7,7 +7,7 @@ const cors = require("cors");
 const admin = require("firebase-admin");
 const cron = require("node-cron");
 const mqtt = require("mqtt");
-const Iyzipay = require("iyzipay"); // 1. Iyzico Paketi Eklendi
+const Iyzipay = require("iyzipay");
 
 const APP_BASE_URL = process.env.APP_BASE_URL;
 
@@ -61,7 +61,6 @@ const rtdb = admin.database();
 const app = express();
 app.use(cors());
 app.use(express.json());
-// Iyzico'dan dönen form verilerini okuyabilmek için AŞAĞIDAKİ SATIRI EKLEYİN:
 app.use(express.urlencoded({ extended: true }));
 
 // =========================================================
@@ -322,30 +321,43 @@ const refundSessionIfNeeded = async (sessionId, reason = "bay_power_loss") => {
 const reserveBayForSession = async (bayId, uid) => {
   const bayRef = rtdb.ref(`bays/${bayId}`);
 
+  const beforeSnap = await bayRef.once("value");
+
+  if (!beforeSnap.exists()) {
+    return {
+      success: false,
+      reason: "bay_not_found",
+    };
+  }
+
+  const beforeBay = beforeSnap.val();
+
   const result = await bayRef.transaction((currentBay) => {
-    if (!currentBay) {
+    const bay = currentBay || beforeBay;
+
+    if (!bay) {
       return;
     }
 
-    const status = currentBay.status || "available";
+    const status = bay.status || "available";
 
     const canReserveFromAvailable =
       status === "available" &&
-      !currentBay.currentSessionId &&
-      currentBay.isActive !== false;
+      !bay.currentSessionId &&
+      bay.isActive !== false;
 
     const canReserveFromWaiting =
       status === "waiting" &&
-      currentBay.lastUserId === uid &&
-      !currentBay.currentSessionId &&
-      currentBay.isActive !== false;
+      bay.lastUserId === uid &&
+      !bay.currentSessionId &&
+      bay.isActive !== false;
 
     if (!canReserveFromAvailable && !canReserveFromWaiting) {
       return;
     }
 
     return {
-      ...currentBay,
+      ...bay,
       status: "starting",
       lastUserId: uid,
       startingAt: admin.database.ServerValue.TIMESTAMP,
@@ -353,12 +365,14 @@ const reserveBayForSession = async (bayId, uid) => {
     };
   });
 
-  // ... reserveBayForSession transaction bloğu bittikten sonraki kısım:
   if (!result.committed) {
-    const bayData = result.snapshot.val();
+    const bayData = result.snapshot?.val() || beforeBay;
 
     if (!bayData) {
-      return { success: false, reason: "bay_not_found" };
+      return {
+        success: false,
+        reason: "bay_not_found",
+      };
     }
 
     if (
@@ -366,12 +380,16 @@ const reserveBayForSession = async (bayId, uid) => {
       bayData.status === "offline" ||
       bayData.status === "maintenance"
     ) {
-      return { success: false, reason: "bay_disabled" };
+      return {
+        success: false,
+        reason: "bay_disabled",
+      };
     }
 
     return {
       success: false,
       reason: "bay_not_available",
+      bayData,
     };
   }
 
@@ -395,6 +413,115 @@ const clearBaySessionFields = async (bayId, extraPatch = {}) => {
     updatedAt: admin.database.ServerValue.TIMESTAMP,
     ...extraPatch,
   });
+};
+
+// =========================================================
+// MAIL
+// =========================================================
+const MAIL_COOLDOWN_MS = 10 * 60 * 1000;
+
+const sendAdminAlert = async (bayId, type) => {
+  const now = Date.now();
+  const alertRef = rtdb.ref(`bayAlerts/${bayId}/${type}`);
+
+  const claimResult = await alertRef.transaction((currentAlert) => {
+    const lastSent = Number(currentAlert?.lastSent || 0);
+
+    if (now - lastSent < MAIL_COOLDOWN_MS) {
+      return;
+    }
+
+    return {
+      lastSent: now,
+      updatedAt: admin.database.ServerValue.TIMESTAMP,
+    };
+  });
+
+  if (!claimResult.committed) {
+    safeLog(`📧 Mail atlandı: ${bayId} ${type} bildirimi cooldown içinde.`);
+    return;
+  }
+
+  let subject;
+  let htmlBody;
+
+  if (type === "down") {
+    subject = `🚨 DİKKAT: ${bayId} Bağlantısı Koptu!`;
+    htmlBody = `
+      <h2 style="color: red;">Sistem Uyarısı: Peron Çevrimdışı</h2>
+      <p>
+        <b>${bayId}</b> isimli perondan 2 dakikadan uzun süredir haber alınamıyor.
+        Sistem, müşterilerin mağdur olmaması için peronu otomatik olarak
+        <b>KAPALI</b> durumuna aldı.
+      </p>
+    `;
+  } else if (type === "up") {
+    subject = `✅ DÜZELDİ: ${bayId} Yeniden Çevrimiçi!`;
+    htmlBody = `
+      <h2 style="color: green;">Sistem Bilgilendirmesi: Bağlantı Geldi</h2>
+      <p>
+        <b>${bayId}</b> isimli peronun bağlantısı tekrar sağlandı.
+        Sistem peronu otomatik olarak kullanıma <b>BOŞ</b> açtı.
+      </p>
+    `;
+  } else {
+    safeLog(`❌ Mail tipi bilinmiyor: ${type}`);
+    return;
+  }
+
+  if (!process.env.BREVO_API_KEY) {
+    safeLog("❌ Mail gönderilemedi: BREVO_API_KEY eksik.");
+    return;
+  }
+
+  if (!process.env.EMAIL_FROM) {
+    safeLog("❌ Mail gönderilemedi: EMAIL_FROM eksik.");
+    return;
+  }
+
+  if (!process.env.ADMIN_EMAIL) {
+    safeLog("❌ Mail gönderilemedi: ADMIN_EMAIL eksik.");
+    return;
+  }
+
+  try {
+    const response = await fetch("https://api.brevo.com/v3/smtp/email", {
+      method: "POST",
+      headers: {
+        accept: "application/json",
+        "content-type": "application/json",
+        "api-key": process.env.BREVO_API_KEY,
+      },
+      body: JSON.stringify({
+        sender: {
+          name: "QWash Sistem",
+          email: process.env.EMAIL_FROM,
+        },
+        to: [
+          {
+            email: process.env.ADMIN_EMAIL,
+          },
+        ],
+        subject,
+        htmlContent: htmlBody,
+      }),
+    });
+
+    const responseText = await response.text();
+
+    if (!response.ok) {
+      safeLog(`❌ Mail API Hatası: ${response.status} - ${responseText}`);
+      return;
+    }
+
+    safeLog(
+      `📧 E-Posta başarıyla gönderildi: ${
+        type === "down" ? "Kopma" : "Düzelme"
+      } bildirimi.`,
+    );
+  } catch (error) {
+    safeLog(`❌ Mail API Bağlantı Hatası: ${error.message}`);
+  }
 };
 
 // =========================================================
@@ -435,15 +562,88 @@ mqttClient.on("message", async (topic, messageBuffer) => {
 
   try {
     if (eventType === "status") {
-      await rtdb.ref(`bays/${bayId}`).update({
-        status: message,
-        isActive: message !== "offline",
-        autoOffline: null,
-        lastSeen: admin.database.ServerValue.TIMESTAMP,
-        updatedAt: admin.database.ServerValue.TIMESTAMP,
+      const bayRef = rtdb.ref(`bays/${bayId}`);
+      const nextStatus = String(message || "").trim();
+
+      if (nextStatus === "offline") {
+        const baySnap = await bayRef.once("value");
+        const bayData = baySnap.val() || {};
+
+        if (bayData.currentSessionId) {
+          const refundResult = await refundSessionIfNeeded(
+            bayData.currentSessionId,
+            "bay_power_loss",
+          );
+
+          if (refundResult.refunded) {
+            safeLog(
+              `💸 OFFLINE İADESİ: ${bayId} bağlantı kesildi, ${refundResult.tokens} jeton iade edildi.`,
+            );
+          } else {
+            safeLog(
+              `ℹ️ OFFLINE sırasında iade yapılmadı: ${bayId} - ${refundResult.reason}`,
+            );
+          }
+        }
+
+        await clearBaySessionFields(bayId, {
+          status: "offline",
+          isActive: false,
+          autoOffline: true,
+          lastSeen: admin.database.ServerValue.TIMESTAMP,
+        });
+
+        await sendAdminAlert(bayId, "down");
+
+        safeLog(`📥 MQTT STATUS: ${bayId} -> ${nextStatus}`);
+        return;
+      }
+
+      await bayRef.transaction((currentBay) => {
+        if (!currentBay) {
+          return {
+            status: nextStatus || "available",
+            isActive: true,
+            autoOffline: null,
+            currentSessionId: null,
+            lastUserId: null,
+            requestedPackage: null,
+            hardwareSelection: "",
+            durationSec: null,
+            tokensCost: null,
+            createdAt: admin.database.ServerValue.TIMESTAMP,
+            updatedAt: admin.database.ServerValue.TIMESTAMP,
+            lastSeen: admin.database.ServerValue.TIMESTAMP,
+          };
+        }
+
+        const currentStatus = currentBay.status || "available";
+
+        if (
+          currentBay.currentSessionId &&
+          ["busy", "starting"].includes(currentStatus) &&
+          ["available", "waiting"].includes(nextStatus)
+        ) {
+          return {
+            ...currentBay,
+            isActive: true,
+            autoOffline: null,
+            lastSeen: admin.database.ServerValue.TIMESTAMP,
+            updatedAt: admin.database.ServerValue.TIMESTAMP,
+          };
+        }
+
+        return {
+          ...currentBay,
+          status: nextStatus || currentStatus,
+          isActive: true,
+          autoOffline: null,
+          lastSeen: admin.database.ServerValue.TIMESTAMP,
+          updatedAt: admin.database.ServerValue.TIMESTAMP,
+        };
       });
 
-      safeLog(`📥 MQTT STATUS: ${bayId} -> ${message}`);
+      safeLog(`📥 MQTT STATUS: ${bayId} -> ${nextStatus}`);
       return;
     }
 
@@ -662,13 +862,15 @@ app.post("/api/prepare-bay", verifyUser, async (req, res) => {
     const bayRef = rtdb.ref(`bays/${bayId}`);
 
     const beforeSnap = await bayRef.once("value");
+    const beforeBay = beforeSnap.val();
+
     safeLog(
       `🟡 PREPARE BEFORE: exists=${beforeSnap.exists()} data=${JSON.stringify(
-        beforeSnap.val()
+        beforeBay
       )}`
     );
 
-    if (!beforeSnap.exists()) {
+    if (!beforeSnap.exists() || !beforeBay) {
       return res.status(404).json({
         error: `Peron bulunamadı: ${bayId}`,
       });
@@ -681,19 +883,21 @@ app.post("/api/prepare-bay", verifyUser, async (req, res) => {
         )}`
       );
 
-      if (!currentBay) {
+      const bay = currentBay || beforeBay;
+
+      if (!bay) {
         return;
       }
 
-      const status = currentBay.status || "available";
+      const status = bay.status || "available";
 
       if (
         status === "available" &&
-        !currentBay.currentSessionId &&
-        currentBay.isActive !== false
+        !bay.currentSessionId &&
+        bay.isActive !== false
       ) {
         return {
-          ...currentBay,
+          ...bay,
           status: "waiting",
           lastUserId: uid,
           hardwareSelection: "",
@@ -703,12 +907,12 @@ app.post("/api/prepare-bay", verifyUser, async (req, res) => {
 
       if (
         status === "waiting" &&
-        currentBay.lastUserId === uid &&
-        !currentBay.currentSessionId &&
-        currentBay.isActive !== false
+        bay.lastUserId === uid &&
+        !bay.currentSessionId &&
+        bay.isActive !== false
       ) {
         return {
-          ...currentBay,
+          ...bay,
           hardwareSelection: "",
           updatedAt: admin.database.ServerValue.TIMESTAMP,
         };
@@ -724,6 +928,40 @@ app.post("/api/prepare-bay", verifyUser, async (req, res) => {
     );
 
     if (!result.committed) {
+      const bayData = result.snapshot?.val() || beforeBay;
+
+      safeLog(
+        `🟠 PREPARE REDDEDİLDİ: bayId=${bayId} data=${JSON.stringify(bayData)}`
+      );
+
+      if (!bayData) {
+        return res.status(404).json({
+          error: `Peron bulunamadı: ${bayId}`,
+        });
+      }
+
+      if (
+        bayData.isActive === false ||
+        bayData.status === "offline" ||
+        bayData.status === "maintenance"
+      ) {
+        return res.status(409).json({
+          error: "Peron şu anda aktif değil veya bakım modunda.",
+        });
+      }
+
+      if (bayData.currentSessionId) {
+        return res.status(409).json({
+          error: "Peron şu anda aktif bir yıkama oturumunda.",
+        });
+      }
+
+      if (bayData.status === "waiting" && bayData.lastUserId !== uid) {
+        return res.status(409).json({
+          error: "Peron şu anda başka bir kullanıcı tarafından hazırlanıyor.",
+        });
+      }
+
       return res.status(409).json({
         error:
           "Peron şu anda başka bir kullanıcı tarafından kullanılıyor veya hazırlanıyor.",
@@ -771,7 +1009,6 @@ app.post("/api/start-session", verifyUser, async (req, res) => {
     const rtdbBayRef = rtdb.ref(`bays/${bayId}`);
     const packageRef = db.collection("packages").doc(packageId);
 
-    // 1. Önce peronu atomik şekilde kilitle / rezerve et
     const reserveResult = await reserveBayForSession(bayId, uid);
 
     if (!reserveResult.success) {
@@ -780,6 +1017,7 @@ app.post("/api/start-session", verifyUser, async (req, res) => {
           .status(404)
           .json({ error: "Peron bulunamadı veya cihaz tamamen kapalı." });
       }
+
       if (reserveResult.reason === "bay_disabled") {
         return res
           .status(403)
@@ -794,7 +1032,6 @@ app.post("/api/start-session", verifyUser, async (req, res) => {
 
     bayReserved = true;
 
-    // 2. Sadece rezervasyonu alan istek jeton düşebilir ve session oluşturabilir
     await db.runTransaction(async (t) => {
       const userDoc = await t.get(userRef);
 
@@ -852,7 +1089,6 @@ app.post("/api/start-session", verifyUser, async (req, res) => {
       });
     });
 
-    // 3. Peronu kesin olarak busy durumuna al
     await rtdbBayRef.update({
       status: "busy",
       requestedPackage: packageId,
@@ -865,13 +1101,11 @@ app.post("/api/start-session", verifyUser, async (req, res) => {
       updatedAt: admin.database.ServerValue.TIMESTAMP,
     });
 
-    // 4. ESP32'ye MQTT komutu gönder
     const mqttOk = await safeSendBayCommand(
       bayId,
       `BUSY|${packageId}|${finalDurationSec}`,
     );
 
-    // 5. MQTT başarısızsa jetonu iade et ve peronu waiting'e geri al
     if (!mqttOk) {
       const refundResult = await refundSessionIfNeeded(
         newSessionId,
@@ -915,7 +1149,6 @@ app.post("/api/start-session", verifyUser, async (req, res) => {
       message: "Makine başlatıldı.",
     });
   } catch (error) {
-    // Session oluşmadan hata olduysa peron starting durumunda kalmasın
     if (bayReserved && !newSessionId) {
       try {
         await clearBaySessionFields(bayId, {
@@ -971,7 +1204,7 @@ app.post("/api/start-session", verifyUser, async (req, res) => {
 });
 
 // ---------------------------------------------------------
-// PERONDAN MANUEL ÇIKIŞ (İPTAL / CANCEL WAITING)
+// PERONDAN MANUEL ÇIKIŞ
 // ---------------------------------------------------------
 app.post("/api/cancel-waiting", verifyUser, async (req, res) => {
   const { bayId } = req.body;
@@ -1061,7 +1294,6 @@ app.post("/api/stop-session", verifyUser, async (req, res) => {
     const session = sessionDoc.data();
     const bayData = baySnap.val() || {};
 
-    // 1) Session gerçekten bu kullanıcıya mı ait?
     if (session.userId !== uid) {
       safeLog(
         `🚨 YETKİSİZ OTURUM DURDURMA DENEMESİ: Saldırgan=${uid}, Session=${sessionId}, SessionUser=${session.userId || "yok"}`,
@@ -1072,7 +1304,6 @@ app.post("/api/stop-session", verifyUser, async (req, res) => {
       });
     }
 
-    // 2) İstekle gelen bayId, session içindeki bayId ile eşleşiyor mu?
     if (session.bayId !== bayId) {
       safeLog(
         `🚨 BAY/SESSION EŞLEŞME HATASI: User=${uid}, İstekBay=${bayId}, SessionBay=${session.bayId}, Session=${sessionId}`,
@@ -1083,14 +1314,12 @@ app.post("/api/stop-session", verifyUser, async (req, res) => {
       });
     }
 
-    // 3) Session hâlâ durdurulabilir durumda mı?
     if (session.status !== "running") {
       return res.status(409).json({
         error: "Bu oturum zaten aktif değil.",
       });
     }
 
-    // 4) RTDB tarafında bu peronda gerçekten bu session mı aktif?
     if (bayData.currentSessionId !== sessionId) {
       safeLog(
         `🚨 AKTİF SESSION EŞLEŞMİYOR: User=${uid}, Bay=${bayId}, İstekSession=${sessionId}, BaySession=${bayData.currentSessionId || "yok"}`,
@@ -1101,7 +1330,6 @@ app.post("/api/stop-session", verifyUser, async (req, res) => {
       });
     }
 
-    // 5) RTDB tarafında son kullanıcı da aynı mı? Ek savunma katmanı.
     if (bayData.lastUserId !== uid) {
       safeLog(
         `🚨 BAY KULLANICI EŞLEŞMİYOR: User=${uid}, Bay=${bayId}, BayLastUser=${bayData.lastUserId || "yok"}`,
@@ -1140,7 +1368,7 @@ app.post("/api/stop-session", verifyUser, async (req, res) => {
 });
 
 // ---------------------------------------------------------
-// 1. IYZICO CHECKOUT FORM BAŞLATMA ENDPOINT'İ
+// IYZICO CHECKOUT FORM BAŞLATMA
 // ---------------------------------------------------------
 app.post("/api/topup", verifyUser, async (req, res) => {
   const uid = req.user.uid;
@@ -1153,6 +1381,7 @@ app.post("/api/topup", verifyUser, async (req, res) => {
   }
 
   const eklenecekJeton = Number(tokens);
+
   if (
     !Number.isFinite(eklenecekJeton) ||
     !Number.isInteger(eklenecekJeton) ||
@@ -1301,7 +1530,7 @@ app.post("/api/topup", verifyUser, async (req, res) => {
 });
 
 // ---------------------------------------------------------
-// 2. IYZICO GERİ DÖNÜŞ (CALLBACK) ENDPOINT'İ
+// IYZICO CALLBACK
 // ---------------------------------------------------------
 app.post("/api/topup-callback", async (req, res) => {
   const { token } = req.body;
@@ -1370,6 +1599,7 @@ app.post("/api/topup-callback", async (req, res) => {
             </html>
           `);
         }
+
         if (result.conversationId !== orderId || result.basketId !== orderId) {
           await orderRef.update({
             status: "iyzico_order_mismatch",
@@ -1529,6 +1759,7 @@ app.post("/api/topup-callback", async (req, res) => {
     return res.status(500).send("<h1>Sunucu hatası oluştu.</h1>");
   }
 });
+
 // ---------------------------------------------------------
 // ADMIN BAY LISTESI
 // ---------------------------------------------------------
@@ -1914,105 +2145,6 @@ const systemStartupClean = async () => {
 };
 
 // =========================================================
-// MAIL
-// =========================================================
-const mailCooldown = {};
-const MAIL_COOLDOWN_MS = 10 * 60 * 1000;
-
-const sendAdminAlert = async (bayId, type) => {
-  const cooldownKey = `${bayId}_${type}`;
-  const lastSent = mailCooldown[cooldownKey] || 0;
-
-  if (Date.now() - lastSent < MAIL_COOLDOWN_MS) {
-    safeLog(`📧 Mail atlandı: ${bayId} ${type} bildirimi cooldown içinde.`);
-    return;
-  }
-
-  mailCooldown[cooldownKey] = Date.now();
-
-  let subject;
-  let htmlBody;
-
-  if (type === "down") {
-    subject = `🚨 DİKKAT: ${bayId} Bağlantısı Koptu!`;
-    htmlBody = `
-      <h2 style="color: red;">Sistem Uyarısı: Peron Çevrimdışı</h2>
-      <p>
-        <b>${bayId}</b> isimli perondan 2 dakikadan uzun süredir haber alınamıyor.
-        Sistem, müşterilerin mağdur olmaması için peronu otomatik olarak
-        <b>KAPALI</b> durumuna aldı.
-      </p>
-    `;
-  } else if (type === "up") {
-    subject = `✅ DÜZELDİ: ${bayId} Yeniden Çevrimiçi!`;
-    htmlBody = `
-      <h2 style="color: green;">Sistem Bilgilendirmesi: Bağlantı Geldi</h2>
-      <p>
-        <b>${bayId}</b> isimli peronun bağlantısı tekrar sağlandı.
-        Sistem peronu otomatik olarak kullanıma <b>BOŞ</b> açtı.
-      </p>
-    `;
-  } else {
-    safeLog(`❌ Mail tipi bilinmiyor: ${type}`);
-    return;
-  }
-
-  if (!process.env.BREVO_API_KEY) {
-    safeLog("❌ Mail gönderilemedi: BREVO_API_KEY eksik.");
-    return;
-  }
-
-  if (!process.env.EMAIL_FROM) {
-    safeLog("❌ Mail gönderilemedi: EMAIL_FROM eksik.");
-    return;
-  }
-
-  if (!process.env.ADMIN_EMAIL) {
-    safeLog("❌ Mail gönderilemedi: ADMIN_EMAIL eksik.");
-    return;
-  }
-
-  try {
-    const response = await fetch("https://api.brevo.com/v3/smtp/email", {
-      method: "POST",
-      headers: {
-        accept: "application/json",
-        "content-type": "application/json",
-        "api-key": process.env.BREVO_API_KEY,
-      },
-      body: JSON.stringify({
-        sender: {
-          name: "QWash Sistem",
-          email: process.env.EMAIL_FROM,
-        },
-        to: [
-          {
-            email: process.env.ADMIN_EMAIL,
-          },
-        ],
-        subject,
-        htmlContent: htmlBody,
-      }),
-    });
-
-    const responseText = await response.text();
-
-    if (!response.ok) {
-      safeLog(`❌ Mail API Hatası: ${response.status} - ${responseText}`);
-      return;
-    }
-
-    safeLog(
-      `📧 E-Posta başarıyla gönderildi: ${
-        type === "down" ? "Kopma" : "Düzelme"
-      } bildirimi.`,
-    );
-  } catch (error) {
-    safeLog(`❌ Mail API Bağlantı Hatası: ${error.message}`);
-  }
-};
-
-// =========================================================
 // CRON
 // =========================================================
 let isHeartbeatCronRunning = false;
@@ -2029,7 +2161,6 @@ cron.schedule("* * * * *", async () => {
   try {
     const now = Date.now();
 
-    // 1. SÜRESİ DOLMUŞ RUNNING OTURUMLARI KAPAT
     const expiredSessions = await db
       .collection("sessions")
       .where("status", "==", "running")
@@ -2078,7 +2209,6 @@ cron.schedule("* * * * *", async () => {
       });
     }
 
-    // 2. 60 SANİYEDİR WAITING OLANLARI AVAILABLE YAP
     const waitingBaysSnap = await rtdb
       .ref("bays")
       .orderByChild("status")
@@ -2118,7 +2248,6 @@ cron.schedule("* * * * *", async () => {
       });
     }
 
-    // 3. HEARTBEAT KONTROLÜ - ELEKTRİK / BAĞLANTI KESİNTİSİ
     const timeoutMs = 2 * 60 * 1000;
 
     const deadBaysSnap = await rtdb
@@ -2174,7 +2303,6 @@ cron.schedule("* * * * *", async () => {
       }
     }
 
-    // 4. BAĞLANTISI GERİ GELENLERİ AÇ
     const autoOfflineBaysSnap = await rtdb
       .ref("bays")
       .orderByChild("autoOffline")
@@ -2213,10 +2341,18 @@ cron.schedule("* * * * *", async () => {
 // =========================================================
 const PORT = process.env.PORT || 3000;
 const HOST = "0.0.0.0";
+const RUN_STARTUP_CLEAN = process.env.RUN_STARTUP_CLEAN === "true";
 
-systemStartupClean().then(() => {
+const startServer = () => {
   app.listen(PORT, HOST, () => {
     safeLog("🚀 QWash Sunucusu Başarıyla Başlatıldı!");
     safeLog(`📡 API Portu: ${PORT}`);
   });
-});
+};
+
+if (RUN_STARTUP_CLEAN) {
+  systemStartupClean().then(startServer);
+} else {
+  safeLog("ℹ️ Startup temizliği atlandı. RUN_STARTUP_CLEAN=true değil.");
+  startServer();
+}
