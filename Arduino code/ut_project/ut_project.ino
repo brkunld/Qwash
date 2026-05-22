@@ -174,14 +174,14 @@ void kalanSureKaydet(unsigned long kalanSure) {
   sonNvsKayitMs = millis();
 }
 
-int guvenliDurationOku(int gelenSure) {
+bool durationGecerliMi(int gelenSure) {
   if (gelenSure < MIN_DURATION_SEC || gelenSure > MAX_DURATION_SEC) {
     LOG_PRINT(F("Gecersiz durationSec: "));
     LOG_PRINTLN(gelenSure);
-    return durationSec;
+    return false;
   }
 
-  return gelenSure;
+  return true;
 }
 
 String paketNormalizeEt(const String& paket) {
@@ -364,6 +364,7 @@ void geciciEkranKontrolEt() {
 
     odemeBekleniyor = true;
     odemeBeklemeBaslangicMs = millis();
+    beklemeBaslangicMs = millis();
 
     bekleyenPaketSecimi = "";
     return;
@@ -373,7 +374,9 @@ void geciciEkranKontrolEt() {
 // ================= QR =================
 static void qrCizimGorevi(esp_qrcode_handle_t qrcode) {
   int qr_size = esp_qrcode_get_size(qrcode);
-  int scale = 7;
+
+  int maxQrPx = min(tft.width(), tft.height()) - 20;
+  int scale = max(1, maxQrPx / qr_size);
   int qr_size_px = qr_size * scale;
 
   int offset_x = (tft.width() - qr_size_px) / 2;
@@ -617,9 +620,15 @@ void mqttKomutUygula(const String& komut) {
   }
   else if (komut == "ACTIVE_ON") {
     isBayActive = true;
+
+    if (currentStatus == "offline") {
+      currentStatus = "available";
+    }
+
     durumDegisti = true;
   }
   else if (komut == "ACTIVE_OFF") {
+    currentStatus = "offline";
     isBayActive = false;
     odemeBekleniyor = false;
     dokunmatikKilit = false;
@@ -637,8 +646,13 @@ void mqttKomutUygula(const String& komut) {
       String gelenPaket = komut.substring(firstSep + 1, secondSep);
       int gelenSure = komut.substring(secondSep + 1).toInt();
 
+      if (!durationGecerliMi(gelenSure)) {
+        mqttSecimYayinla("invalid_duration");
+        return;
+      }
+
       requestedPackage = paketNormalizeEt(gelenPaket);
-      durationSec = guvenliDurationOku(gelenSure);
+      durationSec = gelenSure;
 
       kalanSureKaydet(0);
       islemBaslangicMs = 0;
@@ -722,7 +736,7 @@ bool mqttBaglan() {
   mqttSecureClient.stop();
   delay(100);
 
-  mqttSecureClient.setInsecure();
+  mqttSecureClient.setCACert(root_ca);
   mqttSecureClient.setTimeout(20000);
   mqttSecureClient.setHandshakeTimeout(30);
 
@@ -1071,7 +1085,7 @@ void loop() {
         tft.println("SU MODU");
       }
 
-      if (eskiDurum != "busy") {
+      if (eskiDurum != "busy" || yeniBusyKomutuGeldi) {
         unsigned long kayitliKalanSure = preferences.getULong("kalanSure", 0);
 
         if (yeniBusyKomutuGeldi) {
@@ -1123,7 +1137,7 @@ void loop() {
   if (currentStatus == "busy") {
     ekrandaSayaciGuncelle();
   }
-  else if (currentStatus == "waiting" && !dokunmatikKilit) {
+  else if (currentStatus == "waiting" && !dokunmatikKilit && !odemeBekleniyor) {
     unsigned long gecenZaman = millis() - beklemeBaslangicMs;
 
     if (gecenZaman >= BEKLEME_SURESI_MS) {
