@@ -1475,7 +1475,7 @@ app.post("/api/admin/update-bay", verifyAdmin, async (req, res) => {
 
     let mqttOk = null;
 
-    if (patch.status) {
+    if (allowedPatch.status) {
       const statusCommandMap = {
         available: "AVAILABLE",
         waiting: "WAITING",
@@ -1483,22 +1483,22 @@ app.post("/api/admin/update-bay", verifyAdmin, async (req, res) => {
         maintenance: "MAINTENANCE",
       };
 
-      const command = statusCommandMap[patch.status];
+      const command = statusCommandMap[allowedPatch.status];
 
       if (command) {
         mqttOk = await safeSendBayCommand(bayId, command);
       }
     }
 
-    if (patch.isActive === true) {
+    if (allowedPatch.isActive === true) {
       mqttOk = await safeSendBayCommand(bayId, "ACTIVE_ON");
     }
 
-    if (patch.isActive === false) {
+    if (allowedPatch.isActive === false) {
       mqttOk = await safeSendBayCommand(bayId, "ACTIVE_OFF");
     }
 
-    safeLog(`🛠️ Peron Güncellendi: ${bayId} -> ${JSON.stringify(patch)}`);
+    safeLog(`🛠️ Peron Güncellendi: ${bayId} -> ${JSON.stringify(allowedPatch)}`);
 
     return res.status(200).json({
       success: true,
@@ -1635,11 +1635,16 @@ app.post("/api/admin/topup", verifyAdmin, async (req, res) => {
   try {
     const adet = parseInt(tokens, 10);
 
-    if (!Number.isFinite(adet) || adet <= 0) {
-      return res.status(400).json({
-        error: "Geçerli bir jeton miktarı girin.",
-      });
-    }
+if (
+  !Number.isFinite(adet) ||
+  !Number.isInteger(adet) ||
+  adet <= 0 ||
+  adet > 10000
+) {
+  return res.status(400).json({
+    error: "Geçerli bir jeton miktarı girin. Tek seferde en fazla 10000 jeton yüklenebilir.",
+  });
+}
 
     const snap = await db.collection("packages").doc("jeton").get();
     const jetonFiyat = snap.exists ? Number(snap.data().jetonFiyat || 0) : 0;
