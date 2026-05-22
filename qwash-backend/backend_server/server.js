@@ -552,6 +552,7 @@ app.get("/", (req, res) => {
 // ---------------------------------------------------------
 app.post("/api/prepare-bay", verifyUser, async (req, res) => {
   const { bayId } = req.body;
+  const uid = req.user.uid;
 
   if (!bayId) {
     return res.status(400).json({ error: "bayId gerekli." });
@@ -559,27 +560,50 @@ app.post("/api/prepare-bay", verifyUser, async (req, res) => {
 
   try {
     const bayRef = rtdb.ref(`bays/${bayId}`);
-    const baySnap = await bayRef.once("value");
-    const bayData = baySnap.val();
 
-    if (!bayData) {
-      return res.status(404).json({
-        error: "Peron bulunamadı.",
-      });
-    }
+    const result = await bayRef.transaction((currentBay) => {
+      if (!currentBay) {
+        return;
+      }
 
-    if (bayData.status !== "available" && bayData.status !== "waiting") {
-      return res.status(400).json({
-        error: "Peron şu anda kullanılıyor.",
-      });
-    }
+      const status = currentBay.status || "available";
 
-    await bayRef.update({
-      status: "waiting",
-      lastUserId: req.user.uid,
-      hardwareSelection: "",
-      updatedAt: admin.database.ServerValue.TIMESTAMP,
+      if (
+        status === "available" &&
+        !currentBay.currentSessionId &&
+        currentBay.isActive !== false
+      ) {
+        return {
+          ...currentBay,
+          status: "waiting",
+          lastUserId: uid,
+          hardwareSelection: "",
+          updatedAt: admin.database.ServerValue.TIMESTAMP,
+        };
+      }
+
+      if (
+        status === "waiting" &&
+        currentBay.lastUserId === uid &&
+        !currentBay.currentSessionId &&
+        currentBay.isActive !== false
+      ) {
+        return {
+          ...currentBay,
+          hardwareSelection: "",
+          updatedAt: admin.database.ServerValue.TIMESTAMP,
+        };
+      }
+
+      return;
     });
+
+    if (!result.committed) {
+      return res.status(409).json({
+        error:
+          "Peron şu anda başka bir kullanıcı tarafından kullanılıyor veya hazırlanıyor.",
+      });
+    }
 
     const mqttOk = await safeSendBayCommand(bayId, "WAITING");
 
@@ -598,14 +622,14 @@ app.post("/api/prepare-bay", verifyUser, async (req, res) => {
     });
   }
 });
-
 // ---------------------------------------------------------
 // OTURUM BAŞLATMA
 // ---------------------------------------------------------
 app.post("/api/start-session", verifyUser, async (req, res) => {
-  const { uid, bayId, packageId } = req.body;
+  const uid = req.user.uid;
+  const { bayId, packageId } = req.body;
 
-  if (!uid || !bayId || !packageId) {
+  if (!bayId || !packageId) {
     return res.status(400).json({ error: "Eksik parametre gönderildi." });
   }
 
@@ -1190,8 +1214,6 @@ app.post("/api/topup-callback", async (req, res) => {
             updatedAt: admin.firestore.FieldValue.serverTimestamp(),
           });
 
-          
-
           safeLog(`❌ Ödeme Başarısız veya İptal Edildi. Order: ${orderId}`);
 
           return res.send(`
@@ -1292,16 +1314,16 @@ app.post("/api/topup-callback", async (req, res) => {
               updatedAt: admin.firestore.FieldValue.serverTimestamp(),
             });
 
-t.update(orderRef, {
-  status: "success",
-  paymentId: result.paymentId || null,
-  iyzicoPaidPrice: result.paidPrice || null,
-  iyzicoPrice: result.price || null,
-  iyzicoConversationId: result.conversationId || null,
-  iyzicoBasketId: result.basketId || null,
-  completedAt: admin.firestore.FieldValue.serverTimestamp(),
-  updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-});
+            t.update(orderRef, {
+              status: "success",
+              paymentId: result.paymentId || null,
+              iyzicoPaidPrice: result.paidPrice || null,
+              iyzicoPrice: result.price || null,
+              iyzicoConversationId: result.conversationId || null,
+              iyzicoBasketId: result.basketId || null,
+              completedAt: admin.firestore.FieldValue.serverTimestamp(),
+              updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            });
 
             t.set(db.collection("transactions").doc(), {
               type: "topup",
