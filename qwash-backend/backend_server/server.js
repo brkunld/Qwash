@@ -353,7 +353,22 @@ const reserveBayForSession = async (bayId, uid) => {
     };
   });
 
+  // ... reserveBayForSession transaction bloğu bittikten sonraki kısım:
   if (!result.committed) {
+    const bayData = result.snapshot.val();
+
+    if (!bayData) {
+      return { success: false, reason: "bay_not_found" };
+    }
+
+    if (
+      bayData.isActive === false ||
+      bayData.status === "offline" ||
+      bayData.status === "maintenance"
+    ) {
+      return { success: false, reason: "bay_disabled" };
+    }
+
     return {
       success: false,
       reason: "bay_not_available",
@@ -684,7 +699,31 @@ app.post("/api/prepare-bay", verifyUser, async (req, res) => {
       return;
     });
 
+    // ... transaction bloğu bittikten sonraki kısım:
     if (!result.committed) {
+      // İşlem iptal edildiyse, o anki veritabanı durumunu (snapshot) alıyoruz
+      const bayData = result.snapshot.val();
+
+      // 1. Durum: RTDB'den veri silinmiş veya cihaz henüz hiç bağlanmamış
+      if (!bayData) {
+        return res.status(404).json({
+          error:
+            "Peron bulunamadı. Cihazın internete bağlanması bekleniyor (maks. 30 sn).",
+        });
+      }
+
+      // 2. Durum: Cihaz var ama kapalı / hizmet dışı
+      if (
+        bayData.isActive === false ||
+        bayData.status === "offline" ||
+        bayData.status === "maintenance"
+      ) {
+        return res.status(403).json({
+          error: "Bu peron şu anda kapalıdır veya bakım modundadır.",
+        });
+      }
+
+      // 3. Durum: Peron gerçekten başkası tarafından kullanılıyor
       return res.status(409).json({
         error:
           "Peron şu anda başka bir kullanıcı tarafından kullanılıyor veya hazırlanıyor.",
@@ -733,6 +772,17 @@ app.post("/api/start-session", verifyUser, async (req, res) => {
     const reserveResult = await reserveBayForSession(bayId, uid);
 
     if (!reserveResult.success) {
+      if (reserveResult.reason === "bay_not_found") {
+        return res
+          .status(404)
+          .json({ error: "Peron bulunamadı veya cihaz tamamen kapalı." });
+      }
+      if (reserveResult.reason === "bay_disabled") {
+        return res
+          .status(403)
+          .json({ error: "Bu peron şu anda hizmet dışıdır." });
+      }
+
       return res.status(409).json({
         error:
           "Peron şu anda başka bir kullanıcı tarafından kullanılıyor veya hazırlanıyor.",
