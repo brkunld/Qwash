@@ -17,18 +17,33 @@ import {
 } from "react-native";
 import { auth, db } from "../firebase";
 
+const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL;
+
+const getApiUrl = (path = "") => {
+  if (!API_BASE_URL) {
+    throw new Error("API_BASE_URL_MISSING");
+  }
+
+  return `${API_BASE_URL.replace(/\/$/, "")}${path}`;
+};
+
 export default function Login() {
   const [email, setEmail] = useState("");
   const [sifre, setSifre] = useState("");
   const [yukleniyor, setYukleniyor] = useState(false);
   const [sifreGoster, setSifreGoster] = useState(false);
 
-  // 🔥 Sunucuyu (Backend) Önceden Isıtma (Hızlandırma Hilesi)
-  useEffect(() => {
-    fetch("https://qwash-8q4y.onrender.com/").catch(() =>
-      console.log("Sunucu uyanıyor..."),
-    );
-  }, []);
+ useEffect(() => {
+  try {
+    fetch(getApiUrl("/")).catch(() => {
+      console.log("Sunucu uyanıyor...");
+    });
+  } catch (error) {
+    if (error.message === "API_BASE_URL_MISSING") {
+      console.log("API adresi tanımlı değil.");
+    }
+  }
+}, []);
 
   const girisYap = async () => {
     if (!email.trim() || !sifre.trim()) {

@@ -65,7 +65,7 @@ if (!gotTheLock) {
   // =========================================================
   // API BASE URL KONTROLÜ
   // Renderer'a sadece public backend base URL verilir.
-  // Örn: https://qwash-8q4y.onrender.com
+  // Örn: https://qwash-.onrender.com
   // =========================================================
   function getApiBaseUrl() {
     const apiBaseUrl = process.env.API_BASE_URL;

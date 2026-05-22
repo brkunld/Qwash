@@ -14,11 +14,15 @@ import {
 // Örn: firebase.js içinde export const auth = getAuth(app); olmalı.
 import { auth } from "../../firebase";
 
-// Render backend URL'in.
-// Daha temiz yöntem: .env içine EXPO_PUBLIC_API_BASE_URL koymak.
-// Örnek: EXPO_PUBLIC_API_BASE_URL=https://qwash-backend.onrender.com
-const API_BASE_URL =
-  process.env.EXPO_PUBLIC_API_BASE_URL || "https://qwash-8q4y.onrender.com";
+const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL;
+
+const getApiUrl = (path = "") => {
+  if (!API_BASE_URL) {
+    throw new Error("API_BASE_URL_MISSING");
+  }
+
+  return `${API_BASE_URL.replace(/\/$/, "")}${path}`;
+};
 
 export default function QrKamera() {
   const [permission, requestPermission] = useCameraPermissions();
@@ -91,49 +95,48 @@ export default function QrKamera() {
   };
 
   const prepareBay = async (bayId) => {
-  const currentUser = auth.currentUser;
+    const currentUser = auth.currentUser;
 
-  if (!currentUser) {
-    throw new Error("Oturum bulunamadı. Lütfen tekrar giriş yapın.");
-  }
+    if (!currentUser) {
+      throw new Error("Oturum bulunamadı. Lütfen tekrar giriş yapın.");
+    }
 
-  const idToken = await currentUser.getIdToken(true);
+    const idToken = await currentUser.getIdToken(true);
+    const url = getApiUrl("/api/prepare-bay");
 
-  const url = `${API_BASE_URL}/api/prepare-bay`;
+    console.log("Prepare Bay URL:", url);
+    console.log("Prepare Bay bayId:", bayId);
 
-  console.log("Prepare Bay URL:", url);
-  console.log("Prepare Bay bayId:", bayId);
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${idToken}`,
+      },
+      body: JSON.stringify({
+        bayId,
+      }),
+    });
 
-  const response = await fetch(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${idToken}`,
-    },
-    body: JSON.stringify({
-      bayId,
-    }),
-  });
+    const text = await response.text();
 
-  const text = await response.text();
+    console.log("Prepare Bay Status:", response.status);
+    console.log("Prepare Bay Raw Response:", text);
 
-  console.log("Prepare Bay Status:", response.status);
-  console.log("Prepare Bay Raw Response:", text);
+    let data = {};
 
-  let data = {};
+    try {
+      data = text ? JSON.parse(text) : {};
+    } catch {
+      throw new Error(`Sunucudan JSON olmayan cevap geldi: ${text}`);
+    }
 
-  try {
-    data = text ? JSON.parse(text) : {};
-  } catch (error) {
-    throw new Error(`Sunucudan JSON olmayan cevap geldi: ${text}`, error);
-  }
+    if (!response.ok) {
+      throw new Error(data.error || data.message || `HTTP ${response.status}`);
+    }
 
-  if (!response.ok) {
-    throw new Error(data.error || data.message || `HTTP ${response.status}`);
-  }
-
-  return data;
-};
+    return data;
+  };
 
   const okundu = async ({ data }) => {
     if (kilit) return;
@@ -177,10 +180,12 @@ export default function QrKamera() {
 
       setYukleniyor(false);
 
-      Alert.alert(
-        "Hata",
-        error.message || "Peron hazırlanırken bir hata oluştu.",
-      );
+      const mesaj =
+        error.message === "API_BASE_URL_MISSING"
+          ? "API adresi tanımlı değil. Lütfen uygulama yapılandırmasını kontrol edin."
+          : error.message || "Peron hazırlanırken bir hata oluştu.";
+
+      Alert.alert("Hata", mesaj);
 
       setTimeout(() => setKilit(false), 2500);
     }
