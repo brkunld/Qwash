@@ -200,6 +200,61 @@ const refundSessionIfNeeded = async (sessionId, reason = "bay_power_loss") => {
       };
     }
 
+    const durationSec = Number(session.durationSec || 0);
+    const startedAtMs =
+      Number(session.startedAtMs || 0) ||
+      (session.startedAt && typeof session.startedAt.toMillis === "function"
+        ? session.startedAt.toMillis()
+        : 0);
+
+    const usedMs = startedAtMs > 0 ? Date.now() - startedAtMs : 0;
+    const totalMs = durationSec > 0 ? durationSec * 1000 : 0;
+    const usedRatio = totalMs > 0 ? usedMs / totalMs : 0;
+
+    const noRefundAfterRatio = 0.8;
+
+    if (
+      reason !== "mqtt_start_failed" &&
+      totalMs > 0 &&
+      usedRatio >= noRefundAfterRatio
+    ) {
+      tx.update(sessionRef, {
+        status: "ended",
+        refunded: false,
+        refundSkipped: true,
+        refundSkippedReason: "usage_over_refund_limit",
+        usedRatio,
+        usedMs,
+        totalMs,
+        endedAt: admin.firestore.FieldValue.serverTimestamp(),
+        endedReason: reason,
+      });
+
+      tx.set(db.collection("transactions").doc(), {
+        type: "refund_skipped",
+        status: "skipped",
+        userId,
+        sessionId,
+        bayId: session.bayId || null,
+        packageId: session.packageId || session.type || null,
+        tokens: 0,
+        originalTokensCost: tokensCost,
+        reason,
+        usedRatio,
+        usedMs,
+        totalMs,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+
+      return {
+        refunded: false,
+        reason: "usage_over_refund_limit",
+        usedRatio,
+        usedMs,
+        totalMs,
+      };
+    }
+
     const userRef = db.collection("users").doc(userId);
     const userDoc = await tx.get(userRef);
 
@@ -232,6 +287,9 @@ const refundSessionIfNeeded = async (sessionId, reason = "bay_power_loss") => {
       refundedAt: admin.firestore.FieldValue.serverTimestamp(),
       endedAt: admin.firestore.FieldValue.serverTimestamp(),
       endedReason: reason,
+      usedRatio,
+      usedMs,
+      totalMs,
     });
 
     tx.set(db.collection("transactions").doc(), {
@@ -244,6 +302,9 @@ const refundSessionIfNeeded = async (sessionId, reason = "bay_power_loss") => {
       tokens: tokensCost,
       amountTRY: null,
       reason,
+      usedRatio,
+      usedMs,
+      totalMs,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
     });
 
@@ -251,6 +312,9 @@ const refundSessionIfNeeded = async (sessionId, reason = "bay_power_loss") => {
       refunded: true,
       userId,
       tokens: tokensCost,
+      usedRatio,
+      usedMs,
+      totalMs,
     };
   });
 };
@@ -700,6 +764,9 @@ app.post("/api/start-session", verifyUser, async (req, res) => {
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       });
 
+      const startedAtMs = Date.now();
+      const expectedEndTimeMs = startedAtMs + finalDurationSec * 1000;
+
       t.set(sessionRef, {
         bayId,
         userId: uid,
@@ -709,9 +776,10 @@ app.post("/api/start-session", verifyUser, async (req, res) => {
         durationSec: finalDurationSec,
         status: "running",
         startedAt: admin.firestore.FieldValue.serverTimestamp(),
-        expectedEndTime: admin.firestore.Timestamp.fromMillis(
-          Date.now() + finalDurationSec * 1000,
-        ),
+        startedAtMs,
+        expectedEndTime:
+          admin.firestore.Timestamp.fromMillis(expectedEndTimeMs),
+        expectedEndTimeMs,
       });
     });
 
