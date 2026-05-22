@@ -438,6 +438,11 @@ const clearBaySessionFields = async (bayId, extraPatch = {}) => {
     requestedPackage: null,
     durationSec: null,
     tokensCost: null,
+    hardwareSelection: "",
+    pendingPackage: null,
+    pendingPackageSource: null,
+    pendingSelectionId: null,
+    pendingPackageAt: null,
     updatedAt: admin.database.ServerValue.TIMESTAMP,
     ...extraPatch,
   });
@@ -692,6 +697,10 @@ mqttClient.on("message", async (topic, messageBuffer) => {
             requestedPackage: null,
             durationSec: null,
             tokensCost: null,
+            pendingPackage: null,
+            pendingPackageSource: null,
+            pendingSelectionId: null,
+            pendingPackageAt: null,
             createdAt: admin.database.ServerValue.TIMESTAMP,
             updatedAt: admin.database.ServerValue.TIMESTAMP,
             lastSeen: admin.database.ServerValue.TIMESTAMP,
@@ -743,6 +752,10 @@ mqttClient.on("message", async (topic, messageBuffer) => {
           requestedPackage: null,
           durationSec: null,
           tokensCost: null,
+          pendingPackage: null,
+          pendingPackageSource: null,
+          pendingSelectionId: null,
+          pendingPackageAt: null,
           createdAt: admin.database.ServerValue.TIMESTAMP,
           updatedAt: admin.database.ServerValue.TIMESTAMP,
           lastSeen: admin.database.ServerValue.TIMESTAMP,
@@ -816,7 +829,8 @@ mqttClient.on("message", async (topic, messageBuffer) => {
     }
 
     if (eventType === "selection") {
-      const selectionVal = String(message || "").trim();
+      const selectionValRaw = String(message || "").trim();
+      const selectionVal = normalizeText(selectionValRaw);
 
       if (isCancelValue(selectionVal)) {
         const cancelResult = await clearWaitingBayAfterCancel(bayId);
@@ -830,26 +844,70 @@ mqttClient.on("message", async (topic, messageBuffer) => {
         return;
       }
 
-      if (eventType === "selection") {
-        const selectionVal = String(message || "").trim();
+      let packageId = "";
 
-        if (isCancelValue(selectionVal)) {
-          const cancelResult = await clearWaitingBayAfterCancel(bayId);
+      if (
+        selectionVal === "foam" ||
+        selectionVal === "kopuk" ||
+        selectionVal === "köpük" ||
+        selectionVal === "kopup"
+      ) {
+        packageId = "foam";
+      } else if (
+        selectionVal === "wash" ||
+        selectionVal === "water" ||
+        selectionVal === "su" ||
+        selectionVal === "yikama" ||
+        selectionVal === "yıkama"
+      ) {
+        packageId = "wash";
+      }
 
-          safeLog(
-            `↩️ MQTT SELECTION CANCEL: ${bayId} result=${JSON.stringify(
-              cancelResult,
-            )}`,
-          );
-
-          return;
-        }
-
-        safeLog(`🧼 MQTT SEÇİM: ${bayId} -> ${selectionVal}`);
+      if (!packageId) {
+        safeLog(`⚠️ MQTT SEÇİM GEÇERSİZ: ${bayId} -> ${selectionValRaw}`);
         return;
       }
 
-      safeLog(`🧼 MQTT SEÇİM: ${bayId} -> ${selectionVal}`);
+      const bayRef = rtdb.ref(`bays/${bayId}`);
+      const selectionId = `${Date.now()}_${Math.random()
+        .toString(36)
+        .slice(2, 8)}`;
+
+      const result = await bayRef.transaction((bay) => {
+        if (!bay) return;
+
+        const status = bay.status || "available";
+
+        if (
+          status !== "waiting" ||
+          bay.currentSessionId ||
+          bay.isActive === false ||
+          !bay.lastUserId
+        ) {
+          return;
+        }
+
+        return {
+          ...bay,
+          pendingPackage: packageId,
+          pendingPackageSource: "esp",
+          pendingSelectionId: selectionId,
+          pendingPackageAt: admin.database.ServerValue.TIMESTAMP,
+          updatedAt: admin.database.ServerValue.TIMESTAMP,
+        };
+      });
+
+      if (!result.committed) {
+        safeLog(
+          `⚠️ MQTT SEÇİM REDDEDİLDİ: ${bayId} -> ${packageId}, bay uygun değil.`,
+        );
+        return;
+      }
+
+      safeLog(
+        `🧼 MQTT SEÇİM: ${bayId} -> ${packageId}, mobil başlatma bekleniyor.`,
+      );
+
       return;
     }
   } catch (error) {
@@ -1241,16 +1299,21 @@ app.post("/api/start-session", verifyUser, async (req, res) => {
       });
     });
 
-    await rtdbBayRef.update({
-      status: "busy",
-      requestedPackage: packageId,
-      durationSec: finalDurationSec,
-      tokensCost: finalTokensCost,
-      lastUserId: uid,
-      currentSessionId: newSessionId,
-      startingAt: null,
-      updatedAt: admin.database.ServerValue.TIMESTAMP,
-    });
+await rtdbBayRef.update({
+  status: "busy",
+  requestedPackage: packageId,
+  durationSec: finalDurationSec,
+  tokensCost: finalTokensCost,
+  lastUserId: uid,
+  currentSessionId: newSessionId,
+  hardwareSelection: "",
+  pendingPackage: null,
+  pendingPackageSource: null,
+  pendingSelectionId: null,
+  pendingPackageAt: null,
+  startingAt: null,
+  updatedAt: admin.database.ServerValue.TIMESTAMP,
+});
 
     const mqttOk = await safeSendBayCommand(
       bayId,

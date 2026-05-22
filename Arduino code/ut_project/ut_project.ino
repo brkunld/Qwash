@@ -69,6 +69,7 @@ String mqttTopicCommands = "";
 String mqttTopicStatus = "";
 String mqttTopicHeartbeat = "";
 String mqttTopicSelection = "";
+String mqttTopicEvent = "";
 
 unsigned long sonMqttDenemeMs = 0;
 const unsigned long MQTT_RETRY_INTERVAL_MS = 5000;
@@ -155,8 +156,7 @@ const unsigned long BUTON_DEBOUNCE_MS = 200;
 bool oncekiKopukButonDurumu = HIGH;
 
 // ============================================================
-void availableModunaDon(const char* sebep, bool cancelSelectionGonder);
-
+void availableModunaDon(const char* sebep, bool cancelEventGonder);
 // ================= YARDIMCI =================
 void resetSayacDurumu() {
   sayacSonEkranSaniye = -1;
@@ -511,6 +511,7 @@ void mqttTopicleriHazirla() {
   mqttTopicStatus = "qwash/bays/" + bayId + "/status";
   mqttTopicHeartbeat = "qwash/bays/" + bayId + "/heartbeat";
   mqttTopicSelection = "qwash/bays/" + bayId + "/selection";
+  mqttTopicEvent = "qwash/bays/" + bayId + "/event";
 }
 
 bool mqttDurumYayinla() {
@@ -554,8 +555,19 @@ bool mqttSecimYayinla(const String& secilenPaket) {
     false
   );
 }
+bool mqttEventYayinla(const String& eventMesaji) {
+  if (!mqttClient.connected()) {
+    return false;
+  }
 
-void availableModunaDon(const char* sebep, bool cancelSelectionGonder) {
+  return mqttClient.publish(
+    mqttTopicEvent.c_str(),
+    eventMesaji.c_str(),
+    false
+  );
+}
+
+void availableModunaDon(const char* sebep, bool cancelEventGonder) {
   LOG_PRINT(F("AVAILABLE moduna donuluyor. Sebep: "));
   LOG_PRINTLN(sebep);
 
@@ -575,8 +587,13 @@ void availableModunaDon(const char* sebep, bool cancelSelectionGonder) {
   isBayActive = true;
   durumDegisti = true;
 
-  if (cancelSelectionGonder) {
-    mqttSecimYayinla("cancel");
+  if (cancelEventGonder) {
+    if (!mqttEventYayinla("CANCEL")) {
+      LOG_PRINTLN(F("CANCEL event gonderilemedi, eski selection fallback deneniyor."));
+      mqttSecimYayinla("cancel");
+    } else {
+      LOG_PRINTLN(F("CANCEL event gonderildi."));
+    }
   }
 
   mqttDurumYayinla();
@@ -927,6 +944,7 @@ void setup() {
   mqttTopicStatus.reserve(64);
   mqttTopicHeartbeat.reserve(64);
   mqttTopicSelection.reserve(64);
+  mqttTopicEvent.reserve(64);
   bekleyenPaketSecimi.reserve(16);
 
   pinMode(buzzerPin, OUTPUT);
@@ -1141,7 +1159,7 @@ void loop() {
     unsigned long gecenZaman = millis() - beklemeBaslangicMs;
 
     if (gecenZaman >= BEKLEME_SURESI_MS) {
-      availableModunaDon("waiting_timeout", false);
+      availableModunaDon("waiting_timeout", true);
       return;
     }
 
