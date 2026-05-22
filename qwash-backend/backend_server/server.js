@@ -1422,12 +1422,47 @@ app.post("/api/admin/update-bay", verifyAdmin, async (req, res) => {
   }
 
   try {
+    const allowedPatch = {};
+
+    if (patch.status !== undefined) {
+      const allowedStatuses = [
+        "available",
+        "waiting",
+        "offline",
+        "maintenance",
+      ];
+
+      if (!allowedStatuses.includes(patch.status)) {
+        return res.status(400).json({
+          error: "Geçersiz peron durumu.",
+        });
+      }
+
+      allowedPatch.status = patch.status;
+    }
+
+    if (patch.isActive !== undefined) {
+      if (typeof patch.isActive !== "boolean") {
+        return res.status(400).json({
+          error: "isActive boolean olmalıdır.",
+        });
+      }
+
+      allowedPatch.isActive = patch.isActive;
+    }
+
+    if (Object.keys(allowedPatch).length === 0) {
+      return res.status(400).json({
+        error: "Güncellenecek geçerli alan yok.",
+      });
+    }
+
     const guncellemeVerisi = {
-      ...patch,
+      ...allowedPatch,
       updatedAt: admin.database.ServerValue.TIMESTAMP,
     };
 
-    if (patch.status === "available" || patch.status === "offline") {
+    if (allowedPatch.status === "available" || allowedPatch.status === "offline") {
       guncellemeVerisi.currentSessionId = null;
       guncellemeVerisi.lastUserId = null;
       guncellemeVerisi.requestedPackage = null;
@@ -1904,14 +1939,14 @@ cron.schedule("* * * * *", async () => {
       for (const [bayId, bay] of Object.entries(waitingBays)) {
         if (bay.updatedAt && now - bay.updatedAt > 60000) {
           waitingUpdates[`bays/${bayId}/status`] = "available";
-waitingUpdates[`bays/${bayId}/currentSessionId`] = null;
-waitingUpdates[`bays/${bayId}/lastUserId`] = null;
-waitingUpdates[`bays/${bayId}/requestedPackage`] = null;
-waitingUpdates[`bays/${bayId}/durationSec`] = null;
-waitingUpdates[`bays/${bayId}/tokensCost`] = null;
-waitingUpdates[`bays/${bayId}/hardwareSelection`] = "";
-waitingUpdates[`bays/${bayId}/updatedAt`] =
-  admin.database.ServerValue.TIMESTAMP;
+          waitingUpdates[`bays/${bayId}/currentSessionId`] = null;
+          waitingUpdates[`bays/${bayId}/lastUserId`] = null;
+          waitingUpdates[`bays/${bayId}/requestedPackage`] = null;
+          waitingUpdates[`bays/${bayId}/durationSec`] = null;
+          waitingUpdates[`bays/${bayId}/tokensCost`] = null;
+          waitingUpdates[`bays/${bayId}/hardwareSelection`] = "";
+          waitingUpdates[`bays/${bayId}/updatedAt`] =
+            admin.database.ServerValue.TIMESTAMP;
           mqttAvailableCommands.push(bayId);
 
           safeLog(
