@@ -74,6 +74,9 @@ String mqttTopicEvent = "";
 unsigned long sonMqttDenemeMs = 0;
 const unsigned long MQTT_RETRY_INTERVAL_MS = 5000;
 bool ilkMqttBaglantiTamamlandi = false;
+String sonYayinlananDurum = "";
+unsigned long sonDurumYayinMs = 0;
+const unsigned long DURUM_YAYIN_DEBOUNCE_MS = 1000;
 
 // ================= HAFIZA / ZAMAN =================
 Preferences preferences;
@@ -130,7 +133,7 @@ bool durumDegisti = true;
 bool dokunmatikKilit = false;
 bool odemeBekleniyor = false;
 unsigned long odemeBeklemeBaslangicMs = 0;
-const unsigned long ODEME_BEKLEME_TIMEOUT_MS = 60000;
+const unsigned long ODEME_BEKLEME_TIMEOUT_MS = 30000;
 unsigned long sonCancelEventMs = 0;
 const unsigned long CANCEL_EVENT_DEBOUNCE_MS = 2000;
 bool cancelBackendCevabiBekleniyor = false;
@@ -162,6 +165,8 @@ bool oncekiKopukButonDurumu = HIGH;
 
 // ============================================================
 void availableModunaDon(const char* sebep, bool cancelEventGonder);
+void iptalIstegiGonder();
+void odemeBeklemeIptalEt(const char* sebep);
 // ================= YARDIMCI =================
 void resetSayacDurumu() {
   sayacSonEkranSaniye = -1;
@@ -520,11 +525,29 @@ void mqttTopicleriHazirla() {
 bool mqttDurumYayinla() {
   if (!mqttClient.connected()) return false;
 
-  return mqttClient.publish(
+  unsigned long suAn = millis();
+
+  if (
+    currentStatus == sonYayinlananDurum &&
+    suAn - sonDurumYayinMs < DURUM_YAYIN_DEBOUNCE_MS
+  ) {
+    LOG_PRINT(F("Durum tekrar yayinlanmadi: "));
+    LOG_PRINTLN(currentStatus);
+    return true;
+  }
+
+  bool ok = mqttClient.publish(
     mqttTopicStatus.c_str(),
     currentStatus.c_str(),
     true
   );
+
+  if (ok) {
+    sonYayinlananDurum = currentStatus;
+    sonDurumYayinMs = suAn;
+  }
+
+  return ok;
 }
 
 bool mqttHeartbeatYayinla() {
@@ -601,6 +624,31 @@ void iptalIstegiGonder() {
   ekranaMesajYaz("Iptal ediliyor...", TFT_RED);
 }
 
+void odemeBeklemeIptalEt(const char* sebep) {
+  LOG_PRINT(F("Odeme bekleme iptal edildi. Sebep: "));
+  LOG_PRINTLN(sebep);
+
+  geciciEkranModu = GECICI_YOK;
+  bekleyenPaketSecimi = "";
+
+  odemeBekleniyor = false;
+  dokunmatikKilit = false;
+  hataEkraniGosteriliyor = false;
+  cancelBackendCevabiBekleniyor = false;
+
+  requestedPackage = "";
+  durationSec = 60;
+
+  islemHafizasiniTemizle();
+
+  currentStatus = "available";
+  isBayActive = true;
+  durumDegisti = true;
+
+  mqttDurumYayinla();
+  mqttEventYayinla("CANCEL");
+}
+
 void availableModunaDon(const char* sebep, bool cancelEventGonder) {
   LOG_PRINT(F("AVAILABLE moduna donuluyor. Sebep: "));
   LOG_PRINTLN(sebep);
@@ -647,32 +695,36 @@ void mqttKomutUygula(const String& komut) {
 
 if (komut == "AVAILABLE") {
   cancelBackendCevabiBekleniyor = false;
-
-  if (currentStatus == "available" && !odemeBekleniyor) {
-    LOG_PRINTLN(F("AVAILABLE zaten aktif, tekrar islenmedi."));
-    dokunmatikKilit = false;
-    return;
-  }
-
-  currentStatus = "available";
-  isBayActive = true;
   odemeBekleniyor = false;
   dokunmatikKilit = false;
   hataEkraniGosteriliyor = false;
   geciciEkranModu = GECICI_YOK;
   bekleyenPaketSecimi = "";
+
+  if (currentStatus == "available") {
+    LOG_PRINTLN(F("AVAILABLE zaten aktif, tekrar islenmedi."));
+    durumDegisti = true;
+    return;
+  }
+
+  currentStatus = "available";
+  isBayActive = true;
   islemHafizasiniTemizle();
   durumDegisti = true;
 }
-  else if (komut == "WAITING") {
-    cancelBackendCevabiBekleniyor = false;
-    currentStatus = "waiting";
-    isBayActive = true;
-    odemeBekleniyor = false;
-    dokunmatikKilit = false;
-    islemHafizasiniTemizle();
-    durumDegisti = true;
-  }
+else if (komut == "WAITING") {
+  cancelBackendCevabiBekleniyor = false;
+  odemeBekleniyor = false;
+  dokunmatikKilit = false;
+  hataEkraniGosteriliyor = false;
+  geciciEkranModu = GECICI_YOK;
+  bekleyenPaketSecimi = "";
+
+  currentStatus = "waiting";
+  isBayActive = true;
+  islemHafizasiniTemizle();
+  durumDegisti = true;
+}
   else if (komut == "OFFLINE") {
     currentStatus = "offline";
     isBayActive = false;
@@ -724,6 +776,12 @@ if (komut == "AVAILABLE") {
 
       requestedPackage = paketNormalizeEt(gelenPaket);
       durationSec = gelenSure;
+
+      cancelBackendCevabiBekleniyor = false;
+      odemeBekleniyor = false;
+      hataEkraniGosteriliyor = false;
+      geciciEkranModu = GECICI_YOK;
+      bekleyenPaketSecimi = "";
 
       kalanSureKaydet(0);
       islemBaslangicMs = 0;
@@ -1312,10 +1370,10 @@ void loop() {
     }
   }
 
-  if (odemeBekleniyor && currentStatus == "waiting") {
-    if (millis() - odemeBeklemeBaslangicMs >= ODEME_BEKLEME_TIMEOUT_MS) {
-      availableModunaDon("odeme_timeout", false);
-      return;
-    }
+if (odemeBekleniyor && currentStatus == "waiting") {
+  if (millis() - odemeBeklemeBaslangicMs >= ODEME_BEKLEME_TIMEOUT_MS) {
+    odemeBeklemeIptalEt("odeme_timeout");
+    return;
   }
+}
 }

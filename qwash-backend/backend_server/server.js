@@ -900,8 +900,55 @@ mqttClient.on("message", async (topic, messageBuffer) => {
         return;
       }
 
-      // Eğer gelen mesaj iptal değilse, donanım seçimidir.
-      safeLog(`🧼 MQTT SEÇİM: ${bayId} -> ${selectionVal}`);
+      const normalizedSelection = normalizeText(selectionVal);
+
+      let packageId = "";
+
+      if (
+        normalizedSelection === "foam" ||
+        normalizedSelection === "kopuk" ||
+        normalizedSelection === "köpük"
+      ) {
+        packageId = "foam";
+      } else if (
+        normalizedSelection === "wash" ||
+        normalizedSelection === "su" ||
+        normalizedSelection === "water" ||
+        normalizedSelection === "yikama" ||
+        normalizedSelection === "yıkama"
+      ) {
+        packageId = "wash";
+      }
+
+      if (!packageId) {
+        safeLog(`⚠️ MQTT SEÇİM bilinmeyen paket: ${bayId} -> ${selectionVal}`);
+        return;
+      }
+
+      const bayRef = rtdb.ref(`bays/${bayId}`);
+      const baySnap = await bayRef.once("value");
+      const bayData = baySnap.val() || {};
+
+      if (
+        bayData.status !== "waiting" ||
+        bayData.currentSessionId ||
+        !bayData.lastUserId
+      ) {
+        safeLog(
+          `⚠️ MQTT SEÇİM yok sayıldı: ${bayId} status=${bayData.status}, lastUserId=${bayData.lastUserId || "yok"}`,
+        );
+        return;
+      }
+
+      await bayRef.update({
+        hardwareSelection: packageId,
+        pendingPackage: packageId,
+        pendingPackageSource: "esp32",
+        pendingPackageAt: admin.database.ServerValue.TIMESTAMP,
+        updatedAt: admin.database.ServerValue.TIMESTAMP,
+      });
+
+      safeLog(`🧼 MQTT SEÇİM KAYDEDİLDİ: ${bayId} -> ${packageId}`);
       return;
     }
   } catch (error) {
