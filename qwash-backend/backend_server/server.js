@@ -648,12 +648,11 @@ app.get("/", (req, res) => {
   return res.status(200).send("QWash API Sapasağlam Ayakta! 🚀");
 });
 
-// ---------------------------------------------------------
-// QR OKUTULUNCA PERONU WAITING MODUNA AL
-// ---------------------------------------------------------
 app.post("/api/prepare-bay", verifyUser, async (req, res) => {
   const { bayId } = req.body;
   const uid = req.user.uid;
+
+  safeLog(`🟡 PREPARE GELDİ: bayId="${bayId}", uid="${uid}"`);
 
   if (!bayId) {
     return res.status(400).json({ error: "bayId gerekli." });
@@ -662,7 +661,26 @@ app.post("/api/prepare-bay", verifyUser, async (req, res) => {
   try {
     const bayRef = rtdb.ref(`bays/${bayId}`);
 
+    const beforeSnap = await bayRef.once("value");
+    safeLog(
+      `🟡 PREPARE BEFORE: exists=${beforeSnap.exists()} data=${JSON.stringify(
+        beforeSnap.val()
+      )}`
+    );
+
+    if (!beforeSnap.exists()) {
+      return res.status(404).json({
+        error: `Peron bulunamadı: ${bayId}`,
+      });
+    }
+
     const result = await bayRef.transaction((currentBay) => {
+      safeLog(
+        `🟡 PREPARE TX CURRENT: bayId=${bayId} data=${JSON.stringify(
+          currentBay
+        )}`
+      );
+
       if (!currentBay) {
         return;
       }
@@ -699,31 +717,13 @@ app.post("/api/prepare-bay", verifyUser, async (req, res) => {
       return;
     });
 
-    // ... transaction bloğu bittikten sonraki kısım:
+    safeLog(
+      `🟡 PREPARE RESULT: committed=${result.committed} snapshot=${JSON.stringify(
+        result.snapshot?.val()
+      )}`
+    );
+
     if (!result.committed) {
-      // İşlem iptal edildiyse, o anki veritabanı durumunu (snapshot) alıyoruz
-      const bayData = result.snapshot.val();
-
-      // 1. Durum: RTDB'den veri silinmiş veya cihaz henüz hiç bağlanmamış
-      if (!bayData) {
-        return res.status(404).json({
-          error:
-            "Peron bulunamadı. Cihazın internete bağlanması bekleniyor (maks. 30 sn).",
-        });
-      }
-
-      // 2. Durum: Cihaz var ama kapalı / hizmet dışı
-      if (
-        bayData.isActive === false ||
-        bayData.status === "offline" ||
-        bayData.status === "maintenance"
-      ) {
-        return res.status(403).json({
-          error: "Bu peron şu anda kapalıdır veya bakım modundadır.",
-        });
-      }
-
-      // 3. Durum: Peron gerçekten başkası tarafından kullanılıyor
       return res.status(409).json({
         error:
           "Peron şu anda başka bir kullanıcı tarafından kullanılıyor veya hazırlanıyor.",
@@ -731,6 +731,8 @@ app.post("/api/prepare-bay", verifyUser, async (req, res) => {
     }
 
     const mqttOk = await safeSendBayCommand(bayId, "WAITING");
+
+    safeLog(`🟢 PREPARE OK: bayId=${bayId}, mqttOk=${mqttOk}`);
 
     return res.status(200).json({
       success: true,
@@ -747,6 +749,7 @@ app.post("/api/prepare-bay", verifyUser, async (req, res) => {
     });
   }
 });
+
 // ---------------------------------------------------------
 // OTURUM BAŞLATMA
 // ---------------------------------------------------------
