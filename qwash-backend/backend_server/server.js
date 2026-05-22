@@ -977,29 +977,45 @@ app.post("/api/stop-session", verifyUser, async (req, res) => {
 // ---------------------------------------------------------
 app.post("/api/topup", verifyUser, async (req, res) => {
   const uid = req.user.uid;
-  const { tokens, amountTRY } = req.body;
+  const { tokens } = req.body;
 
-  if (!tokens || !amountTRY) {
+  if (!tokens) {
     return res.status(400).json({
-      error: "Eksik parametre gönderildi. tokens ve amountTRY zorunludur.",
+      error: "Eksik parametre gönderildi. tokens zorunludur.",
     });
   }
 
   const eklenecekJeton = parseInt(tokens, 10);
-  const eklenecekTutar = Number(amountTRY);
 
   if (
     !Number.isFinite(eklenecekJeton) ||
-    !Number.isFinite(eklenecekTutar) ||
+    !Number.isInteger(eklenecekJeton) ||
     eklenecekJeton <= 0 ||
-    eklenecekTutar <= 0
+    eklenecekJeton > 100
   ) {
     return res.status(400).json({
-      error: "Geçersiz jeton veya tutar.",
+      error: "Geçersiz jeton miktarı.",
     });
   }
 
   try {
+    const jetonPackageDoc = await db.collection("packages").doc("jeton").get();
+
+    if (!jetonPackageDoc.exists) {
+      return res.status(500).json({
+        error: "Jeton fiyat ayarı bulunamadı.",
+      });
+    }
+
+    const jetonFiyat = Number(jetonPackageDoc.data().jetonFiyat || 0);
+
+    if (!Number.isFinite(jetonFiyat) || jetonFiyat <= 0) {
+      return res.status(500).json({
+        error: "Jeton fiyat ayarı hatalı.",
+      });
+    }
+
+    const eklenecekTutar = eklenecekJeton * jetonFiyat;
     const userRef = db.collection("users").doc(uid);
     const userDoc = await userRef.get();
 
