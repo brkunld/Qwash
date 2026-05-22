@@ -265,12 +265,18 @@ const reserveBayForSession = async (bayId, uid) => {
 
     const status = currentBay.status || "available";
 
-    const isReservable =
-      (status === "available" || status === "waiting") &&
+    const canReserveFromAvailable =
+      status === "available" &&
       !currentBay.currentSessionId &&
       currentBay.isActive !== false;
 
-    if (!isReservable) {
+    const canReserveFromWaiting =
+      status === "waiting" &&
+      currentBay.lastUserId === uid &&
+      !currentBay.currentSessionId &&
+      currentBay.isActive !== false;
+
+    if (!canReserveFromAvailable && !canReserveFromWaiting) {
       return;
     }
 
@@ -1689,28 +1695,28 @@ const systemStartupClean = async () => {
     }
 
     const runningSessions = await db
-  .collection("sessions")
-  .where("status", "==", "running")
-  .get();
+      .collection("sessions")
+      .where("status", "==", "running")
+      .get();
 
-if (!runningSessions.empty) {
-  for (const doc of runningSessions.docs) {
-    const refundResult = await refundSessionIfNeeded(
-      doc.id,
-      "server_restart",
-    );
+    if (!runningSessions.empty) {
+      for (const doc of runningSessions.docs) {
+        const refundResult = await refundSessionIfNeeded(
+          doc.id,
+          "server_restart",
+        );
 
-    if (refundResult.refunded) {
-      safeLog(
-        `💸 SERVER RESTART İADESİ: Session=${doc.id}, User=${refundResult.userId}, ${refundResult.tokens} jeton iade edildi.`,
-      );
-    } else {
-      safeLog(
-        `ℹ️ SERVER RESTART sırasında iade yapılmadı: Session=${doc.id} - ${refundResult.reason}`,
-      );
+        if (refundResult.refunded) {
+          safeLog(
+            `💸 SERVER RESTART İADESİ: Session=${doc.id}, User=${refundResult.userId}, ${refundResult.tokens} jeton iade edildi.`,
+          );
+        } else {
+          safeLog(
+            `ℹ️ SERVER RESTART sırasında iade yapılmadı: Session=${doc.id} - ${refundResult.reason}`,
+          );
+        }
+      }
     }
-  }
-}
 
     safeLog("✨ Temizlik tamamlandı! Tüm peronlar 'available' durumunda.");
   } catch (error) {
