@@ -1015,8 +1015,7 @@ app.post("/api/topup", verifyUser, async (req, res) => {
     });
   }
 
-  const eklenecekJeton = parseInt(tokens, 10);
-
+  const eklenecekJeton = Number(tokens);
   if (
     !Number.isFinite(eklenecekJeton) ||
     !Number.isInteger(eklenecekJeton) ||
@@ -1064,6 +1063,7 @@ app.post("/api/topup", verifyUser, async (req, res) => {
     await orderRef.set({
       userId: uid,
       tokens: eklenecekJeton,
+      unitPriceTRY: jetonFiyat,
       amountTRY: eklenecekTutar,
       status: "pending",
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -1271,14 +1271,14 @@ app.post("/api/topup-callback", async (req, res) => {
           expectedKurus !== paidKurus
         ) {
           await orderRef.update({
-  status: "amount_mismatch",
-  expectedAmountTRY: expectedAmount,
-  expectedKurus,
-  iyzicoPaidPrice: result.paidPrice || null,
-  iyzicoPaidKurus: paidKurus,
-  paymentId: result.paymentId || null,
-  updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-});
+            status: "amount_mismatch",
+            expectedAmountTRY: expectedAmount,
+            expectedKurus,
+            iyzicoPaidPrice: result.paidPrice || null,
+            iyzicoPaidKurus: paidKurus,
+            paymentId: result.paymentId || null,
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          });
 
           safeLog(
             `🚨 IYZICO TUTAR UYUŞMAZLIĞI: Order=${orderId}, Expected=${expectedAmount}, Paid=${result.paidPrice}`,
@@ -1644,7 +1644,7 @@ app.post("/api/admin/topup", verifyAdmin, async (req, res) => {
   }
 
   try {
-    const adet = parseInt(tokens, 10);
+    const adet = Number(tokens);
 
     if (
       !Number.isFinite(adet) ||
