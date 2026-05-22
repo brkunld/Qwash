@@ -781,21 +781,22 @@ app.post("/api/start-session", verifyUser, async (req, res) => {
       });
 
       const startedAtMs = Date.now();
-const expectedEndTimeMs = startedAtMs + finalDurationSec * 1000;
+      const expectedEndTimeMs = startedAtMs + finalDurationSec * 1000;
 
-t.set(sessionRef, {
-  bayId,
-  userId: uid,
-  type: packageId,
-  packageId,
-  tokensCost: finalTokensCost,
-  durationSec: finalDurationSec,
-  status: "running",
-  startedAt: admin.firestore.Timestamp.fromMillis(startedAtMs),
-  startedAtMs,
-  expectedEndTime: admin.firestore.Timestamp.fromMillis(expectedEndTimeMs),
-  expectedEndTimeMs,
-});
+      t.set(sessionRef, {
+        bayId,
+        userId: uid,
+        type: packageId,
+        packageId,
+        tokensCost: finalTokensCost,
+        durationSec: finalDurationSec,
+        status: "running",
+        startedAt: admin.firestore.Timestamp.fromMillis(startedAtMs),
+        startedAtMs,
+        expectedEndTime:
+          admin.firestore.Timestamp.fromMillis(expectedEndTimeMs),
+        expectedEndTimeMs,
+      });
     });
 
     // 3. Peronu kesin olarak busy durumuna al
