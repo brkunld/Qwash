@@ -55,11 +55,26 @@ if (!gotTheLock) {
 
     if (missingKeys.length > 0) {
       throw new Error(
-        `Firebase config eksik: ${missingKeys.join(", ")}. .env dosyasını kontrol edin.`
+        `Firebase config eksik: ${missingKeys.join(", ")}. .env dosyasını kontrol edin.`,
       );
     }
 
     return firebaseConfig;
+  }
+
+  // =========================================================
+  // API BASE URL KONTROLÜ
+  // Renderer'a sadece public backend base URL verilir.
+  // Örn: https://qwash-8q4y.onrender.com
+  // =========================================================
+  function getApiBaseUrl() {
+    const apiBaseUrl = process.env.API_BASE_URL;
+
+    if (!apiBaseUrl) {
+      throw new Error("API_BASE_URL eksik. .env dosyasını kontrol edin.");
+    }
+
+    return apiBaseUrl.replace(/\/$/, "");
   }
 
   // =========================================================
@@ -68,6 +83,10 @@ if (!gotTheLock) {
   // =========================================================
   ipcMain.handle("firebase:get-config", () => {
     return getFirebaseConfig();
+  });
+
+  ipcMain.handle("api:get-base-url", () => {
+    return getApiBaseUrl();
   });
 
   ipcMain.handle("app:close", () => {

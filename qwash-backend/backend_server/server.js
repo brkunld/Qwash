@@ -9,6 +9,14 @@ const cron = require("node-cron");
 const mqtt = require("mqtt");
 const Iyzipay = require("iyzipay"); // 1. Iyzico Paketi Eklendi
 
+const APP_BASE_URL = process.env.APP_BASE_URL;
+
+if (!APP_BASE_URL) {
+  throw new Error(
+    "❌ APP_BASE_URL env eksik. Örn: https://qwash-****.onrender.com",
+  );
+}
+
 // =========================================================
 // IYZICO SANDBOX YAPILANDIRMASI
 // =========================================================
@@ -246,7 +254,6 @@ const refundSessionIfNeeded = async (sessionId, reason = "bay_power_loss") => {
     };
   });
 };
-
 
 const reserveBayForSession = async (bayId, uid) => {
   const bayRef = rtdb.ref(`bays/${bayId}`);
@@ -778,8 +785,7 @@ app.post("/api/start-session", verifyUser, async (req, res) => {
 
     if (error.message === "Gecersiz_Paket_Degerleri") {
       return res.status(500).json({
-        error:
-          "Sistemdeki paket değerleri hatalı. Lütfen yöneticiye bildirin.",
+        error: "Sistemdeki paket değerleri hatalı. Lütfen yöneticiye bildirin.",
       });
     }
 
@@ -891,7 +897,7 @@ app.post("/api/stop-session", verifyUser, async (req, res) => {
     // 1) Session gerçekten bu kullanıcıya mı ait?
     if (session.userId !== uid) {
       safeLog(
-        `🚨 YETKİSİZ OTURUM DURDURMA DENEMESİ: Saldırgan=${uid}, Session=${sessionId}, SessionUser=${session.userId || "yok"}`
+        `🚨 YETKİSİZ OTURUM DURDURMA DENEMESİ: Saldırgan=${uid}, Session=${sessionId}, SessionUser=${session.userId || "yok"}`,
       );
 
       return res.status(403).json({
@@ -902,7 +908,7 @@ app.post("/api/stop-session", verifyUser, async (req, res) => {
     // 2) İstekle gelen bayId, session içindeki bayId ile eşleşiyor mu?
     if (session.bayId !== bayId) {
       safeLog(
-        `🚨 BAY/SESSION EŞLEŞME HATASI: User=${uid}, İstekBay=${bayId}, SessionBay=${session.bayId}, Session=${sessionId}`
+        `🚨 BAY/SESSION EŞLEŞME HATASI: User=${uid}, İstekBay=${bayId}, SessionBay=${session.bayId}, Session=${sessionId}`,
       );
 
       return res.status(400).json({
@@ -920,7 +926,7 @@ app.post("/api/stop-session", verifyUser, async (req, res) => {
     // 4) RTDB tarafında bu peronda gerçekten bu session mı aktif?
     if (bayData.currentSessionId !== sessionId) {
       safeLog(
-        `🚨 AKTİF SESSION EŞLEŞMİYOR: User=${uid}, Bay=${bayId}, İstekSession=${sessionId}, BaySession=${bayData.currentSessionId || "yok"}`
+        `🚨 AKTİF SESSION EŞLEŞMİYOR: User=${uid}, Bay=${bayId}, İstekSession=${sessionId}, BaySession=${bayData.currentSessionId || "yok"}`,
       );
 
       return res.status(409).json({
@@ -931,7 +937,7 @@ app.post("/api/stop-session", verifyUser, async (req, res) => {
     // 5) RTDB tarafında son kullanıcı da aynı mı? Ek savunma katmanı.
     if (bayData.lastUserId !== uid) {
       safeLog(
-        `🚨 BAY KULLANICI EŞLEŞMİYOR: User=${uid}, Bay=${bayId}, BayLastUser=${bayData.lastUserId || "yok"}`
+        `🚨 BAY KULLANICI EŞLEŞMİYOR: User=${uid}, Bay=${bayId}, BayLastUser=${bayData.lastUserId || "yok"}`,
       );
 
       return res.status(403).json({
@@ -951,7 +957,9 @@ app.post("/api/stop-session", verifyUser, async (req, res) => {
 
     const mqttOk = await safeSendBayCommand(bayId, "WAITING");
 
-    safeLog(`⛔ MANUEL DURDURMA BAŞARILI: User=${uid}, Bay=${bayId}, Session=${sessionId}`);
+    safeLog(
+      `⛔ MANUEL DURDURMA BAŞARILI: User=${uid}, Bay=${bayId}, Session=${sessionId}`,
+    );
 
     return res.status(200).json({
       success: true,
@@ -1015,9 +1023,7 @@ app.post("/api/topup", verifyUser, async (req, res) => {
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
     });
 
-    const RENDER_URL = "https://qwash-8q4y.onrender.com";
-
-    const callbackUrl = `${RENDER_URL}/api/topup-callback?orderId=${orderRef.id}`;
+    const callbackUrl = `${APP_BASE_URL}/api/topup-callback?orderId=${orderRef.id}`;
 
     const iyzicoRequest = {
       locale: Iyzipay.LOCALE.TR,
@@ -1073,35 +1079,38 @@ app.post("/api/topup", verifyUser, async (req, res) => {
       ],
     };
 
-    iyzipay.checkoutFormInitialize.create(iyzicoRequest, async (err, result) => {
-      if (err || result.status === "failure") {
+    iyzipay.checkoutFormInitialize.create(
+      iyzicoRequest,
+      async (err, result) => {
+        if (err || result.status === "failure") {
+          await orderRef.update({
+            status: "init_failed",
+            errorMessage: result ? result.errorMessage : err.message,
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          });
+
+          safeLog(
+            `❌ Iyzico Form Başlatılamadı: ${
+              result ? result.errorMessage : err.message
+            }`,
+          );
+
+          return res.status(400).json({
+            error: "Ödeme oturumu başlatılamadı.",
+          });
+        }
+
         await orderRef.update({
-          status: "init_failed",
-          errorMessage: result ? result.errorMessage : err.message,
+          iyzicoCheckoutToken: result.token || null,
           updatedAt: admin.firestore.FieldValue.serverTimestamp(),
         });
 
-        safeLog(
-          `❌ Iyzico Form Başlatılamadı: ${
-            result ? result.errorMessage : err.message
-          }`,
-        );
-
-        return res.status(400).json({
-          error: "Ödeme oturumu başlatılamadı.",
+        return res.status(200).json({
+          success: true,
+          paymentUrl: result.paymentPageUrl,
         });
-      }
-
-      await orderRef.update({
-        iyzicoCheckoutToken: result.token || null,
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      });
-
-      return res.status(200).json({
-        success: true,
-        paymentUrl: result.paymentPageUrl,
-      });
-    });
+      },
+    );
   } catch (error) {
     safeLog(`❌ Sunucu Ödeme Hatası: ${error.message}`);
     return res.status(500).json({ error: "Sunucu hatası." });
@@ -1292,9 +1301,11 @@ app.post("/api/topup-callback", async (req, res) => {
 
           safeLog(`❌ Ödeme alındı ama DB yazma hatası: ${dbError.message}`);
 
-          return res.status(500).send(
-            "<h1>Ödeme Alındı fakat bir veritabanı hatası oluştu. Lütfen destekle iletişime geçin.</h1>",
-          );
+          return res
+            .status(500)
+            .send(
+              "<h1>Ödeme Alındı fakat bir veritabanı hatası oluştu. Lütfen destekle iletişime geçin.</h1>",
+            );
         }
       },
     );

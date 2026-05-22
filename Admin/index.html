@@ -1748,7 +1748,17 @@
       const app = initializeApp(firebaseConfig);
       const auth = getAuth(app);
       const database = getDatabase(app);
-      const API_BASE = "https://qwash-8q4y.onrender.com/api/admin";
+      const rawApiBaseUrl = window.electronAPI?.getApiBaseUrl
+        ? await window.electronAPI.getApiBaseUrl()
+        : window.APP_CONFIG?.API_BASE_URL;
+
+      if (!rawApiBaseUrl) {
+        throw new Error(
+          "API base URL eksik. .env, preload.js veya main.js ayarlarını kontrol edin.",
+        );
+      }
+
+      const API_BASE = `${String(rawApiBaseUrl).replace(/\/$/, "")}/api/admin`;
 
       async function getAdminToken() {
         const user = auth.currentUser;
