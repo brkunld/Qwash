@@ -131,6 +131,8 @@ bool dokunmatikKilit = false;
 bool odemeBekleniyor = false;
 unsigned long odemeBeklemeBaslangicMs = 0;
 const unsigned long ODEME_BEKLEME_TIMEOUT_MS = 60000;
+unsigned long sonCancelEventMs = 0;
+const unsigned long CANCEL_EVENT_DEBOUNCE_MS = 2000;
 
 // ================= NON-BLOCKING EKRAN AKISI =================
 enum GeciciEkranModu {
@@ -587,14 +589,22 @@ void availableModunaDon(const char* sebep, bool cancelEventGonder) {
   isBayActive = true;
   durumDegisti = true;
 
-  if (cancelEventGonder) {
+if (cancelEventGonder) {
+  unsigned long suAn = millis();
+
+  if (suAn - sonCancelEventMs >= CANCEL_EVENT_DEBOUNCE_MS) {
+    sonCancelEventMs = suAn;
+
     if (!mqttEventYayinla("CANCEL")) {
       LOG_PRINTLN(F("CANCEL event gonderilemedi, eski selection fallback deneniyor."));
       mqttSecimYayinla("cancel");
     } else {
       LOG_PRINTLN(F("CANCEL event gonderildi."));
     }
+  } else {
+    LOG_PRINTLN(F("CANCEL event tekrar gonderilmedi debounce."));
   }
+}
 
   mqttDurumYayinla();
 }
@@ -603,14 +613,19 @@ void mqttKomutUygula(const String& komut) {
   LOG_PRINT(F("MQTT Komut: "));
   LOG_PRINTLN(komut);
 
-  if (komut == "AVAILABLE") {
-    currentStatus = "available";
-    isBayActive = true;
-    odemeBekleniyor = false;
-    dokunmatikKilit = false;
-    islemHafizasiniTemizle();
-    durumDegisti = true;
+if (komut == "AVAILABLE") {
+  if (currentStatus == "available" && !odemeBekleniyor) {
+    LOG_PRINTLN(F("AVAILABLE zaten aktif, tekrar islenmedi."));
+    return;
   }
+
+  currentStatus = "available";
+  isBayActive = true;
+  odemeBekleniyor = false;
+  dokunmatikKilit = false;
+  islemHafizasiniTemizle();
+  durumDegisti = true;
+}
   else if (komut == "WAITING") {
     currentStatus = "waiting";
     isBayActive = true;
