@@ -12,7 +12,7 @@ import {
   setDoc,
 } from "firebase/firestore";
 
-import { onValue, ref, update } from "firebase/database";
+import { onValue, ref } from "firebase/database";
 
 import { auth, db, rtdb } from "../firebase";
 import { getApiUrl } from "./config/api";
@@ -129,7 +129,7 @@ useEffect(() => {
 
     if (!pendingPackage || !pendingSelectionId) return;
 
-    if (data?.pendingPackageSource !== "esp") return;
+    if (data?.pendingPackageSource !== "esp32") return;
     if (data?.lastUserId !== uid) return;
     if (data?.status !== "waiting") return;
     if (data?.currentSessionId) return;
@@ -308,27 +308,6 @@ useEffect(() => {
     });
 
     return () => unsubs.forEach((u) => u());
-  }, [baylarData]);
-
-  // ESP32 FİZİKSEL DOKUNMATİK EKRAN SİNYALİ DİNLEME
-  useEffect(() => {
-    Object.entries(baylarData).forEach(([id, data]) => {
-      // Backend artık "CANCEL" / "IPTAL" verisini buraya yazmıyor. 
-      // Buraya sadece "wash", "foam" gibi geçerli paketler düşecek.
-      if (data?.hardwareSelection) {
-        const secilenPaket = data.hardwareSelection;
-        const rtdbBayRef = ref(rtdb, `bays/${id}`);
-        
-        update(rtdbBayRef, { hardwareSelection: null })
-          .then(() => {
-            // Sadece gelen paketi başlat
-            sessionBaslat(id, secilenPaket);
-          })
-          .catch((err) =>
-            console.error("Donanım seçimini temizleme hatası:", err),
-          );
-      }
-    });
   }, [baylarData]);
 
   // =========================================================

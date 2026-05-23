@@ -14,7 +14,7 @@ const rateLimit = require("express-rate-limit");
 const apiLimiter = rateLimit({
   windowMs: 1 * 60 * 1000, // 1 dakika
   max: 30, // IP başına 1 dakikada max 30 istek
-  message: { error: "Çok fazla istek attınız, lütfen biraz bekleyin." }
+  message: { error: "Çok fazla istek attınız, lütfen biraz bekleyin." },
 });
 
 const APP_BASE_URL = process.env.APP_BASE_URL;
@@ -124,7 +124,11 @@ const withTimeout = (promise, timeoutMs, label) => {
   });
 };
 
-const fetchWithTimeout = async (url, options = {}, timeoutMs = EXTERNAL_TIMEOUT_MS) => {
+const fetchWithTimeout = async (
+  url,
+  options = {},
+  timeoutMs = EXTERNAL_TIMEOUT_MS,
+) => {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
@@ -774,7 +778,7 @@ const resumeOrClearSessionAfterBoot = async (bayId, bayData = {}) => {
   const expectedEndTimeMs =
     Number(session.expectedEndTimeMs || 0) ||
     (session.expectedEndTime &&
-      typeof session.expectedEndTime.toMillis === "function"
+    typeof session.expectedEndTime.toMillis === "function"
       ? session.expectedEndTime.toMillis()
       : 0);
 
@@ -1038,7 +1042,8 @@ const sendAdminAlert = async (bayId, type) => {
     }
 
     safeLog(
-      `📧 E-Posta başarıyla gönderildi: ${type === "down" ? "Kopma" : "Düzelme"
+      `📧 E-Posta başarıyla gönderildi: ${
+        type === "down" ? "Kopma" : "Düzelme"
       } bildirimi.`,
     );
   } catch (error) {
@@ -1217,7 +1222,7 @@ mqttClient.on("message", async (topic, messageBuffer) => {
         if (bootResult.resumed) {
           safeLog(
             `🔄 BOOT DEVAM: ${bayId} session devam ettirildi. ` +
-            `Session=${bootResult.sessionId}, Paket=${bootResult.packageId}, Kalan=${bootResult.remainingSec}sn`,
+              `Session=${bootResult.sessionId}, Paket=${bootResult.packageId}, Kalan=${bootResult.remainingSec}sn`,
           );
         } else {
           safeLog(`🔄 BOOT TEMİZLİĞİ: ${bayId} result=${bootResult.reason}`);
@@ -1322,9 +1327,12 @@ mqttClient.on("message", async (topic, messageBuffer) => {
         return;
       }
 
+      const pendingSelectionId = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
       await bayRef.update({
         hardwareSelection: packageId,
         pendingPackage: packageId,
+        pendingSelectionId,
         pendingPackageSource: "esp32",
         pendingPackageAt: admin.database.ServerValue.TIMESTAMP,
         updatedAt: admin.database.ServerValue.TIMESTAMP,
@@ -1406,8 +1414,8 @@ const verifyAdmin = async (req, res, next) => {
 
     const authorizedEmails = process.env.AUTHORIZED_ADMINS
       ? process.env.AUTHORIZED_ADMINS.split(",")
-        .map((email) => email.trim().toLowerCase())
-        .filter(Boolean)
+          .map((email) => email.trim().toLowerCase())
+          .filter(Boolean)
       : [];
 
     const requestEmail = decodedToken.email
@@ -1456,758 +1464,810 @@ app.get("/", (req, res) => {
   return res.status(200).send("QWash API Sapasağlam Ayakta! 🚀");
 });
 
-app.post("/api/prepare-bay", verifyUser, validateRequestBody(prepareBaySchema), async (req, res) => {
-  const { bayId } = req.validatedBody;
-  const uid = req.user.uid;
+app.post(
+  "/api/prepare-bay",
+  verifyUser,
+  validateRequestBody(prepareBaySchema),
+  async (req, res) => {
+    const { bayId } = req.validatedBody;
+    const uid = req.user.uid;
 
-  safeLog(`🟡 PREPARE GELDİ: bayId="${bayId}", uid="${uid}"`);
+    safeLog(`🟡 PREPARE GELDİ: bayId="${bayId}", uid="${uid}"`);
 
-  try {
-    const bayRef = rtdb.ref(`bays/${bayId}`);
+    try {
+      const bayRef = rtdb.ref(`bays/${bayId}`);
 
-    const beforeSnap = await bayRef.once("value");
-    const beforeBay = beforeSnap.val();
-
-    safeLog(
-      `🟡 PREPARE BEFORE: exists=${beforeSnap.exists()} data=${JSON.stringify(
-        beforeBay,
-      )}`,
-    );
-
-    if (!beforeSnap.exists() || !beforeBay) {
-      return res.status(404).json({
-        error: `Peron bulunamadı: ${bayId}`,
-      });
-    }
-
-    const result = await bayRef.transaction((currentBay) => {
-      safeLog(
-        `🟡 PREPARE TX CURRENT: bayId=${bayId} data=${JSON.stringify(currentBay)}`,
-      );
-
-      const bay = currentBay || beforeBay;
-      if (!bay) return;
-
-      const status = bay.status || "available";
-
-      if (
-        status === "available" &&
-        !bay.currentSessionId &&
-        bay.isActive !== false
-      ) {
-        return {
-          ...bay,
-          status: "waiting",
-          lastUserId: uid,
-        };
-      }
-
-      if (
-        status === "waiting" &&
-        (!bay.lastUserId || bay.lastUserId === uid) &&
-        !bay.currentSessionId &&
-        bay.isActive !== false
-      ) {
-        return {
-          ...bay,
-          lastUserId: uid,
-          updatedAt: Date.now(),
-        };
-      }
-
-      return;
-    });
-
-    safeLog(
-      `🟡 PREPARE RESULT: committed=${result.committed} snapshot=${JSON.stringify(
-        result.snapshot?.val(),
-      )}`,
-    );
-
-    if (!result.committed) {
-      const bayData = result.snapshot?.val() || beforeBay;
+      const beforeSnap = await bayRef.once("value");
+      const beforeBay = beforeSnap.val();
 
       safeLog(
-        `🟠 PREPARE REDDEDİLDİ: bayId=${bayId} data=${JSON.stringify(bayData)}`,
+        `🟡 PREPARE BEFORE: exists=${beforeSnap.exists()} data=${JSON.stringify(
+          beforeBay,
+        )}`,
       );
 
-      if (!bayData) {
+      if (!beforeSnap.exists() || !beforeBay) {
         return res.status(404).json({
           error: `Peron bulunamadı: ${bayId}`,
         });
       }
 
-      if (
-        bayData.isActive === false ||
-        bayData.status === "offline" ||
-        bayData.status === "maintenance"
-      ) {
+      const result = await bayRef.transaction((currentBay) => {
+        safeLog(
+          `🟡 PREPARE TX CURRENT: bayId=${bayId} data=${JSON.stringify(currentBay)}`,
+        );
+
+        const bay = currentBay || beforeBay;
+        if (!bay) return;
+
+        const status = bay.status || "available";
+
+        if (
+          status === "available" &&
+          !bay.currentSessionId &&
+          bay.isActive !== false
+        ) {
+          return {
+            ...bay,
+            status: "waiting",
+            lastUserId: uid,
+          };
+        }
+
+        if (
+          status === "waiting" &&
+          (!bay.lastUserId || bay.lastUserId === uid) &&
+          !bay.currentSessionId &&
+          bay.isActive !== false
+        ) {
+          return {
+            ...bay,
+            lastUserId: uid,
+            updatedAt: Date.now(),
+          };
+        }
+
+        return;
+      });
+
+      safeLog(
+        `🟡 PREPARE RESULT: committed=${result.committed} snapshot=${JSON.stringify(
+          result.snapshot?.val(),
+        )}`,
+      );
+
+      if (!result.committed) {
+        const bayData = result.snapshot?.val() || beforeBay;
+
+        safeLog(
+          `🟠 PREPARE REDDEDİLDİ: bayId=${bayId} data=${JSON.stringify(bayData)}`,
+        );
+
+        if (!bayData) {
+          return res.status(404).json({
+            error: `Peron bulunamadı: ${bayId}`,
+          });
+        }
+
+        if (
+          bayData.isActive === false ||
+          bayData.status === "offline" ||
+          bayData.status === "maintenance"
+        ) {
+          return res.status(409).json({
+            error: "Peron şu anda aktif değil veya bakım modunda.",
+          });
+        }
+
+        if (bayData.currentSessionId) {
+          return res.status(409).json({
+            error: "Peron şu anda aktif bir yıkama oturumunda.",
+          });
+        }
+
+        if (
+          bayData.status === "waiting" &&
+          bayData.lastUserId &&
+          bayData.lastUserId !== uid
+        ) {
+          return res.status(409).json({
+            error: "Peron şu anda başka bir kullanıcı tarafından hazırlanıyor.",
+          });
+        }
+
         return res.status(409).json({
-          error: "Peron şu anda aktif değil veya bakım modunda.",
+          error:
+            "Peron şu anda başka bir kullanıcı tarafından kullanılıyor veya hazırlanıyor.",
         });
       }
 
-      if (bayData.currentSessionId) {
-        return res.status(409).json({
-          error: "Peron şu anda aktif bir yıkama oturumunda.",
-        });
-      }
+      const mqttOk = await safeSendBayCommand(bayId, "WAITING");
 
-      if (
-        bayData.status === "waiting" &&
-        bayData.lastUserId &&
-        bayData.lastUserId !== uid
-      ) {
-        return res.status(409).json({
-          error: "Peron şu anda başka bir kullanıcı tarafından hazırlanıyor.",
-        });
-      }
+      safeLog(`🟢 PREPARE OK: bayId=${bayId}, mqttOk=${mqttOk}`);
 
-      return res.status(409).json({
-        error:
-          "Peron şu anda başka bir kullanıcı tarafından kullanılıyor veya hazırlanıyor.",
+      return res.status(200).json({
+        success: true,
+        mqttOk,
+        message: mqttOk
+          ? "Peron seçim ekranına alındı."
+          : "Peron waiting yapıldı ama MQTT komutu gönderilemedi.",
+      });
+    } catch (error) {
+      safeLog(`❌ Prepare Bay Hatası: ${error.message}`);
+
+      return res.status(500).json({
+        error: "Peron hazırlanırken sunucu hatası oluştu.",
       });
     }
-
-    const mqttOk = await safeSendBayCommand(bayId, "WAITING");
-
-    safeLog(`🟢 PREPARE OK: bayId=${bayId}, mqttOk=${mqttOk}`);
-
-    return res.status(200).json({
-      success: true,
-      mqttOk,
-      message: mqttOk
-        ? "Peron seçim ekranına alındı."
-        : "Peron waiting yapıldı ama MQTT komutu gönderilemedi.",
-    });
-  } catch (error) {
-    safeLog(`❌ Prepare Bay Hatası: ${error.message}`);
-
-    return res.status(500).json({
-      error: "Peron hazırlanırken sunucu hatası oluştu.",
-    });
-  }
-});
+  },
+);
 
 // ---------------------------------------------------------
 // OTURUM BAŞLATMA
 // ---------------------------------------------------------
-app.post("/api/start-session", verifyUser, validateRequestBody(startSessionSchema), async (req, res) => {
-  const uid = req.user.uid;
-  const { bayId, packageId } = req.validatedBody;
+app.post(
+  "/api/start-session",
+  verifyUser,
+  validateRequestBody(startSessionSchema),
+  async (req, res) => {
+    const uid = req.user.uid;
+    const { bayId, packageId } = req.validatedBody;
 
-  if (!packageId || isCancelValue(packageId)) {
-    safeLog(
-      `ℹ️ START SESSION İPTAL SAYILDI: User=${uid}, Bay=${bayId}, packageId=${packageId}`,
-    );
+    if (!packageId || isCancelValue(packageId)) {
+      safeLog(
+        `ℹ️ START SESSION İPTAL SAYILDI: User=${uid}, Bay=${bayId}, packageId=${packageId}`,
+      );
+
+      try {
+        const cancelResult = await clearWaitingBayAfterCancel(bayId, uid);
+
+        safeLog(
+          `ℹ️ START SESSION İPTAL TEMİZLİĞİ: ${bayId} result=${JSON.stringify(
+            cancelResult,
+          )}`,
+        );
+      } catch (cancelCleanupError) {
+        safeLog(
+          `ℹ️ İptal temizliği yapılamadı ama hata sayılmadı: ${cancelCleanupError.message}`,
+        );
+      }
+
+      return res.status(200).json({
+        success: false,
+        cancelled: true,
+        code: "operation_cancelled",
+        message: "İşlem kullanıcı veya cihaz tarafından iptal edildi.",
+      });
+    }
+
+    let bayReserved = false;
+    let newSessionId = null;
+    let finalTokensCost = 0;
+    let finalDurationSec = 0;
 
     try {
-      const cancelResult = await clearWaitingBayAfterCancel(bayId, uid);
+      const userRef = db.collection("users").doc(uid);
+      const rtdbBayRef = rtdb.ref(`bays/${bayId}`);
+      const packageRef = db.collection("packages").doc(packageId);
 
-      safeLog(
-        `ℹ️ START SESSION İPTAL TEMİZLİĞİ: ${bayId} result=${JSON.stringify(
-          cancelResult,
-        )}`,
-      );
-    } catch (cancelCleanupError) {
-      safeLog(
-        `ℹ️ İptal temizliği yapılamadı ama hata sayılmadı: ${cancelCleanupError.message}`,
-      );
-    }
+      const reserveResult = await reserveBayForSession(bayId, uid);
 
-    return res.status(200).json({
-      success: false,
-      cancelled: true,
-      code: "operation_cancelled",
-      message: "İşlem kullanıcı veya cihaz tarafından iptal edildi.",
-    });
-  }
+      if (!reserveResult.success) {
+        if (reserveResult.reason === "bay_not_found") {
+          return res
+            .status(404)
+            .json({ error: "Peron bulunamadı veya cihaz tamamen kapalı." });
+        }
 
-  let bayReserved = false;
-  let newSessionId = null;
-  let finalTokensCost = 0;
-  let finalDurationSec = 0;
+        if (reserveResult.reason === "bay_disabled") {
+          return res
+            .status(403)
+            .json({ error: "Bu peron şu anda hizmet dışıdır." });
+        }
 
-  try {
-    const userRef = db.collection("users").doc(uid);
-    const rtdbBayRef = rtdb.ref(`bays/${bayId}`);
-    const packageRef = db.collection("packages").doc(packageId);
-
-    const reserveResult = await reserveBayForSession(bayId, uid);
-
-    if (!reserveResult.success) {
-      if (reserveResult.reason === "bay_not_found") {
-        return res
-          .status(404)
-          .json({ error: "Peron bulunamadı veya cihaz tamamen kapalı." });
+        return res.status(409).json({
+          error:
+            "Peron şu anda başka bir kullanıcı tarafından kullanılıyor veya hazırlanıyor.",
+        });
       }
 
-      if (reserveResult.reason === "bay_disabled") {
-        return res
-          .status(403)
-          .json({ error: "Bu peron şu anda hizmet dışıdır." });
-      }
+      bayReserved = true;
 
-      return res.status(409).json({
-        error:
-          "Peron şu anda başka bir kullanıcı tarafından kullanılıyor veya hazırlanıyor.",
-      });
-    }
+      await db.runTransaction(async (t) => {
+        const userDoc = await t.get(userRef);
 
-    bayReserved = true;
+        if (!userDoc.exists) {
+          throw new Error("Kullanıcı_Bulunamadi");
+        }
 
-    await db.runTransaction(async (t) => {
-      const userDoc = await t.get(userRef);
+        const packageDoc = await t.get(packageRef);
 
-      if (!userDoc.exists) {
-        throw new Error("Kullanıcı_Bulunamadi");
-      }
+        if (!packageDoc.exists) {
+          throw new Error("Paket_Bulunamadi");
+        }
 
-      const packageDoc = await t.get(packageRef);
+        finalTokensCost = Number(packageDoc.data().tokensCost || 0);
+        finalDurationSec = Number(packageDoc.data().durationSec || 0);
 
-      if (!packageDoc.exists) {
-        throw new Error("Paket_Bulunamadi");
-      }
+        if (finalTokensCost <= 0 || finalDurationSec <= 0) {
+          throw new Error("Gecersiz_Paket_Degerleri");
+        }
 
-      finalTokensCost = Number(packageDoc.data().tokensCost || 0);
-      finalDurationSec = Number(packageDoc.data().durationSec || 0);
+        if (userDoc.data().isBlocked === true) {
+          throw new Error("Engellenmis_Kullanici");
+        }
 
-      if (finalTokensCost <= 0 || finalDurationSec <= 0) {
-        throw new Error("Gecersiz_Paket_Degerleri");
-      }
+        const mevcutBakiye = Number(userDoc.data().walletTokens || 0);
 
-      if (userDoc.data().isBlocked === true) {
-        throw new Error("Engellenmis_Kullanici");
-      }
+        if (mevcutBakiye < finalTokensCost) {
+          throw new Error("Yetersiz_Bakiye");
+        }
 
-      const mevcutBakiye = Number(userDoc.data().walletTokens || 0);
+        const sessionRef = db.collection("sessions").doc();
+        newSessionId = sessionRef.id;
 
-      if (mevcutBakiye < finalTokensCost) {
-        throw new Error("Yetersiz_Bakiye");
-      }
+        t.update(userRef, {
+          walletTokens: mevcutBakiye - finalTokensCost,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
 
-      const sessionRef = db.collection("sessions").doc();
-      newSessionId = sessionRef.id;
+        const startedAtMs = Date.now();
+        const expectedEndTimeMs = startedAtMs + finalDurationSec * 1000;
 
-      t.update(userRef, {
-        walletTokens: mevcutBakiye - finalTokensCost,
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        t.set(sessionRef, {
+          bayId,
+          userId: uid,
+          type: packageId,
+          packageId,
+          tokensCost: finalTokensCost,
+          durationSec: finalDurationSec,
+          status: "running",
+          startedAt: admin.firestore.Timestamp.fromMillis(startedAtMs),
+          startedAtMs,
+          expectedEndTime:
+            admin.firestore.Timestamp.fromMillis(expectedEndTimeMs),
+          expectedEndTimeMs,
+        });
       });
 
-      const startedAtMs = Date.now();
-      const expectedEndTimeMs = startedAtMs + finalDurationSec * 1000;
-
-      t.set(sessionRef, {
-        bayId,
-        userId: uid,
-        type: packageId,
-        packageId,
-        tokensCost: finalTokensCost,
+      await rtdbBayRef.update({
+        status: "busy",
+        requestedPackage: packageId,
         durationSec: finalDurationSec,
-        status: "running",
-        startedAt: admin.firestore.Timestamp.fromMillis(startedAtMs),
-        startedAtMs,
-        expectedEndTime:
-          admin.firestore.Timestamp.fromMillis(expectedEndTimeMs),
-        expectedEndTimeMs,
+        tokensCost: finalTokensCost,
+        lastUserId: uid,
+        currentSessionId: newSessionId,
+        hardwareSelection: "",
+        pendingPackage: null,
+        pendingPackageSource: null,
+        pendingSelectionId: null,
+        pendingPackageAt: null,
+        startingAt: null,
+        updatedAt: admin.database.ServerValue.TIMESTAMP,
       });
-    });
 
-    await rtdbBayRef.update({
-      status: "busy",
-      requestedPackage: packageId,
-      durationSec: finalDurationSec,
-      tokensCost: finalTokensCost,
-      lastUserId: uid,
-      currentSessionId: newSessionId,
-      hardwareSelection: "",
-      pendingPackage: null,
-      pendingPackageSource: null,
-      pendingSelectionId: null,
-      pendingPackageAt: null,
-      startingAt: null,
-      updatedAt: admin.database.ServerValue.TIMESTAMP,
-    });
-
-    const mqttOk = await safeSendBayCommand(
-      bayId,
-      `BUSY|${packageId}|${finalDurationSec}`,
-    );
-
-    if (!mqttOk) {
-      const refundResult = await refundSessionIfNeeded(
-        newSessionId,
-        "mqtt_start_failed",
+      const mqttOk = await safeSendBayCommand(
+        bayId,
+        `BUSY|${packageId}|${finalDurationSec}`,
       );
+
+      if (!mqttOk) {
+        const refundResult = await refundSessionIfNeeded(
+          newSessionId,
+          "mqtt_start_failed",
+        );
+
+        await clearBaySessionFields(bayId, {
+          status: "waiting",
+        });
+
+        safeLog(
+          `💸 MQTT BAŞLATMA HATASI: ${bayId} başlatılamadı. ` +
+            `Session: ${newSessionId}. ` +
+            `İade: ${
+              refundResult.refunded
+                ? `${refundResult.tokens} jeton`
+                : refundResult.reason
+            }`,
+        );
+
+        return res.status(503).json({
+          success: false,
+          mqttOk: false,
+          refunded: refundResult.refunded,
+          refundedTokens: refundResult.tokens || 0,
+          sessionId: newSessionId,
+          error: refundResult.refunded
+            ? "Makine başlatılamadı. Kesilen jetonlar hesabınıza iade edildi."
+            : "Makine başlatılamadı. İade işlemi kontrol edilmeli.",
+        });
+      }
+
+      safeLog(
+        `✅ BAŞARILI: ${bayId} başlatıldı. Süre: ${finalDurationSec} sn, Kesilen: ${finalTokensCost} jeton`,
+      );
+
+      return res.status(200).json({
+        success: true,
+        mqttOk: true,
+        sessionId: newSessionId,
+        message: "Makine başlatıldı.",
+      });
+    } catch (error) {
+      const shouldKeepWaitingAfterStartError =
+        error.message === "Yetersiz_Bakiye";
+
+      if (bayReserved && !newSessionId) {
+        try {
+          if (shouldKeepWaitingAfterStartError) {
+            await rtdb.ref(`bays/${bayId}`).update({
+              status: "waiting",
+              lastUserId: uid,
+              startingAt: null,
+              updatedAt: admin.database.ServerValue.TIMESTAMP,
+            });
+
+            await safeSendBayCommand(bayId, "WAITING");
+          } else {
+            await clearBaySessionFields(bayId, {
+              status: "available",
+            });
+
+            await safeSendBayCommand(bayId, "AVAILABLE");
+          }
+        } catch (rollbackError) {
+          safeLog(`❌ Peron rollback hatası: ${rollbackError.message}`);
+        }
+      }
+
+      if (error.message === "Engellenmis_Kullanici") {
+        safeLog(
+          `🚨 GÜVENLİK İHLALİ: Engelli kullanıcı (${uid}) işlem yapmayı denedi!`,
+        );
+
+        return res.status(403).json({
+          error: "Hesabınız askıya alındığı için işlem yapamazsınız.",
+        });
+      }
+
+      if (error.message === "Yetersiz_Bakiye") {
+        return res.status(400).json({
+          error: "Jeton bakiyeniz yetersiz.",
+        });
+      }
+
+      if (error.message === "Paket_Bulunamadi") {
+        const baySnap = await rtdb.ref(`bays/${bayId}`).once("value");
+        const bayData = baySnap.val();
+
+        if (
+          !bayData ||
+          (!bayData.currentSessionId &&
+            ["available", "waiting", "starting"].includes(bayData.status))
+        ) {
+          safeLog(
+            `ℹ️ Paket bulunamadı ama akış iptal sayıldı: User=${uid}, Bay=${bayId}, packageId=${packageId}`,
+          );
+
+          return res.status(200).json({
+            success: false,
+            cancelled: true,
+            code: "operation_cancelled",
+            message: "İşlem iptal edildi.",
+          });
+        }
+
+        return res.status(404).json({
+          error: "İstenilen paket sistemde bulunamadı.",
+        });
+      }
+
+      if (error.message === "Gecersiz_Paket_Degerleri") {
+        return res.status(500).json({
+          error:
+            "Sistemdeki paket değerleri hatalı. Lütfen yöneticiye bildirin.",
+        });
+      }
+
+      if (error.message === "Kullanıcı_Bulunamadi") {
+        return res.status(404).json({
+          error: "Kullanıcı bulunamadı.",
+        });
+      }
+
+      safeLog(`❌ Başlatma hatası: ${error.message}`);
+
+      return res.status(500).json({
+        error: "Sunucu hatası.",
+      });
+    }
+  },
+);
+
+// ---------------------------------------------------------
+// PERONDAN MANUEL ÇIKIŞ
+// ---------------------------------------------------------
+app.post(
+  "/api/cancel-waiting",
+  verifyUser,
+  validateRequestBody(cancelWaitingSchema),
+  async (req, res) => {
+    const { bayId } = req.validatedBody;
+
+    try {
+      const bayRef = rtdb.ref(`bays/${bayId}`);
+      const baySnap = await bayRef.once("value");
+      const bayData = baySnap.val();
+
+      if (!bayData) {
+        return res.status(404).json({ error: "Peron bulunamadı." });
+      }
+
+      if (bayData.currentSessionId) {
+        safeLog(
+          `🚨 AKTİF SESSION VARKEN İPTAL DENEMESİ: ${req.user.uid}, Peron: ${bayId}`,
+        );
+
+        return res.status(409).json({
+          error: "Aktif oturum varken peron iptal edilemez.",
+        });
+      }
+
+      const alreadyAvailable =
+        bayData.status === "available" &&
+        !bayData.currentSessionId &&
+        !bayData.lastUserId &&
+        !bayData.requestedPackage;
+
+      if (alreadyAvailable) {
+        return res.status(200).json({
+          success: true,
+          mqttOk: false,
+          reason: "already_available",
+          message: "Peron zaten serbest.",
+        });
+      }
+
+      const canCancel =
+        !bayData.currentSessionId &&
+        ["waiting", "starting", "available"].includes(bayData.status) &&
+        (!bayData.lastUserId || bayData.lastUserId === req.user.uid);
+
+      if (!canCancel) {
+        safeLog(
+          `🚨 YETKİSİZ İPTAL DENEMESİ: ${req.user.uid}, Peron: ${bayId}, status=${bayData.status}, lastUserId=${bayData.lastUserId || "yok"}`,
+        );
+
+        return res.status(403).json({
+          error:
+            "Bu peronu iptal etme yetkiniz yok veya peron şu an iptal edilebilir durumda değil.",
+        });
+      }
+
+      const cancelResult = await clearWaitingBayAfterCancel(
+        bayId,
+        req.user.uid,
+      );
+
+      return res.status(200).json({
+        success:
+          cancelResult.cleared || cancelResult.reason === "already_available",
+        mqttOk: cancelResult.commandSent || false,
+        reason: cancelResult.reason,
+        message:
+          cancelResult.reason === "already_available"
+            ? "Peron zaten serbest."
+            : cancelResult.commandSent
+              ? "Peron başarıyla serbest bırakıldı."
+              : "Peron veritabanında serbest bırakıldı.",
+      });
+    } catch (error) {
+      safeLog(`❌ Cancel Waiting Hatası: ${error.message}`);
+
+      return res.status(500).json({
+        error: "Sunucu hatası, işlem iptal edilemedi.",
+      });
+    }
+  },
+);
+
+// ---------------------------------------------------------
+// OTURUMU MANUEL DURDURMA
+// ---------------------------------------------------------
+app.post(
+  "/api/stop-session",
+  verifyUser,
+  validateRequestBody(stopSessionSchema),
+  async (req, res) => {
+    const { bayId, sessionId } = req.validatedBody;
+    const uid = req.user.uid;
+
+    try {
+      const sessionRef = db.collection("sessions").doc(sessionId);
+      const bayRef = rtdb.ref(`bays/${bayId}`);
+
+      const [sessionDoc, baySnap] = await Promise.all([
+        sessionRef.get(),
+        bayRef.once("value"),
+      ]);
+
+      if (!sessionDoc.exists) {
+        return res.status(404).json({ error: "Oturum bulunamadı." });
+      }
+
+      if (!baySnap.exists()) {
+        return res.status(404).json({ error: "Peron bulunamadı." });
+      }
+
+      const session = sessionDoc.data();
+      const bayData = baySnap.val() || {};
+
+      if (session.userId !== uid) {
+        safeLog(
+          `🚨 YETKİSİZ OTURUM DURDURMA DENEMESİ: Saldırgan=${uid}, Session=${sessionId}, SessionUser=${session.userId || "yok"}`,
+        );
+
+        return res.status(403).json({
+          error: "Bu oturumu durdurma yetkiniz yok.",
+        });
+      }
+
+      if (session.bayId !== bayId) {
+        safeLog(
+          `🚨 BAY/SESSION EŞLEŞME HATASI: User=${uid}, İstekBay=${bayId}, SessionBay=${session.bayId}, Session=${sessionId}`,
+        );
+
+        return res.status(400).json({
+          error: "Oturum ve peron bilgisi eşleşmiyor.",
+        });
+      }
+
+      if (session.status !== "running") {
+        return res.status(409).json({
+          error: "Bu oturum zaten aktif değil.",
+        });
+      }
+
+      if (bayData.currentSessionId !== sessionId) {
+        safeLog(
+          `🚨 AKTİF SESSION EŞLEŞMİYOR: User=${uid}, Bay=${bayId}, İstekSession=${sessionId}, BaySession=${bayData.currentSessionId || "yok"}`,
+        );
+
+        return res.status(409).json({
+          error: "Bu peronda belirtilen oturum aktif değil.",
+        });
+      }
+
+      if (bayData.lastUserId !== uid) {
+        safeLog(
+          `🚨 BAY KULLANICI EŞLEŞMİYOR: User=${uid}, Bay=${bayId}, BayLastUser=${bayData.lastUserId || "yok"}`,
+        );
+
+        return res.status(403).json({
+          error: "Bu peronu yönetme yetkiniz yok.",
+        });
+      }
+
+      await sessionRef.update({
+        status: "ended",
+        endedAt: admin.firestore.FieldValue.serverTimestamp(),
+        endedReason: "user_stopped",
+      });
 
       await clearBaySessionFields(bayId, {
         status: "waiting",
       });
 
+      const mqttOk = await safeSendBayCommand(bayId, "WAITING");
+
       safeLog(
-        `💸 MQTT BAŞLATMA HATASI: ${bayId} başlatılamadı. ` +
-        `Session: ${newSessionId}. ` +
-        `İade: ${refundResult.refunded
-          ? `${refundResult.tokens} jeton`
-          : refundResult.reason
-        }`,
+        `⛔ MANUEL DURDURMA BAŞARILI: User=${uid}, Bay=${bayId}, Session=${sessionId}`,
       );
 
-      return res.status(503).json({
-        success: false,
-        mqttOk: false,
-        refunded: refundResult.refunded,
-        refundedTokens: refundResult.tokens || 0,
-        sessionId: newSessionId,
-        error: refundResult.refunded
-          ? "Makine başlatılamadı. Kesilen jetonlar hesabınıza iade edildi."
-          : "Makine başlatılamadı. İade işlemi kontrol edilmeli.",
-      });
-    }
-
-    safeLog(
-      `✅ BAŞARILI: ${bayId} başlatıldı. Süre: ${finalDurationSec} sn, Kesilen: ${finalTokensCost} jeton`,
-    );
-
-    return res.status(200).json({
-      success: true,
-      mqttOk: true,
-      sessionId: newSessionId,
-      message: "Makine başlatıldı.",
-    });
-  } catch (error) {
-    if (bayReserved && !newSessionId) {
-      try {
-        await clearBaySessionFields(bayId, {
-          status: "available",
-        });
-
-        await safeSendBayCommand(bayId, "AVAILABLE");
-      } catch (rollbackError) {
-        safeLog(`❌ Peron rollback hatası: ${rollbackError.message}`);
-      }
-    }
-
-    if (error.message === "Engellenmis_Kullanici") {
-      safeLog(
-        `🚨 GÜVENLİK İHLALİ: Engelli kullanıcı (${uid}) işlem yapmayı denedi!`,
-      );
-
-      return res.status(403).json({
-        error: "Hesabınız askıya alındığı için işlem yapamazsınız.",
-      });
-    }
-
-    if (error.message === "Yetersiz_Bakiye") {
-      return res.status(400).json({
-        error: "Jeton bakiyeniz yetersiz.",
-      });
-    }
-
-    if (error.message === "Paket_Bulunamadi") {
-      const baySnap = await rtdb.ref(`bays/${bayId}`).once("value");
-      const bayData = baySnap.val();
-
-      if (
-        !bayData ||
-        (!bayData.currentSessionId &&
-          ["available", "waiting", "starting"].includes(bayData.status))
-      ) {
-        safeLog(
-          `ℹ️ Paket bulunamadı ama akış iptal sayıldı: User=${uid}, Bay=${bayId}, packageId=${packageId}`,
-        );
-
-        return res.status(200).json({
-          success: false,
-          cancelled: true,
-          code: "operation_cancelled",
-          message: "İşlem iptal edildi.",
-        });
-      }
-
-      return res.status(404).json({
-        error: "İstenilen paket sistemde bulunamadı.",
-      });
-    }
-
-    if (error.message === "Gecersiz_Paket_Degerleri") {
-      return res.status(500).json({
-        error: "Sistemdeki paket değerleri hatalı. Lütfen yöneticiye bildirin.",
-      });
-    }
-
-    if (error.message === "Kullanıcı_Bulunamadi") {
-      return res.status(404).json({
-        error: "Kullanıcı bulunamadı.",
-      });
-    }
-
-    safeLog(`❌ Başlatma hatası: ${error.message}`);
-
-    return res.status(500).json({
-      error: "Sunucu hatası.",
-    });
-  }
-});
-
-// ---------------------------------------------------------
-// PERONDAN MANUEL ÇIKIŞ
-// ---------------------------------------------------------
-app.post("/api/cancel-waiting", verifyUser, validateRequestBody(cancelWaitingSchema), async (req, res) => {
-  const { bayId } = req.validatedBody;
-
-  try {
-    const bayRef = rtdb.ref(`bays/${bayId}`);
-    const baySnap = await bayRef.once("value");
-    const bayData = baySnap.val();
-
-    if (!bayData) {
-      return res.status(404).json({ error: "Peron bulunamadı." });
-    }
-
-    if (bayData.currentSessionId) {
-      safeLog(
-        `🚨 AKTİF SESSION VARKEN İPTAL DENEMESİ: ${req.user.uid}, Peron: ${bayId}`,
-      );
-
-      return res.status(409).json({
-        error: "Aktif oturum varken peron iptal edilemez.",
-      });
-    }
-
-    const alreadyAvailable =
-      bayData.status === "available" &&
-      !bayData.currentSessionId &&
-      !bayData.lastUserId &&
-      !bayData.requestedPackage;
-
-    if (alreadyAvailable) {
       return res.status(200).json({
         success: true,
-        mqttOk: false,
-        reason: "already_available",
-        message: "Peron zaten serbest.",
+        mqttOk,
+        message: "Oturum durduruldu.",
       });
+    } catch (error) {
+      safeLog(`❌ Durdurma hatası: ${error.message}`);
+      return res.status(500).json({ error: "Sunucu hatası." });
     }
-
-    const canCancel =
-      !bayData.currentSessionId &&
-      ["waiting", "starting", "available"].includes(bayData.status) &&
-      (!bayData.lastUserId || bayData.lastUserId === req.user.uid);
-
-    if (!canCancel) {
-      safeLog(
-        `🚨 YETKİSİZ İPTAL DENEMESİ: ${req.user.uid}, Peron: ${bayId}, status=${bayData.status}, lastUserId=${bayData.lastUserId || "yok"}`,
-      );
-
-      return res.status(403).json({
-        error:
-          "Bu peronu iptal etme yetkiniz yok veya peron şu an iptal edilebilir durumda değil.",
-      });
-    }
-
-    const cancelResult = await clearWaitingBayAfterCancel(bayId, req.user.uid);
-
-    return res.status(200).json({
-      success:
-        cancelResult.cleared || cancelResult.reason === "already_available",
-      mqttOk: cancelResult.commandSent || false,
-      reason: cancelResult.reason,
-      message:
-        cancelResult.reason === "already_available"
-          ? "Peron zaten serbest."
-          : cancelResult.commandSent
-            ? "Peron başarıyla serbest bırakıldı."
-            : "Peron veritabanında serbest bırakıldı.",
-    });
-  } catch (error) {
-    safeLog(`❌ Cancel Waiting Hatası: ${error.message}`);
-
-    return res.status(500).json({
-      error: "Sunucu hatası, işlem iptal edilemedi.",
-    });
-  }
-});
-
-// ---------------------------------------------------------
-// OTURUMU MANUEL DURDURMA
-// ---------------------------------------------------------
-app.post("/api/stop-session", verifyUser, validateRequestBody(stopSessionSchema), async (req, res) => {
-  const { bayId, sessionId } = req.validatedBody;
-  const uid = req.user.uid;
-
-  try {
-    const sessionRef = db.collection("sessions").doc(sessionId);
-    const bayRef = rtdb.ref(`bays/${bayId}`);
-
-    const [sessionDoc, baySnap] = await Promise.all([
-      sessionRef.get(),
-      bayRef.once("value"),
-    ]);
-
-    if (!sessionDoc.exists) {
-      return res.status(404).json({ error: "Oturum bulunamadı." });
-    }
-
-    if (!baySnap.exists()) {
-      return res.status(404).json({ error: "Peron bulunamadı." });
-    }
-
-    const session = sessionDoc.data();
-    const bayData = baySnap.val() || {};
-
-    if (session.userId !== uid) {
-      safeLog(
-        `🚨 YETKİSİZ OTURUM DURDURMA DENEMESİ: Saldırgan=${uid}, Session=${sessionId}, SessionUser=${session.userId || "yok"}`,
-      );
-
-      return res.status(403).json({
-        error: "Bu oturumu durdurma yetkiniz yok.",
-      });
-    }
-
-    if (session.bayId !== bayId) {
-      safeLog(
-        `🚨 BAY/SESSION EŞLEŞME HATASI: User=${uid}, İstekBay=${bayId}, SessionBay=${session.bayId}, Session=${sessionId}`,
-      );
-
-      return res.status(400).json({
-        error: "Oturum ve peron bilgisi eşleşmiyor.",
-      });
-    }
-
-    if (session.status !== "running") {
-      return res.status(409).json({
-        error: "Bu oturum zaten aktif değil.",
-      });
-    }
-
-    if (bayData.currentSessionId !== sessionId) {
-      safeLog(
-        `🚨 AKTİF SESSION EŞLEŞMİYOR: User=${uid}, Bay=${bayId}, İstekSession=${sessionId}, BaySession=${bayData.currentSessionId || "yok"}`,
-      );
-
-      return res.status(409).json({
-        error: "Bu peronda belirtilen oturum aktif değil.",
-      });
-    }
-
-    if (bayData.lastUserId !== uid) {
-      safeLog(
-        `🚨 BAY KULLANICI EŞLEŞMİYOR: User=${uid}, Bay=${bayId}, BayLastUser=${bayData.lastUserId || "yok"}`,
-      );
-
-      return res.status(403).json({
-        error: "Bu peronu yönetme yetkiniz yok.",
-      });
-    }
-
-    await sessionRef.update({
-      status: "ended",
-      endedAt: admin.firestore.FieldValue.serverTimestamp(),
-      endedReason: "user_stopped",
-    });
-
-    await clearBaySessionFields(bayId, {
-      status: "waiting",
-    });
-
-    const mqttOk = await safeSendBayCommand(bayId, "WAITING");
-
-    safeLog(
-      `⛔ MANUEL DURDURMA BAŞARILI: User=${uid}, Bay=${bayId}, Session=${sessionId}`,
-    );
-
-    return res.status(200).json({
-      success: true,
-      mqttOk,
-      message: "Oturum durduruldu.",
-    });
-  } catch (error) {
-    safeLog(`❌ Durdurma hatası: ${error.message}`);
-    return res.status(500).json({ error: "Sunucu hatası." });
-  }
-});
+  },
+);
 
 // ---------------------------------------------------------
 // IYZICO CHECKOUT FORM BAŞLATMA
 // ---------------------------------------------------------
-app.post("/api/topup", verifyUser, validateRequestBody(topupSchema), async (req, res) => {
-  const uid = req.user.uid;
-  const eklenecekJeton = req.validatedBody.tokens;
+app.post(
+  "/api/topup",
+  verifyUser,
+  validateRequestBody(topupSchema),
+  async (req, res) => {
+    const uid = req.user.uid;
+    const eklenecekJeton = req.validatedBody.tokens;
 
-  try {
-    const jetonPackageDoc = await db.collection("packages").doc("jeton").get();
+    try {
+      const jetonPackageDoc = await db
+        .collection("packages")
+        .doc("jeton")
+        .get();
 
-    if (!jetonPackageDoc.exists) {
-      return res.status(500).json({
-        error: "Jeton fiyat ayarı bulunamadı.",
-      });
-    }
+      if (!jetonPackageDoc.exists) {
+        return res.status(500).json({
+          error: "Jeton fiyat ayarı bulunamadı.",
+        });
+      }
 
-    const jetonFiyat = Number(jetonPackageDoc.data().jetonFiyat || 0);
+      const jetonFiyat = Number(jetonPackageDoc.data().jetonFiyat || 0);
 
-    if (!Number.isFinite(jetonFiyat) || jetonFiyat <= 0) {
-      return res.status(500).json({
-        error: "Jeton fiyat ayarı hatalı.",
-      });
-    }
+      if (!Number.isFinite(jetonFiyat) || jetonFiyat <= 0) {
+        return res.status(500).json({
+          error: "Jeton fiyat ayarı hatalı.",
+        });
+      }
 
-    const eklenecekTutar = eklenecekJeton * jetonFiyat;
-    const userRef = db.collection("users").doc(uid);
-    const userDoc = await userRef.get();
+      const eklenecekTutar = eklenecekJeton * jetonFiyat;
+      const userRef = db.collection("users").doc(uid);
+      const userDoc = await userRef.get();
 
-    if (!userDoc.exists) {
-      return res.status(404).json({ error: "Kullanıcı bulunamadı." });
-    }
+      if (!userDoc.exists) {
+        return res.status(404).json({ error: "Kullanıcı bulunamadı." });
+      }
 
-    if (userDoc.data().isBlocked === true) {
-      return res.status(403).json({
-        error: "Hesabınız askıya alındığı için bakiye yükleyemezsiniz.",
-      });
-    }
+      if (userDoc.data().isBlocked === true) {
+        return res.status(403).json({
+          error: "Hesabınız askıya alındığı için bakiye yükleyemezsiniz.",
+        });
+      }
 
-    const orderRef = db.collection("topupOrders").doc();
+      const orderRef = db.collection("topupOrders").doc();
 
-    await orderRef.set({
-      userId: uid,
-      tokens: eklenecekJeton,
-      unitPriceTRY: jetonFiyat,
-      amountTRY: eklenecekTutar,
-      status: "pending",
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
-    });
-
-    const callbackUrl = `${APP_BASE_URL}/api/topup-callback?orderId=${orderRef.id}`;
-
-    const buyerIp = getClientIp(req);
-
-    if (!buyerIp) {
-      await orderRef.update({
-        status: "ip_missing",
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      await orderRef.set({
+        userId: uid,
+        tokens: eklenecekJeton,
+        unitPriceTRY: jetonFiyat,
+        amountTRY: eklenecekTutar,
+        status: "pending",
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
       });
 
-      return res.status(400).json({
-        error: "Kullanıcı IP adresi alınamadı.",
-      });
-    }
+      const callbackUrl = `${APP_BASE_URL}/api/topup-callback?orderId=${orderRef.id}`;
 
-    const iyzicoRequest = {
-      locale: Iyzipay.LOCALE.TR,
-      conversationId: orderRef.id,
-      price: eklenecekTutar.toString(),
-      paidPrice: eklenecekTutar.toString(),
-      currency: Iyzipay.CURRENCY.TRY,
-      installment: "1",
-      basketId: orderRef.id,
-      paymentChannel: Iyzipay.PAYMENT_CHANNEL.MOBILE,
-      callbackUrl,
+      const buyerIp = getClientIp(req);
 
-      buyer: {
-        id: uid,
-        name: userDoc.data().ad || "QWash",
-        surname: userDoc.data().soyad || "Müşterisi",
-        gsmNumber: userDoc.data().telefon || "+905555555555",
-        email: req.user.email || "user@qwash.com",
-        identityNumber: "11111111111",
-        lastLoginDate: "2026-01-01 12:00:00",
-        registrationDate: "2026-01-01 12:00:00",
-        registrationAddress: "QWash Mobil",
-        ip: buyerIp,
-        city: "Istanbul",
-        country: "Turkey",
-        zipCode: "34000",
-      },
+      if (!buyerIp) {
+        await orderRef.update({
+          status: "ip_missing",
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
 
-      shippingAddress: {
-        contactName: "QWash Müşterisi",
-        city: "Istanbul",
-        country: "Turkey",
-        address: "QWash Mobil Uygulaması",
-        zipCode: "34000",
-      },
+        return res.status(400).json({
+          error: "Kullanıcı IP adresi alınamadı.",
+        });
+      }
 
-      billingAddress: {
-        contactName: "QWash Müşterisi",
-        city: "Istanbul",
-        country: "Turkey",
-        address: "QWash Mobil Uygulaması",
-        zipCode: "34000",
-      },
+      const iyzicoRequest = {
+        locale: Iyzipay.LOCALE.TR,
+        conversationId: orderRef.id,
+        price: eklenecekTutar.toString(),
+        paidPrice: eklenecekTutar.toString(),
+        currency: Iyzipay.CURRENCY.TRY,
+        installment: "1",
+        basketId: orderRef.id,
+        paymentChannel: Iyzipay.PAYMENT_CHANNEL.MOBILE,
+        callbackUrl,
 
-      basketItems: [
-        {
-          id: "JETON_PK_" + eklenecekJeton,
-          name: `${eklenecekJeton} Adet QWash Jetonu`,
-          category1: "Uygulama İçi Satın Alma",
-          itemType: Iyzipay.BASKET_ITEM_TYPE.VIRTUAL,
-          price: eklenecekTutar.toString(),
+        buyer: {
+          id: uid,
+          name: userDoc.data().ad || "QWash",
+          surname: userDoc.data().soyad || "Müşterisi",
+          gsmNumber: userDoc.data().telefon || "+905555555555",
+          email: req.user.email || "user@qwash.com",
+          identityNumber: "11111111111",
+          lastLoginDate: "2026-01-01 12:00:00",
+          registrationDate: "2026-01-01 12:00:00",
+          registrationAddress: "QWash Mobil",
+          ip: buyerIp,
+          city: "Istanbul",
+          country: "Turkey",
+          zipCode: "34000",
         },
-      ],
-    };
 
-    const result = await initializeIyzicoCheckoutForm(iyzicoRequest);
+        shippingAddress: {
+          contactName: "QWash Müşterisi",
+          city: "Istanbul",
+          country: "Turkey",
+          address: "QWash Mobil Uygulaması",
+          zipCode: "34000",
+        },
 
-    if (!result || result.status === "failure") {
+        billingAddress: {
+          contactName: "QWash Müşterisi",
+          city: "Istanbul",
+          country: "Turkey",
+          address: "QWash Mobil Uygulaması",
+          zipCode: "34000",
+        },
+
+        basketItems: [
+          {
+            id: "JETON_PK_" + eklenecekJeton,
+            name: `${eklenecekJeton} Adet QWash Jetonu`,
+            category1: "Uygulama İçi Satın Alma",
+            itemType: Iyzipay.BASKET_ITEM_TYPE.VIRTUAL,
+            price: eklenecekTutar.toString(),
+          },
+        ],
+      };
+
+      const result = await initializeIyzicoCheckoutForm(iyzicoRequest);
+
+      if (!result || result.status === "failure") {
+        await orderRef.update({
+          status: "init_failed",
+          errorMessage: result?.errorMessage || "Iyzico yanıtı geçersiz.",
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+
+        safeLog(
+          `❌ Iyzico Form Başlatılamadı: ${
+            result?.errorMessage || "Iyzico yanıtı geçersiz."
+          }`,
+        );
+
+        return res.status(400).json({
+          error: "Ödeme oturumu başlatılamadı.",
+        });
+      }
+
       await orderRef.update({
-        status: "init_failed",
-        errorMessage: result?.errorMessage || "Iyzico yanıtı geçersiz.",
+        iyzicoCheckoutToken: result.token || null,
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       });
 
-      safeLog(
-        `❌ Iyzico Form Başlatılamadı: ${result?.errorMessage || "Iyzico yanıtı geçersiz."
-        }`,
-      );
-
-      return res.status(400).json({
-        error: "Ödeme oturumu başlatılamadı.",
+      return res.status(200).json({
+        success: true,
+        paymentUrl: result.paymentPageUrl,
       });
+    } catch (error) {
+      safeLog(`❌ Sunucu Ödeme Hatası: ${error.message}`);
+      return res.status(500).json({ error: "Sunucu hatası." });
     }
-
-    await orderRef.update({
-      iyzicoCheckoutToken: result.token || null,
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-    });
-
-    return res.status(200).json({
-      success: true,
-      paymentUrl: result.paymentPageUrl,
-    });
-  } catch (error) {
-    safeLog(`❌ Sunucu Ödeme Hatası: ${error.message}`);
-    return res.status(500).json({ error: "Sunucu hatası." });
-  }
-});
+  },
+);
 
 // ---------------------------------------------------------
 // IYZICO CALLBACK
 // ---------------------------------------------------------
-app.post("/api/topup-callback", validateRequestBody(topupCallbackBodySchema), validateRequestQuery(topupCallbackQuerySchema), async (req, res) => {
-  const { token } = req.validatedBody;
-  const { orderId } = req.validatedQuery;
+app.post(
+  "/api/topup-callback",
+  validateRequestBody(topupCallbackBodySchema),
+  validateRequestQuery(topupCallbackQuerySchema),
+  async (req, res) => {
+    const { token } = req.validatedBody;
+    const { orderId } = req.validatedQuery;
 
-  if (!token || !orderId) {
-    return res.status(400).send("<h1>Geçersiz İstek</h1>");
-  }
-
-  const orderRef = db.collection("topupOrders").doc(orderId);
-
-  try {
-    const orderDoc = await orderRef.get();
-
-    if (!orderDoc.exists) {
-      safeLog(`🚨 Geçersiz ödeme callback orderId: ${orderId}`);
-      return res.status(404).send("<h1>Sipariş bulunamadı.</h1>");
+    if (!token || !orderId) {
+      return res.status(400).send("<h1>Geçersiz İstek</h1>");
     }
 
-    const order = orderDoc.data();
+    const orderRef = db.collection("topupOrders").doc(orderId);
 
-    if (order.status !== "pending") {
-      safeLog(`ℹ️ Tekrarlanan callback engellendi. Order: ${orderId}`);
+    try {
+      const orderDoc = await orderRef.get();
 
-      return res.send(`
+      if (!orderDoc.exists) {
+        safeLog(`🚨 Geçersiz ödeme callback orderId: ${orderId}`);
+        return res.status(404).send("<h1>Sipariş bulunamadı.</h1>");
+      }
+
+      const order = orderDoc.data();
+
+      if (order.status !== "pending") {
+        safeLog(`ℹ️ Tekrarlanan callback engellendi. Order: ${orderId}`);
+
+        return res.send(`
         <html lang="tr">
           <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
           <body style="text-align:center; padding-top:50px; font-family:sans-serif;">
@@ -2216,30 +2276,30 @@ app.post("/api/topup-callback", validateRequestBody(topupCallbackBodySchema), va
           </body>
         </html>
       `);
-    }
+      }
 
-    const result = await retrieveIyzicoCheckoutForm({
-      locale: Iyzipay.LOCALE.TR,
-      conversationId: orderId,
-      token,
-    });
-
-    if (
-      !result ||
-      result.status !== "success" ||
-      result.paymentStatus !== "SUCCESS"
-    ) {
-      await orderRef.update({
-        status: "failed",
-        iyzicoStatus: result?.status || null,
-        iyzicoPaymentStatus: result?.paymentStatus || null,
-        errorMessage: result?.errorMessage || null,
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      const result = await retrieveIyzicoCheckoutForm({
+        locale: Iyzipay.LOCALE.TR,
+        conversationId: orderId,
+        token,
       });
 
-      safeLog(`❌ Ödeme Başarısız veya İptal Edildi. Order: ${orderId}`);
+      if (
+        !result ||
+        result.status !== "success" ||
+        result.paymentStatus !== "SUCCESS"
+      ) {
+        await orderRef.update({
+          status: "failed",
+          iyzicoStatus: result?.status || null,
+          iyzicoPaymentStatus: result?.paymentStatus || null,
+          errorMessage: result?.errorMessage || null,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
 
-      return res.send(`
+        safeLog(`❌ Ödeme Başarısız veya İptal Edildi. Order: ${orderId}`);
+
+        return res.send(`
             <html lang="tr">
               <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
               <body style="text-align:center; padding-top:50px; font-family:sans-serif; background-color:#fff3f3;">
@@ -2249,22 +2309,22 @@ app.post("/api/topup-callback", validateRequestBody(topupCallbackBodySchema), va
               </body>
             </html>
           `);
-    }
+      }
 
-    if (result.conversationId !== orderId || result.basketId !== orderId) {
-      await orderRef.update({
-        status: "iyzico_order_mismatch",
-        iyzicoConversationId: result.conversationId || null,
-        iyzicoBasketId: result.basketId || null,
-        paymentId: result.paymentId || null,
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      });
+      if (result.conversationId !== orderId || result.basketId !== orderId) {
+        await orderRef.update({
+          status: "iyzico_order_mismatch",
+          iyzicoConversationId: result.conversationId || null,
+          iyzicoBasketId: result.basketId || null,
+          paymentId: result.paymentId || null,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
 
-      safeLog(
-        `🚨 IYZICO ORDER UYUŞMAZLIĞI: Order=${orderId}, Conversation=${result.conversationId}, Basket=${result.basketId}`,
-      );
+        safeLog(
+          `🚨 IYZICO ORDER UYUŞMAZLIĞI: Order=${orderId}, Conversation=${result.conversationId}, Basket=${result.basketId}`,
+        );
 
-      return res.status(400).send(`
+        return res.status(400).send(`
             <html lang="tr">
               <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
               <body style="text-align:center; padding-top:50px; font-family:sans-serif; background-color:#fff3f3;">
@@ -2274,35 +2334,35 @@ app.post("/api/topup-callback", validateRequestBody(topupCallbackBodySchema), va
               </body>
             </html>
           `);
-    }
+      }
 
-    const toKurus = (value) => Math.round(Number(value) * 100);
+      const toKurus = (value) => Math.round(Number(value) * 100);
 
-    const expectedAmount = Number(order.amountTRY);
-    const paidPrice = Number(result.paidPrice);
-    const expectedKurus = toKurus(order.amountTRY);
-    const paidKurus = toKurus(result.paidPrice);
+      const expectedAmount = Number(order.amountTRY);
+      const paidPrice = Number(result.paidPrice);
+      const expectedKurus = toKurus(order.amountTRY);
+      const paidKurus = toKurus(result.paidPrice);
 
-    if (
-      !Number.isFinite(expectedAmount) ||
-      !Number.isFinite(paidPrice) ||
-      expectedKurus !== paidKurus
-    ) {
-      await orderRef.update({
-        status: "amount_mismatch",
-        expectedAmountTRY: expectedAmount,
-        expectedKurus,
-        iyzicoPaidPrice: result.paidPrice || null,
-        iyzicoPaidKurus: paidKurus,
-        paymentId: result.paymentId || null,
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      });
+      if (
+        !Number.isFinite(expectedAmount) ||
+        !Number.isFinite(paidPrice) ||
+        expectedKurus !== paidKurus
+      ) {
+        await orderRef.update({
+          status: "amount_mismatch",
+          expectedAmountTRY: expectedAmount,
+          expectedKurus,
+          iyzicoPaidPrice: result.paidPrice || null,
+          iyzicoPaidKurus: paidKurus,
+          paymentId: result.paymentId || null,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
 
-      safeLog(
-        `🚨 IYZICO TUTAR UYUŞMAZLIĞI: Order=${orderId}, Expected=${expectedAmount}, Paid=${result.paidPrice}`,
-      );
+        safeLog(
+          `🚨 IYZICO TUTAR UYUŞMAZLIĞI: Order=${orderId}, Expected=${expectedAmount}, Paid=${result.paidPrice}`,
+        );
 
-      return res.status(400).send(`
+        return res.status(400).send(`
             <html lang="tr">
               <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
               <body style="text-align:center; padding-top:50px; font-family:sans-serif; background-color:#fff3f3;">
@@ -2312,67 +2372,67 @@ app.post("/api/topup-callback", validateRequestBody(topupCallbackBodySchema), va
               </body>
             </html>
           `);
-    }
+      }
 
-    try {
-      await db.runTransaction(async (t) => {
-        const freshOrderDoc = await t.get(orderRef);
+      try {
+        await db.runTransaction(async (t) => {
+          const freshOrderDoc = await t.get(orderRef);
 
-        if (!freshOrderDoc.exists) {
-          throw new Error("Order_Bulunamadi");
-        }
+          if (!freshOrderDoc.exists) {
+            throw new Error("Order_Bulunamadi");
+          }
 
-        const freshOrder = freshOrderDoc.data();
+          const freshOrder = freshOrderDoc.data();
 
-        if (freshOrder.status !== "pending") {
-          throw new Error("Order_Zaten_Islendi");
-        }
+          if (freshOrder.status !== "pending") {
+            throw new Error("Order_Zaten_Islendi");
+          }
 
-        const userRef = db.collection("users").doc(freshOrder.userId);
-        const userDoc = await t.get(userRef);
+          const userRef = db.collection("users").doc(freshOrder.userId);
+          const userDoc = await t.get(userRef);
 
-        if (!userDoc.exists) {
-          throw new Error("Kullanici_Bulunamadi");
-        }
+          if (!userDoc.exists) {
+            throw new Error("Kullanici_Bulunamadi");
+          }
 
-        const tokensToAdd = Number(freshOrder.tokens);
-        const amountTRY = Number(freshOrder.amountTRY);
-        const mevcutBakiye = Number(userDoc.data().walletTokens || 0);
+          const tokensToAdd = Number(freshOrder.tokens);
+          const amountTRY = Number(freshOrder.amountTRY);
+          const mevcutBakiye = Number(userDoc.data().walletTokens || 0);
 
-        t.update(userRef, {
-          walletTokens: mevcutBakiye + tokensToAdd,
-          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          t.update(userRef, {
+            walletTokens: mevcutBakiye + tokensToAdd,
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          });
+
+          t.update(orderRef, {
+            status: "success",
+            paymentId: result.paymentId || null,
+            iyzicoPaidPrice: result.paidPrice || null,
+            iyzicoPrice: result.price || null,
+            iyzicoConversationId: result.conversationId || null,
+            iyzicoBasketId: result.basketId || null,
+            completedAt: admin.firestore.FieldValue.serverTimestamp(),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          });
+
+          t.set(db.collection("transactions").doc(), {
+            type: "topup",
+            status: "success",
+            paymentId: result.paymentId || null,
+            orderId,
+            tokens: tokensToAdd,
+            unitPriceTRY: amountTRY / tokensToAdd,
+            amountTRY,
+            userId: freshOrder.userId,
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+          });
         });
 
-        t.update(orderRef, {
-          status: "success",
-          paymentId: result.paymentId || null,
-          iyzicoPaidPrice: result.paidPrice || null,
-          iyzicoPrice: result.price || null,
-          iyzicoConversationId: result.conversationId || null,
-          iyzicoBasketId: result.basketId || null,
-          completedAt: admin.firestore.FieldValue.serverTimestamp(),
-          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        });
+        safeLog(
+          `✅ CHECKOUT ÖDEMESİ BAŞARILI: Order=${orderId}, ${order.userId} -> ${order.tokens} jeton yüklendi.`,
+        );
 
-        t.set(db.collection("transactions").doc(), {
-          type: "topup",
-          status: "success",
-          paymentId: result.paymentId || null,
-          orderId,
-          tokens: tokensToAdd,
-          unitPriceTRY: amountTRY / tokensToAdd,
-          amountTRY,
-          userId: freshOrder.userId,
-          createdAt: admin.firestore.FieldValue.serverTimestamp(),
-        });
-      });
-
-      safeLog(
-        `✅ CHECKOUT ÖDEMESİ BAŞARILI: Order=${orderId}, ${order.userId} -> ${order.tokens} jeton yüklendi.`,
-      );
-
-      return res.send(`
+        return res.send(`
             <html lang="tr">
               <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
               <body style="text-align:center; padding-top:50px; font-family:sans-serif; background-color:#f4fbf7;">
@@ -2382,9 +2442,9 @@ app.post("/api/topup-callback", validateRequestBody(topupCallbackBodySchema), va
               </body>
             </html>
           `);
-    } catch (dbError) {
-      if (dbError.message === "Order_Zaten_Islendi") {
-        return res.send(`
+      } catch (dbError) {
+        if (dbError.message === "Order_Zaten_Islendi") {
+          return res.send(`
               <html lang="tr">
                 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
                 <body style="text-align:center; padding-top:50px; font-family:sans-serif;">
@@ -2393,21 +2453,22 @@ app.post("/api/topup-callback", validateRequestBody(topupCallbackBodySchema), va
                 </body>
               </html>
             `);
+        }
+
+        safeLog(`❌ Ödeme alındı ama DB yazma hatası: ${dbError.message}`);
+
+        return res
+          .status(500)
+          .send(
+            "<h1>Ödeme Alındı fakat bir veritabanı hatası oluştu. Lütfen destekle iletişime geçin.</h1>",
+          );
       }
-
-      safeLog(`❌ Ödeme alındı ama DB yazma hatası: ${dbError.message}`);
-
-      return res
-        .status(500)
-        .send(
-          "<h1>Ödeme Alındı fakat bir veritabanı hatası oluştu. Lütfen destekle iletişime geçin.</h1>",
-        );
+    } catch (error) {
+      safeLog(`❌ Callback sunucu hatası: ${error.message}`);
+      return res.status(500).send("<h1>Sunucu hatası oluştu.</h1>");
     }
-  } catch (error) {
-    safeLog(`❌ Callback sunucu hatası: ${error.message}`);
-    return res.status(500).send("<h1>Sunucu hatası oluştu.</h1>");
-  }
-});
+  },
+);
 
 // ---------------------------------------------------------
 // ADMIN BAY LISTESI
@@ -2437,286 +2498,340 @@ app.get("/api/admin/bays", verifyAdmin, async (req, res) => {
 // ---------------------------------------------------------
 // ADMIN BAY UPDATE
 // ---------------------------------------------------------
-app.post("/api/admin/update-bay", verifyAdmin, validateRequestBody(adminUpdateBaySchema), async (req, res) => {
-  const { bayId, patch } = req.validatedBody;
+app.post(
+  "/api/admin/update-bay",
+  verifyAdmin,
+  validateRequestBody(adminUpdateBaySchema),
+  async (req, res) => {
+    const { bayId, patch } = req.validatedBody;
 
-  try {
-    const allowedPatch = {};
+    try {
+      const allowedPatch = {};
 
-    if (patch.status !== undefined) {
-      const allowedStatuses = [
+      if (patch.status !== undefined) {
+        const allowedStatuses = [
+          "available",
+          "waiting",
+          "offline",
+          "maintenance",
+        ];
+
+        if (!allowedStatuses.includes(patch.status)) {
+          return res.status(400).json({
+            error: "Geçersiz peron durumu.",
+          });
+        }
+
+        allowedPatch.status = patch.status;
+      }
+
+      if (patch.isActive !== undefined) {
+        if (typeof patch.isActive !== "boolean") {
+          return res.status(400).json({
+            error: "isActive boolean olmalıdır.",
+          });
+        }
+
+        allowedPatch.isActive = patch.isActive;
+      }
+
+      if (Object.keys(allowedPatch).length === 0) {
+        return res.status(400).json({
+          error: "Güncellenecek geçerli alan yok.",
+        });
+      }
+
+      let adminSessionCloseResult = null;
+
+      const statusWillForceCloseSession = [
         "available",
-        "waiting",
         "offline",
         "maintenance",
-      ];
+      ].includes(allowedPatch.status);
 
-      if (!allowedStatuses.includes(patch.status)) {
-        return res.status(400).json({
-          error: "Geçersiz peron durumu.",
-        });
+      if (statusWillForceCloseSession) {
+        const baySnap = await rtdb.ref(`bays/${bayId}`).once("value");
+        const bayData = baySnap.val();
+
+        if (bayData?.currentSessionId) {
+          adminSessionCloseResult = await refundSessionIfNeeded(
+            bayData.currentSessionId,
+            `admin_set_${allowedPatch.status}`,
+          );
+
+          safeLog(
+            `🛠️ ADMIN PERON KAPATMA: ${bayId}, Session=${bayData.currentSessionId}, ` +
+              `Status=${allowedPatch.status}, Refund=${adminSessionCloseResult.refunded ? "yes" : "no"}, ` +
+              `Reason=${adminSessionCloseResult.reason || "ok"}`,
+          );
+        }
       }
 
-      allowedPatch.status = patch.status;
-    }
-
-    if (patch.isActive !== undefined) {
-      if (typeof patch.isActive !== "boolean") {
-        return res.status(400).json({
-          error: "isActive boolean olmalıdır.",
-        });
-      }
-
-      allowedPatch.isActive = patch.isActive;
-    }
-
-    if (Object.keys(allowedPatch).length === 0) {
-      return res.status(400).json({
-        error: "Güncellenecek geçerli alan yok.",
-      });
-    }
-
-    const guncellemeVerisi = {
-      ...allowedPatch,
-      updatedAt: admin.database.ServerValue.TIMESTAMP,
-    };
-
-    if (
-      allowedPatch.status === "available" ||
-      allowedPatch.status === "offline"
-    ) {
-      guncellemeVerisi.currentSessionId = null;
-      guncellemeVerisi.lastUserId = null;
-      guncellemeVerisi.requestedPackage = null;
-      guncellemeVerisi.durationSec = null;
-      guncellemeVerisi.tokensCost = null;
-    }
-
-    await rtdb.ref(`bays/${bayId}`).update(guncellemeVerisi);
-
-    let mqttOk = null;
-
-    if (allowedPatch.status) {
-      const statusCommandMap = {
-        available: "AVAILABLE",
-        waiting: "WAITING",
-        offline: "OFFLINE",
-        maintenance: "MAINTENANCE",
+      const guncellemeVerisi = {
+        ...allowedPatch,
+        updatedAt: admin.database.ServerValue.TIMESTAMP,
       };
 
-      const command = statusCommandMap[allowedPatch.status];
-
-      if (command) {
-        mqttOk = await safeSendBayCommand(bayId, command);
+      if (
+        allowedPatch.status === "available" ||
+        allowedPatch.status === "offline" ||
+        allowedPatch.status === "maintenance"
+      ) {
+        guncellemeVerisi.currentSessionId = null;
+        guncellemeVerisi.lastUserId = null;
+        guncellemeVerisi.requestedPackage = null;
+        guncellemeVerisi.durationSec = null;
+        guncellemeVerisi.tokensCost = null;
+        guncellemeVerisi.hardwareSelection = "";
+        guncellemeVerisi.pendingPackage = null;
+        guncellemeVerisi.pendingPackageSource = null;
+        guncellemeVerisi.pendingSelectionId = null;
+        guncellemeVerisi.pendingPackageAt = null;
       }
+
+      await rtdb.ref(`bays/${bayId}`).update(guncellemeVerisi);
+
+      let mqttOk = null;
+
+      if (allowedPatch.status) {
+        const statusCommandMap = {
+          available: "AVAILABLE",
+          waiting: "WAITING",
+          offline: "OFFLINE",
+          maintenance: "MAINTENANCE",
+        };
+
+        const command = statusCommandMap[allowedPatch.status];
+
+        if (command) {
+          mqttOk = await safeSendBayCommand(bayId, command);
+        }
+      }
+
+      if (allowedPatch.isActive === true) {
+        mqttOk = await safeSendBayCommand(bayId, "ACTIVE_ON");
+      }
+
+      if (allowedPatch.isActive === false) {
+        mqttOk = await safeSendBayCommand(bayId, "ACTIVE_OFF");
+      }
+
+      safeLog(
+        `🛠️ Peron Güncellendi: ${bayId} -> ${JSON.stringify(allowedPatch)}`,
+      );
+      return res.status(200).json({
+        success: true,
+        mqttOk,
+        adminSessionCloseResult,
+        message: "Peron güncellendi.",
+      });
+    } catch (error) {
+      safeLog(`❌ Bay Güncelleme Hatası: ${error.message}`);
+
+      if (res.headersSent) return;
+      return res.status(500).json({ error: "Güncelleme başarısız." });
     }
-
-    if (allowedPatch.isActive === true) {
-      mqttOk = await safeSendBayCommand(bayId, "ACTIVE_ON");
-    }
-
-    if (allowedPatch.isActive === false) {
-      mqttOk = await safeSendBayCommand(bayId, "ACTIVE_OFF");
-    }
-
-    safeLog(
-      `🛠️ Peron Güncellendi: ${bayId} -> ${JSON.stringify(allowedPatch)}`,
-    );
-
-    return res.status(200).json({
-      success: true,
-      mqttOk,
-      message: "Peron güncellendi.",
-    });
-  } catch (error) {
-    safeLog(`❌ Bay Güncelleme Hatası: ${error.message}`);
-
-    if (res.headersSent) return;
-    return res.status(500).json({ error: "Güncelleme başarısız." });
-  }
-});
+  },
+);
 
 // ---------------------------------------------------------
 // ADMIN USER SEARCH
 // ---------------------------------------------------------
-app.post("/api/admin/search-user", verifyAdmin, validateRequestBody(adminSearchUserSchema), async (req, res) => {
-  const { arama } = req.validatedBody;
+app.post(
+  "/api/admin/search-user",
+  verifyAdmin,
+  validateRequestBody(adminSearchUserSchema),
+  async (req, res) => {
+    const { arama } = req.validatedBody;
 
-  if (!arama) {
-    return res.status(400).json({ error: "Arama terimi boş olamaz." });
-  }
-
-  try {
-    const queryVal = arama.trim();
-
-    if (!queryVal) {
+    if (!arama) {
       return res.status(400).json({ error: "Arama terimi boş olamaz." });
     }
 
-    if (
-      !queryVal.includes("@") &&
-      !queryVal.includes(" ") &&
-      queryVal.length >= 20
-    ) {
-      const uidSnap = await db.collection("users").doc(queryVal).get();
+    try {
+      const queryVal = arama.trim();
 
-      if (uidSnap.exists) {
-        return res.status(200).json({
-          user: { id: uidSnap.id, ...uidSnap.data() },
-        });
+      if (!queryVal) {
+        return res.status(400).json({ error: "Arama terimi boş olamaz." });
       }
-    }
 
-    if (/\S+@\S+\.\S+/.test(queryVal)) {
-      const emailSnap = await db
+      if (
+        !queryVal.includes("@") &&
+        !queryVal.includes(" ") &&
+        queryVal.length >= 20
+      ) {
+        const uidSnap = await db.collection("users").doc(queryVal).get();
+
+        if (uidSnap.exists) {
+          return res.status(200).json({
+            user: { id: uidSnap.id, ...uidSnap.data() },
+          });
+        }
+      }
+
+      if (/\S+@\S+\.\S+/.test(queryVal)) {
+        const emailSnap = await db
+          .collection("users")
+          .where("email", "==", queryVal.toLowerCase())
+          .limit(1)
+          .get();
+
+        if (!emailSnap.empty) {
+          const doc = emailSnap.docs[0];
+
+          return res.status(200).json({
+            user: { id: doc.id, ...doc.data() },
+          });
+        }
+      }
+
+      const telSnap = await db
         .collection("users")
-        .where("email", "==", queryVal.toLowerCase())
+        .where("telefon", "==", queryVal)
         .limit(1)
         .get();
 
-      if (!emailSnap.empty) {
-        const doc = emailSnap.docs[0];
+      if (!telSnap.empty) {
+        const doc = telSnap.docs[0];
 
         return res.status(200).json({
           user: { id: doc.id, ...doc.data() },
         });
       }
-    }
 
-    const telSnap = await db
-      .collection("users")
-      .where("telefon", "==", queryVal)
-      .limit(1)
-      .get();
+      return res.status(404).json({
+        error: "Eşleşen kullanıcı bulunamadı.",
+      });
+    } catch (error) {
+      safeLog(`❌ Kullanıcı Arama Hatası: ${error.message}`);
 
-    if (!telSnap.empty) {
-      const doc = telSnap.docs[0];
-
-      return res.status(200).json({
-        user: { id: doc.id, ...doc.data() },
+      if (res.headersSent) return;
+      return res.status(500).json({
+        error: "Arama sırasında hata oluştu.",
       });
     }
-
-    return res.status(404).json({
-      error: "Eşleşen kullanıcı bulunamadı.",
-    });
-  } catch (error) {
-    safeLog(`❌ Kullanıcı Arama Hatası: ${error.message}`);
-
-    if (res.headersSent) return;
-    return res.status(500).json({
-      error: "Arama sırasında hata oluştu.",
-    });
-  }
-});
+  },
+);
 
 // ---------------------------------------------------------
 // ADMIN USER UPDATE
 // ---------------------------------------------------------
-app.post("/api/admin/update-user", verifyAdmin, validateRequestBody(adminUpdateUserSchema), async (req, res) => {
-  const { userId, patch } = req.validatedBody;
+app.post(
+  "/api/admin/update-user",
+  verifyAdmin,
+  validateRequestBody(adminUpdateUserSchema),
+  async (req, res) => {
+    const { userId, patch } = req.validatedBody;
 
-  try {
-    await db.collection("users").doc(userId).update({
-      isBlocked: patch.isBlocked,
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-    });
+    try {
+      await db.collection("users").doc(userId).update({
+        isBlocked: patch.isBlocked,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
 
-    const islemTipi = patch.isBlocked ? "Engellendi" : "Engeli Kaldırıldı";
-    safeLog(`🛡️ KULLANICI İŞLEMİ: ${userId} -> ${islemTipi}`);
+      const islemTipi = patch.isBlocked ? "Engellendi" : "Engeli Kaldırıldı";
+      safeLog(`🛡️ KULLANICI İŞLEMİ: ${userId} -> ${islemTipi}`);
 
-    return res.status(200).json({
-      success: true,
-      message: "Kullanıcı durumu güncellendi.",
-    });
-  } catch (error) {
-    safeLog(`❌ Kullanıcı Güncelleme Hatası: ${error.message}`);
+      return res.status(200).json({
+        success: true,
+        message: "Kullanıcı durumu güncellendi.",
+      });
+    } catch (error) {
+      safeLog(`❌ Kullanıcı Güncelleme Hatası: ${error.message}`);
 
-    if (res.headersSent) return;
-    return res.status(500).json({
-      error: "Kullanıcı güncellenirken sunucu hatası oluştu.",
-    });
-  }
-});
+      if (res.headersSent) return;
+      return res.status(500).json({
+        error: "Kullanıcı güncellenirken sunucu hatası oluştu.",
+      });
+    }
+  },
+);
 
 // ---------------------------------------------------------
 // ADMIN TOPUP
 // ---------------------------------------------------------
-app.post("/api/admin/topup", verifyAdmin, validateRequestBody(adminTopupSchema), async (req, res) => {
-  const { userId, tokens } = req.validatedBody;
+app.post(
+  "/api/admin/topup",
+  verifyAdmin,
+  validateRequestBody(adminTopupSchema),
+  async (req, res) => {
+    const { userId, tokens } = req.validatedBody;
 
-  try {
-    const adet = Number(tokens);
+    try {
+      const adet = Number(tokens);
 
-    if (
-      !Number.isFinite(adet) ||
-      !Number.isInteger(adet) ||
-      adet <= 0 ||
-      adet > 10000
-    ) {
-      return res.status(400).json({
-        error:
-          "Geçerli bir jeton miktarı girin. Tek seferde en fazla 10000 jeton yüklenebilir.",
+      if (
+        !Number.isFinite(adet) ||
+        !Number.isInteger(adet) ||
+        adet <= 0 ||
+        adet > 10000
+      ) {
+        return res.status(400).json({
+          error:
+            "Geçerli bir jeton miktarı girin. Tek seferde en fazla 10000 jeton yüklenebilir.",
+        });
+      }
+
+      const snap = await db.collection("packages").doc("jeton").get();
+      const jetonFiyat = snap.exists ? Number(snap.data().jetonFiyat || 0) : 0;
+
+      if (jetonFiyat <= 0) {
+        return res.status(500).json({
+          error: "Sistemde jeton fiyatı bulunamadı.",
+        });
+      }
+
+      const amountTRY = adet * jetonFiyat;
+      const userRef = db.collection("users").doc(userId);
+
+      await db.runTransaction(async (tx) => {
+        const uDoc = await tx.get(userRef);
+        if (!uDoc.exists) throw new Error("Kullanıcı_Bulunamadi");
+
+        const yeniBakiye = Number(uDoc.data().walletTokens || 0) + adet;
+
+        tx.update(userRef, {
+          walletTokens: yeniBakiye,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+
+        tx.set(db.collection("transactions").doc(), {
+          userId,
+          type: "admin_topup",
+          tokens: adet,
+          amountTRY,
+          unitPriceTRY: jetonFiyat,
+          bayId: null,
+          packageId: null,
+          status: "success",
+          adminId: req.admin?.uid || req.admin?.email || "ELECTRON_ADMIN",
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
       });
-    }
 
-    const snap = await db.collection("packages").doc("jeton").get();
-    const jetonFiyat = snap.exists ? Number(snap.data().jetonFiyat || 0) : 0;
+      safeLog(
+        `💰 ADMİN BAKİYE YÜKLEDİ: ${userId} kullanıcısına ${adet} jeton eklendi.`,
+      );
 
-    if (jetonFiyat <= 0) {
-      return res.status(500).json({
-        error: "Sistemde jeton fiyatı bulunamadı.",
-      });
-    }
-
-    const amountTRY = adet * jetonFiyat;
-    const userRef = db.collection("users").doc(userId);
-
-    await db.runTransaction(async (tx) => {
-      const uDoc = await tx.get(userRef);
-      if (!uDoc.exists) throw new Error("Kullanıcı_Bulunamadi");
-
-      const yeniBakiye = Number(uDoc.data().walletTokens || 0) + adet;
-
-      tx.update(userRef, {
-        walletTokens: yeniBakiye,
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      });
-
-      tx.set(db.collection("transactions").doc(), {
-        userId,
-        type: "admin_topup",
-        tokens: adet,
+      return res.status(200).json({
+        success: true,
+        tokensAdded: adet,
         amountTRY,
-        unitPriceTRY: jetonFiyat,
-        bayId: null,
-        packageId: null,
-        status: "success",
-        adminId: req.admin?.uid || req.admin?.email || "ELECTRON_ADMIN",
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
       });
-    });
+    } catch (error) {
+      safeLog(`❌ Admin Bakiye Yükleme Hatası: ${error.message}`);
 
-    safeLog(
-      `💰 ADMİN BAKİYE YÜKLEDİ: ${userId} kullanıcısına ${adet} jeton eklendi.`,
-    );
+      if (error.message === "Kullanıcı_Bulunamadi") {
+        return res
+          .status(404)
+          .json({ error: "Kullanıcı dokümanı bulunamadı." });
+      }
 
-    return res.status(200).json({
-      success: true,
-      tokensAdded: adet,
-      amountTRY,
-    });
-  } catch (error) {
-    safeLog(`❌ Admin Bakiye Yükleme Hatası: ${error.message}`);
-
-    if (error.message === "Kullanıcı_Bulunamadi") {
-      return res.status(404).json({ error: "Kullanıcı dokümanı bulunamadı." });
+      if (res.headersSent) return;
+      return res.status(500).json({ error: "Bakiye yükleme başarısız oldu." });
     }
-
-    if (res.headersSent) return;
-    return res.status(500).json({ error: "Bakiye yükleme başarısız oldu." });
-  }
-});
+  },
+);
 
 // =========================================================
 // STARTUP CLEAN
@@ -3022,9 +3137,11 @@ if (ENABLE_CRON) {
   safeLog("ℹ️ Cron devre dışı. ENABLE_CRON=false.");
 }
 
-
 process.on("unhandledRejection", (reason) => {
-  const message = reason instanceof Error ? reason.stack || reason.message : JSON.stringify(reason);
+  const message =
+    reason instanceof Error
+      ? reason.stack || reason.message
+      : JSON.stringify(reason);
   safeLog(`🚨 UNHANDLED REJECTION: ${message}`);
 });
 
@@ -3059,12 +3176,12 @@ const gracefulShutdown = async (signal) => {
   }, 25000);
 
   try {
-if (cronTask) {
-  cronTask.stop();
-  safeLog("✅ Cron task yeni tetiklemelere kapatıldı.");
-}
+    if (cronTask) {
+      cronTask.stop();
+      safeLog("✅ Cron task yeni tetiklemelere kapatıldı.");
+    }
 
-await waitForCronToFinish(10000);
+    await waitForCronToFinish(10000);
 
     if (server) {
       await new Promise((resolve) => {
@@ -3075,9 +3192,9 @@ await waitForCronToFinish(10000);
       });
     }
 
-if (mqttClient) {
+    if (mqttClient) {
       mqttClient.options.reconnectPeriod = 0;
-      
+
       await new Promise((resolve) => {
         mqttClient.end(false, {}, () => {
           safeLog("✅ MQTT bağlantısı düzgün kapatıldı.");
