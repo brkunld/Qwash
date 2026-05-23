@@ -284,6 +284,18 @@ const getClientIp = (req) => {
 // HELPERS
 // =========================================================
 
+const isInvalidBayId = (bayId) => {
+  if (!bayId || typeof bayId !== "string") return true;
+
+  const normalized = bayId.trim();
+
+  return (
+    normalized === "" ||
+    normalized === "bay_000000000000" ||
+    normalized.includes("000000000000")
+  );
+};
+
 const firebaseKeySchema = z
   .string({ required_error: "Zorunlu alan eksik." })
   .trim()
@@ -814,6 +826,11 @@ const reserveBayForSession = async (bayId, uid) => {
 // RTDB BAY TEMIZLIK
 // =========================================================
 const setBayPresence = async (bayId, patch = {}) => {
+  if (isInvalidBayId(bayId)) {
+    safeLog(`🚨 bayPresence yazımı engellendi, geçersiz bayId: ${bayId}`);
+    return;
+  }
+
   await rtdb.ref(`bayPresence/${bayId}`).update({
     updatedAt: admin.database.ServerValue.TIMESTAMP,
     ...patch,
@@ -1076,6 +1093,11 @@ const clearWaitingBayAfterCancel = async (bayId, uid = null) => {
 const MAIL_COOLDOWN_MS = 10 * 60 * 1000;
 
 const sendAdminAlert = async (bayId, type) => {
+  if (isInvalidBayId(bayId)) {
+    safeLog(`🚨 Mail uyarısı atlandı, geçersiz bayId: ${bayId}`);
+    return;
+  }
+
   const now = Date.now();
   const alertRef = rtdb.ref(`bayAlerts/${bayId}/${type}`);
 
@@ -1227,13 +1249,14 @@ mqttClient.on("message", async (topic, messageBuffer) => {
   }
 
   const bayId = parts[2];
+  const eventType = parts[3];
 
-  if (bayId === "bay_000000000000" || bayId === "000000000000") {
-    safeLog(`⚠️ Geçersiz peron ID'si yoksayıldı: ${bayId}`);
+  if (isInvalidBayId(bayId)) {
+    safeLog(
+      `🚨 GEÇERSİZ BAY ID ENGELLENDİ: topic=${topic}, message=${message}`,
+    );
     return;
   }
-
-  const eventType = parts[3];
 
   try {
     if (eventType === "status") {
@@ -1325,8 +1348,10 @@ mqttClient.on("message", async (topic, messageBuffer) => {
     }
 
     if (eventType === "heartbeat") {
-      if (bayId === "bay_000000000000" || bayId.includes("000000000000")) {
-        safeLog(`⚠️ Geçersiz peron ID'si yoksayıldı: ${bayId}`);
+      if (isInvalidBayId(bayId)) {
+        safeLog(
+          `🚨 GEÇERSİZ BAY ID ENGELLENDİ: topic=${topic}, message=${message}`,
+        );
         return;
       }
       const bayRef = rtdb.ref(`bays/${bayId}`);
@@ -3255,6 +3280,11 @@ if (ENABLE_CRON) {
         const presenceData = presenceSnap.val();
 
         for (const [bayId, presence] of Object.entries(presenceData)) {
+          if (isInvalidBayId(bayId)) {
+            safeLog(`🚨 CRON GEÇERSİZ BAY ID ATLANDI: ${bayId}`);
+            continue;
+          }
+
           const lastSeen = Number(presence.lastSeen || 0);
 
           if (!lastSeen) {
