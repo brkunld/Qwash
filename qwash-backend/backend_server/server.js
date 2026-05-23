@@ -80,6 +80,67 @@ app.use((req, res, next) => {
   next();
 });
 
+const EXTERNAL_TIMEOUT_MS = Number(process.env.EXTERNAL_TIMEOUT_MS || 10000);
+const BREVO_TIMEOUT_MS = Number(process.env.BREVO_TIMEOUT_MS || 5000);
+const IYZICO_TIMEOUT_MS = Number(process.env.IYZICO_TIMEOUT_MS || 10000);
+const MQTT_PUBLISH_TIMEOUT_MS = Number(
+  process.env.MQTT_PUBLISH_TIMEOUT_MS || 5000,
+);
+
+const withTimeout = (promise, timeoutMs, label) => {
+  let timeoutId = null;
+
+  const timeoutPromise = new Promise((_, reject) => {
+    timeoutId = setTimeout(() => {
+      reject(new Error(`${label} zaman aşımına uğradı.`));
+    }, timeoutMs);
+  });
+
+  return Promise.race([promise, timeoutPromise]).finally(() => {
+    if (timeoutId) clearTimeout(timeoutId);
+  });
+};
+
+const fetchWithTimeout = async (url, options = {}, timeoutMs = EXTERNAL_TIMEOUT_MS) => {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    return await fetch(url, {
+      ...options,
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timeoutId);
+  }
+};
+
+const initializeIyzicoCheckoutForm = (request) => {
+  return withTimeout(
+    new Promise((resolve, reject) => {
+      iyzipay.checkoutFormInitialize.create(request, (err, result) => {
+        if (err) return reject(err);
+        return resolve(result);
+      });
+    }),
+    IYZICO_TIMEOUT_MS,
+    "Iyzico checkout initialize",
+  );
+};
+
+const retrieveIyzicoCheckoutForm = (request) => {
+  return withTimeout(
+    new Promise((resolve, reject) => {
+      iyzipay.checkoutForm.retrieve(request, (err, result) => {
+        if (err) return reject(err);
+        return resolve(result);
+      });
+    }),
+    IYZICO_TIMEOUT_MS,
+    "Iyzico checkout retrieve",
+  );
+};
+
 // =========================================================
 // MQTT
 // =========================================================
@@ -113,16 +174,20 @@ const mqttTopic = {
 };
 
 const mqttPublish = (topic, payload, options = {}) => {
-  return new Promise((resolve, reject) => {
-    if (!mqttClient.connected) {
-      return reject(new Error("MQTT broker bağlı değil."));
-    }
+  return withTimeout(
+    new Promise((resolve, reject) => {
+      if (!mqttClient.connected) {
+        return reject(new Error("MQTT broker bağlı değil."));
+      }
 
-    mqttClient.publish(topic, String(payload), options, (error) => {
-      if (error) return reject(error);
-      return resolve();
-    });
-  });
+      mqttClient.publish(topic, String(payload), options, (error) => {
+        if (error) return reject(error);
+        return resolve();
+      });
+    }),
+    MQTT_PUBLISH_TIMEOUT_MS,
+    "MQTT publish",
+  );
 };
 
 const sendBayCommand = async (bayId, command) => {
@@ -168,13 +233,141 @@ const getClientIp = (req) => {
 // HELPERS
 // =========================================================
 
-const topupSchema = z.object({
-  tokens: z.coerce
-    .number()
-    .int("Jeton miktarı tam sayı olmalıdır.")
-    .min(1, "Jeton miktarı en az 1 olmalıdır.")
-    .max(100, "Tek seferde en fazla 100 jeton yüklenebilir."),
-});
+const firebaseKeySchema = z
+  .string({ required_error: "Zorunlu alan eksik." })
+  .trim()
+  .min(1, "Zorunlu alan boş olamaz.")
+  .max(128, "Alan çok uzun.")
+  .regex(
+    /^[A-Za-z0-9_-]+$/,
+    "Alan sadece harf, rakam, alt çizgi ve tire içerebilir.",
+  );
+
+const clientUidSchema = firebaseKeySchema.optional();
+
+const packageIdInputSchema = z
+  .string()
+  .trim()
+  .max(128, "Paket bilgisi çok uzun.")
+  .regex(
+    /^[A-Za-z0-9_-]*$/,
+    "Paket bilgisi sadece harf, rakam, alt çizgi ve tire içerebilir.",
+  )
+  .optional()
+  .default("");
+
+const topupSchema = z
+  .object({
+    uid: clientUidSchema,
+    tokens: z.coerce
+      .number()
+      .int("Jeton miktarı tam sayı olmalıdır.")
+      .min(1, "Jeton miktarı en az 1 olmalıdır.")
+      .max(100, "Tek seferde en fazla 100 jeton yüklenebilir."),
+  })
+  .strict();
+
+const prepareBaySchema = z
+  .object({
+    uid: clientUidSchema,
+    bayId: firebaseKeySchema,
+  })
+  .strict();
+const cancelWaitingSchema = prepareBaySchema;
+
+const startSessionSchema = z
+  .object({
+    uid: clientUidSchema,
+    bayId: firebaseKeySchema,
+    packageId: packageIdInputSchema,
+  })
+  .strict();
+
+const stopSessionSchema = z
+  .object({
+    uid: clientUidSchema,
+    bayId: firebaseKeySchema,
+    sessionId: firebaseKeySchema,
+  })
+  .strict();
+
+const topupCallbackBodySchema = z
+  .object({
+    token: z.string().trim().min(1, "token gerekli.").max(512),
+  })
+  .passthrough();
+
+const topupCallbackQuerySchema = z
+  .object({
+    orderId: firebaseKeySchema,
+  })
+  .passthrough();
+
+const adminUpdateBaySchema = z
+  .object({
+    bayId: firebaseKeySchema,
+    patch: z
+      .object({
+        status: z
+          .enum(["available", "waiting", "offline", "maintenance"])
+          .optional(),
+        isActive: z.boolean().optional(),
+      })
+      .strict(),
+  })
+  .strict();
+
+const adminSearchUserSchema = z
+  .object({
+    arama: z.string().trim().min(1, "Arama terimi boş olamaz.").max(254),
+  })
+  .strict();
+
+const adminUpdateUserSchema = z
+  .object({
+    userId: firebaseKeySchema,
+    patch: z.object({ isBlocked: z.boolean() }).strict(),
+  })
+  .strict();
+
+const adminTopupSchema = z
+  .object({
+    userId: firebaseKeySchema,
+    tokens: z.coerce
+      .number()
+      .int("Jeton miktarı tam sayı olmalıdır.")
+      .min(1, "Jeton miktarı en az 1 olmalıdır.")
+      .max(10000, "Tek seferde en fazla 10000 jeton yüklenebilir."),
+  })
+  .strict();
+
+const formatZodError = (error) => {
+  return error.issues?.[0]?.message || "Geçersiz istek.";
+};
+
+const validateRequestBody = (schema) => (req, res, next) => {
+  const parsed = schema.safeParse(req.body || {});
+
+  if (!parsed.success) {
+    return res.status(400).json({
+      error: formatZodError(parsed.error),
+    });
+  }
+
+  req.validatedBody = parsed.data;
+  return next();
+};
+
+const validateRequestQuery = (schema) => (req, res, next) => {
+  const parsed = schema.safeParse(req.query || {});
+
+  if (!parsed.success) {
+    return res.status(400).send("<h1>Geçersiz İstek</h1>");
+  }
+
+  req.validatedQuery = parsed.data;
+  return next();
+};
 
 const normalizeText = (value) => {
   return String(value || "")
@@ -787,37 +980,32 @@ const sendAdminAlert = async (bayId, type) => {
     return;
   }
 
-  let timeoutId = null;
-
   try {
-    const controller = new AbortController();
-
-    timeoutId = setTimeout(() => {
-      controller.abort();
-    }, 5000);
-
-    const response = await fetch("https://api.brevo.com/v3/smtp/email", {
-      method: "POST",
-      signal: controller.signal,
-      headers: {
-        accept: "application/json",
-        "content-type": "application/json",
-        "api-key": process.env.BREVO_API_KEY,
-      },
-      body: JSON.stringify({
-        sender: {
-          name: "QWash Sistem",
-          email: process.env.EMAIL_FROM,
+    const response = await fetchWithTimeout(
+      "https://api.brevo.com/v3/smtp/email",
+      {
+        method: "POST",
+        headers: {
+          accept: "application/json",
+          "content-type": "application/json",
+          "api-key": process.env.BREVO_API_KEY,
         },
-        to: [
-          {
-            email: process.env.ADMIN_EMAIL,
+        body: JSON.stringify({
+          sender: {
+            name: "QWash Sistem",
+            email: process.env.EMAIL_FROM,
           },
-        ],
-        subject,
-        htmlContent: htmlBody,
-      }),
-    });
+          to: [
+            {
+              email: process.env.ADMIN_EMAIL,
+            },
+          ],
+          subject,
+          htmlContent: htmlBody,
+        }),
+      },
+      BREVO_TIMEOUT_MS,
+    );
 
     const responseText = await response.text();
 
@@ -838,10 +1026,6 @@ const sendAdminAlert = async (bayId, type) => {
     }
 
     safeLog(`❌ Mail API Bağlantı Hatası: ${error.message}`);
-  } finally {
-    if (timeoutId) {
-      clearTimeout(timeoutId);
-    }
   }
 };
 
@@ -1250,8 +1434,8 @@ app.get("/", (req, res) => {
   return res.status(200).send("QWash API Sapasağlam Ayakta! 🚀");
 });
 
-app.post("/api/prepare-bay", verifyUser, async (req, res) => {
-  const { bayId } = req.body;
+app.post("/api/prepare-bay", verifyUser, validateRequestBody(prepareBaySchema), async (req, res) => {
+  const { bayId } = req.validatedBody;
   const uid = req.user.uid;
 
   safeLog(`🟡 PREPARE GELDİ: bayId="${bayId}", uid="${uid}"`);
@@ -1390,9 +1574,9 @@ app.post("/api/prepare-bay", verifyUser, async (req, res) => {
 // ---------------------------------------------------------
 // OTURUM BAŞLATMA
 // ---------------------------------------------------------
-app.post("/api/start-session", verifyUser, async (req, res) => {
+app.post("/api/start-session", verifyUser, validateRequestBody(startSessionSchema), async (req, res) => {
   const uid = req.user.uid;
-  const { bayId, packageId } = req.body;
+  const { bayId, packageId } = req.validatedBody;
 
   if (!bayId) {
     return res.status(400).json({ error: "Peron bilgisi eksik." });
@@ -1656,8 +1840,8 @@ app.post("/api/start-session", verifyUser, async (req, res) => {
 // ---------------------------------------------------------
 // PERONDAN MANUEL ÇIKIŞ
 // ---------------------------------------------------------
-app.post("/api/cancel-waiting", verifyUser, async (req, res) => {
-  const { bayId } = req.body;
+app.post("/api/cancel-waiting", verifyUser, validateRequestBody(cancelWaitingSchema), async (req, res) => {
+  const { bayId } = req.validatedBody;
 
   if (!bayId) {
     return res.status(400).json({ error: "bayId gerekli." });
@@ -1739,8 +1923,8 @@ app.post("/api/cancel-waiting", verifyUser, async (req, res) => {
 // ---------------------------------------------------------
 // OTURUMU MANUEL DURDURMA
 // ---------------------------------------------------------
-app.post("/api/stop-session", verifyUser, async (req, res) => {
-  const { bayId, sessionId } = req.body;
+app.post("/api/stop-session", verifyUser, validateRequestBody(stopSessionSchema), async (req, res) => {
+  const { bayId, sessionId } = req.validatedBody;
   const uid = req.user.uid;
 
   if (!bayId || !sessionId) {
@@ -1843,17 +2027,9 @@ app.post("/api/stop-session", verifyUser, async (req, res) => {
 // ---------------------------------------------------------
 // IYZICO CHECKOUT FORM BAŞLATMA
 // ---------------------------------------------------------
-app.post("/api/topup", verifyUser, async (req, res) => {
+app.post("/api/topup", verifyUser, validateRequestBody(topupSchema), async (req, res) => {
   const uid = req.user.uid;
-  const parsedTopup = topupSchema.safeParse(req.body);
-
-  if (!parsedTopup.success) {
-    return res.status(400).json({
-      error: parsedTopup.error.issues[0]?.message || "Geçersiz istek.",
-    });
-  }
-
-  const eklenecekJeton = parsedTopup.data.tokens;
+  const eklenecekJeton = req.validatedBody.tokens;
 
   try {
     const jetonPackageDoc = await db.collection("packages").doc("jeton").get();
@@ -1966,38 +2142,35 @@ app.post("/api/topup", verifyUser, async (req, res) => {
       ],
     };
 
-    iyzipay.checkoutFormInitialize.create(
-      iyzicoRequest,
-      async (err, result) => {
-        if (err || result.status === "failure") {
-          await orderRef.update({
-            status: "init_failed",
-            errorMessage: result ? result.errorMessage : err.message,
-            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-          });
+    const result = await initializeIyzicoCheckoutForm(iyzicoRequest);
 
-          safeLog(
-            `❌ Iyzico Form Başlatılamadı: ${
-              result ? result.errorMessage : err.message
-            }`,
-          );
+    if (!result || result.status === "failure") {
+      await orderRef.update({
+        status: "init_failed",
+        errorMessage: result?.errorMessage || "Iyzico yanıtı geçersiz.",
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
 
-          return res.status(400).json({
-            error: "Ödeme oturumu başlatılamadı.",
-          });
-        }
+      safeLog(
+        `❌ Iyzico Form Başlatılamadı: ${
+          result?.errorMessage || "Iyzico yanıtı geçersiz."
+        }`,
+      );
 
-        await orderRef.update({
-          iyzicoCheckoutToken: result.token || null,
-          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        });
+      return res.status(400).json({
+        error: "Ödeme oturumu başlatılamadı.",
+      });
+    }
 
-        return res.status(200).json({
-          success: true,
-          paymentUrl: result.paymentPageUrl,
-        });
-      },
-    );
+    await orderRef.update({
+      iyzicoCheckoutToken: result.token || null,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    return res.status(200).json({
+      success: true,
+      paymentUrl: result.paymentPageUrl,
+    });
   } catch (error) {
     safeLog(`❌ Sunucu Ödeme Hatası: ${error.message}`);
     return res.status(500).json({ error: "Sunucu hatası." });
@@ -2007,9 +2180,9 @@ app.post("/api/topup", verifyUser, async (req, res) => {
 // ---------------------------------------------------------
 // IYZICO CALLBACK
 // ---------------------------------------------------------
-app.post("/api/topup-callback", async (req, res) => {
-  const { token } = req.body;
-  const { orderId } = req.query;
+app.post("/api/topup-callback", validateRequestBody(topupCallbackBodySchema), validateRequestQuery(topupCallbackQuerySchema), async (req, res) => {
+  const { token } = req.validatedBody;
+  const { orderId } = req.validatedQuery;
 
   if (!token || !orderId) {
     return res.status(400).send("<h1>Geçersiz İstek</h1>");
@@ -2041,25 +2214,24 @@ app.post("/api/topup-callback", async (req, res) => {
       `);
     }
 
-    iyzipay.checkoutForm.retrieve(
-      {
-        locale: Iyzipay.LOCALE.TR,
-        conversationId: orderId,
-        token,
-      },
-      async (err, result) => {
-        if (
-          err ||
-          result.status !== "success" ||
-          result.paymentStatus !== "SUCCESS"
-        ) {
-          await orderRef.update({
-            status: "failed",
-            iyzicoStatus: result?.status || null,
-            iyzicoPaymentStatus: result?.paymentStatus || null,
-            errorMessage: result?.errorMessage || err?.message || null,
-            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-          });
+    const result = await retrieveIyzicoCheckoutForm({
+      locale: Iyzipay.LOCALE.TR,
+      conversationId: orderId,
+      token,
+    });
+
+    if (
+      !result ||
+      result.status !== "success" ||
+      result.paymentStatus !== "SUCCESS"
+    ) {
+      await orderRef.update({
+        status: "failed",
+        iyzicoStatus: result?.status || null,
+        iyzicoPaymentStatus: result?.paymentStatus || null,
+        errorMessage: result?.errorMessage || null,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
 
           safeLog(`❌ Ödeme Başarısız veya İptal Edildi. Order: ${orderId}`);
 
@@ -2227,8 +2399,6 @@ app.post("/api/topup-callback", async (req, res) => {
               "<h1>Ödeme Alındı fakat bir veritabanı hatası oluştu. Lütfen destekle iletişime geçin.</h1>",
             );
         }
-      },
-    );
   } catch (error) {
     safeLog(`❌ Callback sunucu hatası: ${error.message}`);
     return res.status(500).send("<h1>Sunucu hatası oluştu.</h1>");
@@ -2263,8 +2433,8 @@ app.get("/api/admin/bays", verifyAdmin, async (req, res) => {
 // ---------------------------------------------------------
 // ADMIN BAY UPDATE
 // ---------------------------------------------------------
-app.post("/api/admin/update-bay", verifyAdmin, async (req, res) => {
-  const { bayId, patch } = req.body;
+app.post("/api/admin/update-bay", verifyAdmin, validateRequestBody(adminUpdateBaySchema), async (req, res) => {
+  const { bayId, patch } = req.validatedBody;
 
   if (!bayId || !patch) {
     return res.status(400).json({ error: "Eksik parametre." });
@@ -2369,8 +2539,8 @@ app.post("/api/admin/update-bay", verifyAdmin, async (req, res) => {
 // ---------------------------------------------------------
 // ADMIN USER SEARCH
 // ---------------------------------------------------------
-app.post("/api/admin/search-user", verifyAdmin, async (req, res) => {
-  const { arama } = req.body;
+app.post("/api/admin/search-user", verifyAdmin, validateRequestBody(adminSearchUserSchema), async (req, res) => {
+  const { arama } = req.validatedBody;
 
   if (!arama) {
     return res.status(400).json({ error: "Arama terimi boş olamaz." });
@@ -2443,8 +2613,8 @@ app.post("/api/admin/search-user", verifyAdmin, async (req, res) => {
 // ---------------------------------------------------------
 // ADMIN USER UPDATE
 // ---------------------------------------------------------
-app.post("/api/admin/update-user", verifyAdmin, async (req, res) => {
-  const { userId, patch } = req.body;
+app.post("/api/admin/update-user", verifyAdmin, validateRequestBody(adminUpdateUserSchema), async (req, res) => {
+  const { userId, patch } = req.validatedBody;
 
   if (!userId || !patch) {
     return res.status(400).json({ error: "Eksik parametre gönderildi." });
@@ -2476,8 +2646,8 @@ app.post("/api/admin/update-user", verifyAdmin, async (req, res) => {
 // ---------------------------------------------------------
 // ADMIN TOPUP
 // ---------------------------------------------------------
-app.post("/api/admin/topup", verifyAdmin, async (req, res) => {
-  const { userId, tokens } = req.body;
+app.post("/api/admin/topup", verifyAdmin, validateRequestBody(adminTopupSchema), async (req, res) => {
+  const { userId, tokens } = req.validatedBody;
 
   if (!userId || !tokens) {
     return res.status(400).json({
@@ -2862,6 +3032,16 @@ if (ENABLE_CRON) {
   safeLog("ℹ️ Cron devre dışı. ENABLE_CRON=false.");
 }
 
+
+process.on("unhandledRejection", (reason) => {
+  const message = reason instanceof Error ? reason.stack || reason.message : JSON.stringify(reason);
+  safeLog(`🚨 UNHANDLED REJECTION: ${message}`);
+});
+
+process.on("uncaughtException", (error) => {
+  safeLog(`🚨 UNCAUGHT EXCEPTION: ${error.stack || error.message}`);
+});
+
 // =========================================================
 // START
 // =========================================================
@@ -2877,7 +3057,12 @@ const startServer = () => {
 };
 
 if (RUN_STARTUP_CLEAN) {
-  systemStartupClean().then(startServer);
+  systemStartupClean()
+    .then(startServer)
+    .catch((error) => {
+      safeLog(`❌ Startup temizliği başlatılamadı: ${error.message}`);
+      startServer();
+    });
 } else {
   safeLog("ℹ️ Startup temizliği atlandı. RUN_STARTUP_CLEAN=true değil.");
   startServer();
