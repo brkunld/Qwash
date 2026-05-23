@@ -165,7 +165,7 @@ bool mqttTaskBaslatildi = false;
 
 struct MqttPublishJob {
   char topic[96];
-  char payload[128];
+  char payload[192];
   bool retained;
 };
 
@@ -174,6 +174,12 @@ QueueHandle_t mqttPublishQueue = NULL;
 String sonYayinlananDurum = "";
 unsigned long sonDurumYayinMs = 0;
 const unsigned long DURUM_YAYIN_DEBOUNCE_MS = 1000;
+
+// Backend MQTT idempotency icin her kritik event benzersiz eventId tasir.
+// Not: PubSubClient publish tarafinda QoS1 desteklemez; bu yuzden burada
+// sadece eventId/JSON uyumu eklenir. QoS1 publish icin ileride MQTT
+// kutuphanesi degistirilmelidir.
+uint32_t mqttEventCounter = 0;
 
 // ================= ZAMAN =================
 unsigned long islemBaslangicMs = 0;
@@ -685,12 +691,105 @@ bool mqttBootYayinla() {
   return mqttKuyrugaEkle(mqttTopicHeartbeat, "BOOT", false);
 }
 
+String mqttJsonEscape(const String& value) {
+  String escaped = "";
+  escaped.reserve(value.length() + 8);
+
+  for (unsigned int i = 0; i < value.length(); i++) {
+    char c = value.charAt(i);
+
+    if (c == '\\') {
+      escaped += "\\\\";
+    } else if (c == '"') {
+      escaped += "\\\"";
+    } else if (c == '\n') {
+      escaped += "\\n";
+    } else if (c == '\r') {
+      escaped += "\\r";
+    } else if (c == '\t') {
+      escaped += "\\t";
+    } else {
+      escaped += c;
+    }
+  }
+
+  return escaped;
+}
+
+String mqttYeniEventId(const char* eventType) {
+  mqttEventCounter++;
+
+  String eventId = bayId;
+  eventId += "_";
+  eventId += eventType;
+  eventId += "_";
+  eventId += String(millis());
+  eventId += "_";
+  eventId += String(mqttEventCounter);
+
+  return eventId;
+}
+
+bool mqttCancelDegeriMi(const String& value) {
+  return (
+    value.equalsIgnoreCase("cancel") ||
+    value.equalsIgnoreCase("cancelled") ||
+    value.equalsIgnoreCase("canceled") ||
+    value.equalsIgnoreCase("iptal") ||
+    value.equalsIgnoreCase("abort") ||
+    value.equalsIgnoreCase("stop") ||
+    value.equalsIgnoreCase("back") ||
+    value.equalsIgnoreCase("geri")
+  );
+}
+
+String mqttSelectionPayloadHazirla(const String& secilenPaket) {
+  if (mqttCancelDegeriMi(secilenPaket)) {
+    String payload = "{\"type\":\"cancel\",\"eventId\":\"";
+    payload += mqttJsonEscape(mqttYeniEventId("selection_cancel"));
+    payload += "\"}";
+    return payload;
+  }
+
+  const char* normalizedPackage = paketNormalizeEt(secilenPaket);
+  String packageId = normalizedPackage;
+
+  if (packageId.length() == 0) {
+    packageId = secilenPaket;
+  }
+
+  String payload = "{\"type\":\"selection\",\"packageId\":\"";
+  payload += mqttJsonEscape(packageId);
+  payload += "\",\"eventId\":\"";
+  payload += mqttJsonEscape(mqttYeniEventId("selection"));
+  payload += "\"}";
+
+  return payload;
+}
+
+String mqttEventPayloadHazirla(const String& eventMesaji) {
+  String eventType = mqttCancelDegeriMi(eventMesaji) ? "cancel" : "event";
+
+  String payload = "{\"type\":\"";
+  payload += mqttJsonEscape(eventType);
+  payload += "\",\"action\":\"";
+  payload += mqttJsonEscape(eventMesaji);
+  payload += "\",\"eventId\":\"";
+  payload += mqttJsonEscape(mqttYeniEventId(eventType.c_str()));
+  payload += "\"}";
+
+  return payload;
+}
+
+
 bool mqttSecimYayinla(const String& secilenPaket) {
-  return mqttKuyrugaEkle(mqttTopicSelection, secilenPaket, false);
+  String payload = mqttSelectionPayloadHazirla(secilenPaket);
+  return mqttKuyrugaEkle(mqttTopicSelection, payload, false);
 }
 
 bool mqttEventYayinla(const String& eventMesaji) {
-  return mqttKuyrugaEkle(mqttTopicEvent, eventMesaji, false);
+  String payload = mqttEventPayloadHazirla(eventMesaji);
+  return mqttKuyrugaEkle(mqttTopicEvent, payload, false);
 }
 
 void iptalIstegiGonder() {

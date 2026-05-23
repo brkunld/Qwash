@@ -184,12 +184,17 @@ if (!MQTT_HOST || !MQTT_USER || !MQTT_PASS) {
 
 const mqttUrl = `mqtts://${MQTT_HOST}:${MQTT_PORT}`;
 
+const MQTT_CLIENT_ID =
+  process.env.MQTT_CLIENT_ID || "qwash_backend_server";
+
 const mqttClient = mqtt.connect(mqttUrl, {
+  clientId: MQTT_CLIENT_ID,
   username: MQTT_USER,
   password: MQTT_PASS,
   reconnectPeriod: 3000,
   connectTimeout: 20000,
-  clean: true,
+  clean: false,
+  queueQoSZero: false,
 });
 
 const mqttTopic = {
@@ -421,6 +426,115 @@ const isCancelValue = (value) => {
     "null",
     "undefined",
   ].includes(text);
+};
+
+const parseMqttJsonOrText = (message) => {
+  const raw = String(message || "").trim();
+
+  if (!raw) {
+    return {
+      raw,
+      isJson: false,
+      payload: null,
+    };
+  }
+
+  if (raw.startsWith("{")) {
+    try {
+      return {
+        raw,
+        isJson: true,
+        payload: JSON.parse(raw),
+      };
+    } catch {
+      return {
+        raw,
+        isJson: false,
+        payload: null,
+      };
+    }
+  }
+
+  return {
+    raw,
+    isJson: false,
+    payload: null,
+  };
+};
+
+const createFallbackEventId = (bayId, eventType, raw) => {
+  const normalizedRaw = normalizeText(raw).slice(0, 64);
+  return `${bayId}_${eventType}_${normalizedRaw}_${Date.now()}`;
+};
+
+const getMqttEventId = (bayId, eventType, parsed) => {
+  const eventId = parsed?.payload?.eventId;
+
+  if (eventId && typeof eventId === "string") {
+    return eventId.trim().slice(0, 128);
+  }
+
+  return createFallbackEventId(bayId, eventType, parsed?.raw || "");
+};
+
+const getSelectionPackageId = (parsed) => {
+  const rawValue =
+    parsed?.payload?.packageId ||
+    parsed?.payload?.package ||
+    parsed?.payload?.selection ||
+    parsed?.raw ||
+    "";
+
+  const normalizedSelection = normalizeText(rawValue);
+
+  if (
+    normalizedSelection === "foam" ||
+    normalizedSelection === "kopuk" ||
+    normalizedSelection === "köpük"
+  ) {
+    return "foam";
+  }
+
+  if (
+    normalizedSelection === "wash" ||
+    normalizedSelection === "su" ||
+    normalizedSelection === "water" ||
+    normalizedSelection === "yikama" ||
+    normalizedSelection === "yıkama"
+  ) {
+    return "wash";
+  }
+
+  return "";
+};
+
+const getEventAction = (parsed) => {
+  const value =
+    parsed?.payload?.type ||
+    parsed?.payload?.event ||
+    parsed?.payload?.action ||
+    parsed?.raw ||
+    "";
+
+  return normalizeText(value);
+};
+
+const wasMqttEventProcessed = async (bayId, eventId) => {
+  if (!eventId) return false;
+
+  const eventRef = rtdb.ref(`processedMqttEvents/${bayId}/${eventId}`);
+  const snap = await eventRef.once("value");
+
+  return snap.exists();
+};
+
+const markMqttEventProcessed = async (bayId, eventId, patch = {}) => {
+  if (!eventId) return;
+
+  await rtdb.ref(`processedMqttEvents/${bayId}/${eventId}`).set({
+    processedAt: admin.database.ServerValue.TIMESTAMP,
+    ...patch,
+  });
 };
 
 // =========================================================
@@ -1242,10 +1356,24 @@ mqttClient.on("message", async (topic, messageBuffer) => {
     }
 
     if (eventType === "event") {
-      const eventMessage = String(message || "").trim();
+      const parsed = parseMqttJsonOrText(message);
+      const eventId = getMqttEventId(bayId, "event", parsed);
+      const action = getEventAction(parsed);
 
-      if (isCancelValue(eventMessage)) {
+      if (await wasMqttEventProcessed(bayId, eventId)) {
+        safeLog(
+          `ℹ️ MQTT EVENT duplicate yok sayıldı: ${bayId}, eventId=${eventId}`,
+        );
+        return;
+      }
+
+      if (isCancelValue(action)) {
         const cancelResult = await clearWaitingBayAfterCancel(bayId);
+
+        await markMqttEventProcessed(bayId, eventId, {
+          type: "cancel",
+          result: cancelResult.reason || null,
+        });
 
         if (cancelResult.cleared) {
           safeLog(
@@ -1262,15 +1390,35 @@ mqttClient.on("message", async (topic, messageBuffer) => {
         return;
       }
 
-      safeLog(`ℹ️ MQTT EVENT: ${bayId} -> ${eventMessage}`);
+      await markMqttEventProcessed(bayId, eventId, {
+        type: "event",
+        raw: parsed.raw.slice(0, 256),
+      });
+
+      safeLog(`ℹ️ MQTT EVENT: ${bayId} -> ${parsed.raw}`);
       return;
     }
 
     if (eventType === "selection") {
-      const selectionVal = String(message || "").trim();
+      const parsed = parseMqttJsonOrText(message);
+      const eventId = getMqttEventId(bayId, "selection", parsed);
 
-      if (isCancelValue(selectionVal)) {
+      if (await wasMqttEventProcessed(bayId, eventId)) {
+        safeLog(
+          `ℹ️ MQTT SEÇİM duplicate yok sayıldı: ${bayId}, eventId=${eventId}`,
+        );
+        return;
+      }
+
+      const action = getEventAction(parsed);
+
+      if (isCancelValue(action)) {
         const cancelResult = await clearWaitingBayAfterCancel(bayId);
+
+        await markMqttEventProcessed(bayId, eventId, {
+          type: "selection_cancel",
+          result: cancelResult.reason || null,
+        });
 
         if (cancelResult.cleared) {
           safeLog(
@@ -1287,28 +1435,10 @@ mqttClient.on("message", async (topic, messageBuffer) => {
         return;
       }
 
-      const normalizedSelection = normalizeText(selectionVal);
-
-      let packageId = "";
-
-      if (
-        normalizedSelection === "foam" ||
-        normalizedSelection === "kopuk" ||
-        normalizedSelection === "köpük"
-      ) {
-        packageId = "foam";
-      } else if (
-        normalizedSelection === "wash" ||
-        normalizedSelection === "su" ||
-        normalizedSelection === "water" ||
-        normalizedSelection === "yikama" ||
-        normalizedSelection === "yıkama"
-      ) {
-        packageId = "wash";
-      }
+      const packageId = getSelectionPackageId(parsed);
 
       if (!packageId) {
-        safeLog(`⚠️ MQTT SEÇİM bilinmeyen paket: ${bayId} -> ${selectionVal}`);
+        safeLog(`⚠️ MQTT SEÇİM bilinmeyen paket: ${bayId} -> ${parsed.raw}`);
         return;
       }
 
@@ -1324,21 +1454,35 @@ mqttClient.on("message", async (topic, messageBuffer) => {
         safeLog(
           `⚠️ MQTT SEÇİM yok sayıldı: ${bayId} status=${bayData.status}, lastUserId=${bayData.lastUserId || "yok"}`,
         );
+
+        await markMqttEventProcessed(bayId, eventId, {
+          type: "selection_ignored",
+          packageId,
+          status: bayData.status || null,
+          reason: "bay_not_waiting_or_no_user",
+        });
+
         return;
       }
-
-      const pendingSelectionId = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
       await bayRef.update({
         hardwareSelection: packageId,
         pendingPackage: packageId,
-        pendingSelectionId,
+        pendingSelectionId: eventId,
         pendingPackageSource: "esp32",
         pendingPackageAt: admin.database.ServerValue.TIMESTAMP,
+        lastProcessedSelectionId: eventId,
         updatedAt: admin.database.ServerValue.TIMESTAMP,
       });
 
-      safeLog(`🧼 MQTT SEÇİM KAYDEDİLDİ: ${bayId} -> ${packageId}`);
+      await markMqttEventProcessed(bayId, eventId, {
+        type: "selection",
+        packageId,
+      });
+
+      safeLog(
+        `🧼 MQTT SEÇİM KAYDEDİLDİ: ${bayId} -> ${packageId}, eventId=${eventId}`,
+      );
       return;
     }
   } catch (error) {
@@ -2968,16 +3112,32 @@ if (ENABLE_CRON) {
         .get();
 
       if (!expiredSessions.empty) {
-        const batch = db.batch();
+        const FIRESTORE_BATCH_LIMIT = 450;
         const bayUpdates = {};
         const mqttWaitingCommands = [];
 
-        expiredSessions.forEach((doc) => {
+        let batch = db.batch();
+        let batchWriteCount = 0;
+
+        const commitBatchIfNeeded = async (force = false) => {
+          if (batchWriteCount === 0) return;
+
+          if (force || batchWriteCount >= FIRESTORE_BATCH_LIMIT) {
+            await batch.commit();
+            batch = db.batch();
+            batchWriteCount = 0;
+          }
+        };
+
+        for (const doc of expiredSessions.docs) {
           batch.update(doc.ref, {
             status: "ended",
             endedAt: admin.firestore.FieldValue.serverTimestamp(),
             endedReason: "time_up",
           });
+          batchWriteCount += 1;
+
+          await commitBatchIfNeeded();
 
           const bayId = doc.data().bayId;
 
@@ -2995,9 +3155,9 @@ if (ENABLE_CRON) {
           safeLog(
             `🏁 [CRON] OTOMATİK KAPATMA: ${bayId} süresi doldu, bekleme moduna alındı.`,
           );
-        });
+        }
 
-        await batch.commit();
+        await commitBatchIfNeeded(true);
 
         if (Object.keys(bayUpdates).length > 0) {
           await rtdb.ref().update(bayUpdates);
@@ -3007,7 +3167,6 @@ if (ENABLE_CRON) {
           await safeSendBayCommand(bayId, "WAITING");
         }
       }
-
       const waitingBaysSnap = await rtdb
         .ref("bays")
         .orderByChild("status")
