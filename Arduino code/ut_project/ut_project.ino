@@ -8,7 +8,6 @@
 #include <PubSubClient.h>
 
 #include <TFT_eSPI.h>
-#include <Preferences.h>
 #include <time.h>
 
 #include "qrcode.h"
@@ -72,20 +71,27 @@ String mqttTopicSelection = "";
 String mqttTopicEvent = "";
 
 unsigned long sonMqttDenemeMs = 0;
-const unsigned long MQTT_RETRY_INTERVAL_MS = 5000;
+const unsigned long MQTT_RETRY_INTERVAL_MS = 15000;
 bool ilkMqttBaglantiTamamlandi = false;
+
+TaskHandle_t mqttTaskHandle = NULL;
+bool mqttTaskBaslatildi = false;
+
+struct MqttPublishJob {
+  char topic[96];
+  char payload[128];
+  bool retained;
+};
+
+QueueHandle_t mqttPublishQueue = NULL;
+
 String sonYayinlananDurum = "";
 unsigned long sonDurumYayinMs = 0;
 const unsigned long DURUM_YAYIN_DEBOUNCE_MS = 1000;
 
-// ================= HAFIZA / ZAMAN =================
-Preferences preferences;
+// ================= ZAMAN =================
 unsigned long islemBaslangicMs = 0;
 unsigned long islemSuresiMs = 0;
-unsigned long sonNvsKayitMs = 0;
-unsigned long sonKaydedilenKalanSure = 999999;
-
-const unsigned long NVS_KAYIT_INTERVAL_MS = 60000;
 
 // ================= PINLER =================
 const int buzzerPin = 25;
@@ -174,15 +180,7 @@ void resetSayacDurumu() {
   sayacIslemBittiCalindi = false;
 }
 
-void kalanSureKaydet(unsigned long kalanSure) {
-  if (kalanSure == sonKaydedilenKalanSure) {
-    return;
-  }
 
-  preferences.putULong("kalanSure", kalanSure);
-  sonKaydedilenKalanSure = kalanSure;
-  sonNvsKayitMs = millis();
-}
 
 bool durationGecerliMi(int gelenSure) {
   if (gelenSure < MIN_DURATION_SEC || gelenSure > MAX_DURATION_SEC) {
@@ -194,37 +192,32 @@ bool durationGecerliMi(int gelenSure) {
   return true;
 }
 
-String paketNormalizeEt(const String& paket) {
-  String temizPaket = paket;
-  temizPaket.trim();
-  temizPaket.toLowerCase();
-
+const char* paketNormalizeEt(const String& paket) {
   if (
-    temizPaket == "foam" ||
-    temizPaket == "kopuk" ||
-    temizPaket == "köpük" ||
-    temizPaket == "kopup"
+    paket.equalsIgnoreCase("foam") ||
+    paket.equalsIgnoreCase("kopuk") ||
+    paket.equalsIgnoreCase("köpük") ||
+    paket.equalsIgnoreCase("kopup")
   ) {
     return "foam";
   }
 
   if (
-    temizPaket == "wash" ||
-    temizPaket == "su" ||
-    temizPaket == "water" ||
-    temizPaket == "yikama" ||
-    temizPaket == "yıkama"
+    paket.equalsIgnoreCase("wash") ||
+    paket.equalsIgnoreCase("su") ||
+    paket.equalsIgnoreCase("water") ||
+    paket.equalsIgnoreCase("yikama") ||
+    paket.equalsIgnoreCase("yıkama")
   ) {
     return "wash";
   }
 
-  return temizPaket;
+  return "";
 }
 
 void islemHafizasiniTemizle() {
   islemBaslangicMs = 0;
   islemSuresiMs = 0;
-  kalanSureKaydet(0);
   resetSayacDurumu();
   yeniBusyKomutuGeldi = false;
 }
@@ -522,9 +515,35 @@ void mqttTopicleriHazirla() {
   mqttTopicEvent = "qwash/bays/" + bayId + "/event";
 }
 
-bool mqttDurumYayinla() {
-  if (!mqttClient.connected()) return false;
+bool mqttKuyrugaEkle(const String& topic, const String& payload, bool retained = false) {
+  if (mqttPublishQueue == NULL) {
+    return false;
+  }
 
+  MqttPublishJob job;
+  memset(&job, 0, sizeof(job));
+
+  topic.toCharArray(job.topic, sizeof(job.topic));
+  payload.toCharArray(job.payload, sizeof(job.payload));
+  job.retained = retained;
+
+  bool ok = xQueueSend(
+    mqttPublishQueue,
+    &job,
+    pdMS_TO_TICKS(50)
+  ) == pdTRUE;
+
+  if (!ok) {
+    LOG_PRINT(F("MQTT kuyruk dolu, mesaj eklenemedi: "));
+    LOG_PRINT(topic);
+    LOG_PRINT(F(" -> "));
+    LOG_PRINTLN(payload);
+  }
+
+  return ok;
+}
+
+bool mqttDurumYayinla() {
   unsigned long suAn = millis();
 
   if (
@@ -536,11 +555,7 @@ bool mqttDurumYayinla() {
     return true;
   }
 
-  bool ok = mqttClient.publish(
-    mqttTopicStatus.c_str(),
-    currentStatus.c_str(),
-    true
-  );
+  bool ok = mqttKuyrugaEkle(mqttTopicStatus, currentStatus, true);
 
   if (ok) {
     sonYayinlananDurum = currentStatus;
@@ -551,46 +566,19 @@ bool mqttDurumYayinla() {
 }
 
 bool mqttHeartbeatYayinla() {
-  if (!mqttClient.connected()) return false;
-
-  return mqttClient.publish(
-    mqttTopicHeartbeat.c_str(),
-    "ONLINE",
-    false
-  );
+  return mqttKuyrugaEkle(mqttTopicHeartbeat, "ONLINE", false);
 }
 
 bool mqttBootYayinla() {
-  if (!mqttClient.connected()) return false;
-
-  return mqttClient.publish(
-    mqttTopicHeartbeat.c_str(),
-    "BOOT",
-    false
-  );
+  return mqttKuyrugaEkle(mqttTopicHeartbeat, "BOOT", false);
 }
 
 bool mqttSecimYayinla(const String& secilenPaket) {
-  if (!mqttClient.connected()) {
-    return false;
-  }
-
-  return mqttClient.publish(
-    mqttTopicSelection.c_str(),
-    secilenPaket.c_str(),
-    false
-  );
+  return mqttKuyrugaEkle(mqttTopicSelection, secilenPaket, false);
 }
-bool mqttEventYayinla(const String& eventMesaji) {
-  if (!mqttClient.connected()) {
-    return false;
-  }
 
-  return mqttClient.publish(
-    mqttTopicEvent.c_str(),
-    eventMesaji.c_str(),
-    false
-  );
+bool mqttEventYayinla(const String& eventMesaji) {
+  return mqttKuyrugaEkle(mqttTopicEvent, eventMesaji, false);
 }
 
 void iptalIstegiGonder() {
@@ -774,7 +762,14 @@ else if (komut == "WAITING") {
         return;
       }
 
-      requestedPackage = paketNormalizeEt(gelenPaket);
+      const char* normalizedPackage = paketNormalizeEt(gelenPaket);
+
+      if (normalizedPackage[0] == '\0') {
+        mqttSecimYayinla("invalid_package");
+        return;
+      }
+
+      requestedPackage = normalizedPackage;
       durationSec = gelenSure;
 
       cancelBackendCevabiBekleniyor = false;
@@ -783,7 +778,6 @@ else if (komut == "WAITING") {
       geciciEkranModu = GECICI_YOK;
       bekleyenPaketSecimi = "";
 
-      kalanSureKaydet(0);
       islemBaslangicMs = 0;
       islemSuresiMs = 0;
       resetSayacDurumu();
@@ -866,14 +860,14 @@ bool mqttBaglan() {
   delay(100);
 
   mqttSecureClient.setCACert(root_ca);
-  mqttSecureClient.setTimeout(20000);
-  mqttSecureClient.setHandshakeTimeout(30);
+  mqttSecureClient.setTimeout(3000);
+  mqttSecureClient.setHandshakeTimeout(5);
 
   mqttClient.setServer(MQTT_HOST, MQTT_PORT);
   mqttClient.setCallback(mqttCallback);
   mqttClient.setBufferSize(256);
   mqttClient.setKeepAlive(30);
-  mqttClient.setSocketTimeout(20);
+  mqttClient.setSocketTimeout(3);
 
   heapYaz("MQTT connect oncesi");
 
@@ -922,6 +916,39 @@ bool mqttBaglan() {
   return false;
 }
 
+void mqttBaglantiTask(void* parameter) {
+  MqttPublishJob job;
+
+  for (;;) {
+    if (WiFi.status() == WL_CONNECTED) {
+      if (!mqttClient.connected()) {
+        mqttBaglan();
+      }
+
+      if (mqttClient.connected()) {
+        mqttClient.loop();
+
+        while (xQueueReceive(mqttPublishQueue, &job, 0) == pdTRUE) {
+          bool ok = mqttClient.publish(
+            job.topic,
+            job.payload,
+            job.retained
+          );
+
+          if (!ok) {
+            LOG_PRINT(F("MQTT publish basarisiz: "));
+            LOG_PRINT(job.topic);
+            LOG_PRINT(F(" -> "));
+            LOG_PRINTLN(job.payload);
+          }
+        }
+      }
+    }
+
+    vTaskDelay(pdMS_TO_TICKS(10));
+  }
+}
+
 void wifiNonBlockingKontrolEt() {
   wl_status_t wifiStatus = WiFi.status();
 
@@ -935,7 +962,8 @@ void wifiNonBlockingKontrolEt() {
       wifiReconnectInProgress = false;
       sonWifiDenemeMs = millis();
 
-      mqttBaglan();
+// WiFi geri gelince MQTT task ilk fırsatta yeniden denesin.
+      sonMqttDenemeMs = 0;
 
       durumDegisti = true;
     }
@@ -995,10 +1023,6 @@ void ekrandaSayaciGuncelle() {
     int saniye = kalanSaniye % 60;
     int dakika = kalanSaniye / 60;
 
-    if (suAnMs - sonNvsKayitMs >= NVS_KAYIT_INTERVAL_MS) {
-      kalanSureKaydet(kalanSaniye);
-    }
-
     if (kalanSaniye >= 10) {
       if ((int)kalanSaniye != sayacSonEkranSaniye) {
         tone(buzzerPin, 2000, 100);
@@ -1030,7 +1054,6 @@ void ekrandaSayaciGuncelle() {
 
     sayacIslemBittiCalindi = true;
 
-    kalanSureKaydet(0);
     islemBaslangicMs = 0;
     islemSuresiMs = 0;
 
@@ -1089,25 +1112,39 @@ void setup() {
   macAdresi = rawMac;
   bayId = "bay_" + macAdresi;
 
-  mqttTopicleriHazirla();
+mqttTopicleriHazirla();
 
-  preferences.begin("qwash", false);
-  sonKaydedilenKalanSure = preferences.getULong("kalanSure", 0);
+if (mqttPublishQueue == NULL) {
+  mqttPublishQueue = xQueueCreate(20, sizeof(MqttPublishJob));
+}
 
-  if (!wifiBaglan(WIFI_TIMEOUT_MS)) {
-    currentStatus = "offline";
-    isBayActive = false;
-    ekranaBaglantiHatasiYaz();
-    sonWifiDenemeMs = millis();
-    return;
-  }
+if (!mqttTaskBaslatildi && mqttPublishQueue != NULL) {
+  xTaskCreatePinnedToCore(
+    mqttBaglantiTask,
+    "mqttBaglantiTask",
+    8192,
+    NULL,
+    1,
+    &mqttTaskHandle,
+    0
+  );
+
+  mqttTaskBaslatildi = true;
+}
+
+if (!wifiBaglan(WIFI_TIMEOUT_MS)) {
+  currentStatus = "offline";
+  isBayActive = false;
+  ekranaBaglantiHatasiYaz();
+  sonWifiDenemeMs = millis();
+  return;
+}
 
   wifiWasConnected = true;
   wifiReconnectInProgress = false;
 
   ntpBekle();
 
-  mqttBaglan();
   wifiWasConnected = WiFi.status() == WL_CONNECTED;
 
   sonNabizZamani = millis();
@@ -1120,20 +1157,10 @@ void loop() {
 
   wifiNonBlockingKontrolEt();
 
-  bool wifiBagli = WiFi.status() == WL_CONNECTED;
-
-  if (wifiBagli) {
-    mqttBaglan();
-
-    if (mqttClient.connected()) {
-      mqttClient.loop();
-    }
-  } else {
+  if (WiFi.status() != WL_CONNECTED) {
     if (currentStatus != "busy" && !hataEkraniGosteriliyor && durumDegisti) {
-      if (durumDegisti) {
-        ekranaBaglantiHatasiYaz();
-        durumDegisti = false;
-      }
+      ekranaBaglantiHatasiYaz();
+      durumDegisti = false;
     }
   }
 
@@ -1237,32 +1264,14 @@ void loop() {
       }
 
       if (eskiDurum != "busy" || yeniBusyKomutuGeldi) {
-        unsigned long kayitliKalanSure = preferences.getULong("kalanSure", 0);
+        islemBaslangicMs = millis();
+        islemSuresiMs = durationSec * 1000UL;
+        yeniBusyKomutuGeldi = false;
 
-        if (yeniBusyKomutuGeldi) {
-          islemBaslangicMs = millis();
-          islemSuresiMs = durationSec * 1000UL;
-          kalanSureKaydet(durationSec);
-          yeniBusyKomutuGeldi = false;
-
-          LOG_PRINT(F("Yeni MQTT sure baslatildi. Paket: "));
-          LOG_PRINT(requestedPackage);
-          LOG_PRINT(F(" Sure: "));
-          LOG_PRINTLN(durationSec);
-        }
-        else if (kayitliKalanSure > 0 && currentStatus == "busy") {
-          islemBaslangicMs = millis();
-          islemSuresiMs = kayitliKalanSure * 1000UL;
-          sonNvsKayitMs = millis();
-          sonKaydedilenKalanSure = kayitliKalanSure;
-          LOG_PRINTLN(F("Kalan sure hafizadan yuklendi."));
-        }
-        else {
-          islemBaslangicMs = millis();
-          islemSuresiMs = durationSec * 1000UL;
-          kalanSureKaydet(durationSec);
-          LOG_PRINTLN(F("Yeni sure baslatildi."));
-        }
+        LOG_PRINT(F("MQTT sure baslatildi. Paket: "));
+        LOG_PRINT(requestedPackage);
+        LOG_PRINT(F(" Sure: "));
+        LOG_PRINTLN(durationSec);
 
         resetSayacDurumu();
       }

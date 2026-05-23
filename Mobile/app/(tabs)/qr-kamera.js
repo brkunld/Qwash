@@ -15,7 +15,6 @@ import {
 // Örn: firebase.js içinde export const auth = getAuth(app); olmalı.
 import { auth } from "../../firebase";
 
-
 export default function QrKamera() {
   const [permission, requestPermission] = useCameraPermissions();
   const [kilit, setKilit] = useState(false);
@@ -93,7 +92,7 @@ export default function QrKamera() {
       throw new Error("Oturum bulunamadı. Lütfen tekrar giriş yapın.");
     }
 
-    const idToken = await currentUser.getIdToken(true);
+    const idToken = await currentUser.getIdToken();
     const url = getApiUrl("/api/prepare-bay");
 
     console.log("Prepare Bay URL:", url);
@@ -138,9 +137,7 @@ export default function QrKamera() {
 
     const { raw, bayId } = bayIdTemizle(data);
 
-    const re = /^bay_[A-Fa-f0-9]{12}$/i;
-
-    if (!re.test(bayId)) {
+    if (!bayId || !bayId.toLowerCase().startsWith("bay_")) {
       setYukleniyor(false);
 
       Alert.alert(
@@ -148,7 +145,7 @@ export default function QrKamera() {
         `Okunan: "${raw}"\nLütfen geçerli bir Qwash peron QR kodu okutun.`,
       );
 
-      setTimeout(() => setKilit(false), 2000);
+      setTimeout(() => setKilit(false), 1200);
       return;
     }
 
@@ -159,9 +156,11 @@ export default function QrKamera() {
 
       if (!result?.success) {
         Alert.alert("Hata", "Peron seçim ekranına alınamadı.");
-        setTimeout(() => setKilit(false), 2000);
+        setTimeout(() => setKilit(false), 1200);
         return;
       }
+
+      setKilit(false);
 
       router.navigate({
         pathname: "/kullanici",
@@ -179,7 +178,7 @@ export default function QrKamera() {
 
       Alert.alert("Hata", mesaj);
 
-      setTimeout(() => setKilit(false), 2500);
+      setTimeout(() => setKilit(false), 1500);
     }
   };
 

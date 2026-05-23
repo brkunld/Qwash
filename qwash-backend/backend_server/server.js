@@ -8,6 +8,7 @@ const admin = require("firebase-admin");
 const cron = require("node-cron");
 const mqtt = require("mqtt");
 const Iyzipay = require("iyzipay");
+const { z } = require("zod");
 
 const APP_BASE_URL = process.env.APP_BASE_URL;
 
@@ -59,6 +60,9 @@ const db = admin.firestore();
 const rtdb = admin.database();
 
 const app = express();
+
+app.set("trust proxy", true);
+
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -144,9 +148,34 @@ const safeSendBayCommand = async (bayId, command) => {
   }
 };
 
+const getClientIp = (req) => {
+  const forwardedFor = req.headers["x-forwarded-for"];
+
+  if (typeof forwardedFor === "string" && forwardedFor.trim()) {
+    return forwardedFor.split(",")[0].trim();
+  }
+
+  if (Array.isArray(forwardedFor) && forwardedFor.length > 0) {
+    return String(forwardedFor[0]).split(",")[0].trim();
+  }
+
+  return (
+    req.ip || req.socket?.remoteAddress || req.connection?.remoteAddress || ""
+  );
+};
+
 // =========================================================
 // HELPERS
 // =========================================================
+
+const topupSchema = z.object({
+  tokens: z.coerce
+    .number()
+    .int("Jeton miktarı tam sayı olmalıdır.")
+    .min(1, "Jeton miktarı en az 1 olmalıdır.")
+    .max(100, "Tek seferde en fazla 100 jeton yüklenebilir."),
+});
+
 const normalizeText = (value) => {
   return String(value || "")
     .trim()
@@ -470,6 +499,151 @@ const clearBaySessionFields = async (bayId, extraPatch = {}) => {
   }
 };
 
+const resumeOrClearSessionAfterBoot = async (bayId, bayData = {}) => {
+  const sessionId = bayData.currentSessionId;
+
+  if (!sessionId) {
+    await clearBaySessionFields(bayId, {
+      status: "available",
+      isActive: true,
+      autoOffline: null,
+      lastSeen: admin.database.ServerValue.TIMESTAMP,
+    });
+
+    await safeSendBayCommand(bayId, "AVAILABLE");
+
+    return {
+      resumed: false,
+      reason: "no_active_session",
+    };
+  }
+
+  const sessionRef = db.collection("sessions").doc(sessionId);
+  const sessionDoc = await sessionRef.get();
+
+  if (!sessionDoc.exists) {
+    await clearBaySessionFields(bayId, {
+      status: "available",
+      isActive: true,
+      autoOffline: null,
+      lastSeen: admin.database.ServerValue.TIMESTAMP,
+    });
+
+    await safeSendBayCommand(bayId, "AVAILABLE");
+
+    return {
+      resumed: false,
+      reason: "session_not_found",
+    };
+  }
+
+  const session = sessionDoc.data();
+
+  if (session.status !== "running") {
+    await clearBaySessionFields(bayId, {
+      status: "available",
+      isActive: true,
+      autoOffline: null,
+      lastSeen: admin.database.ServerValue.TIMESTAMP,
+    });
+
+    await safeSendBayCommand(bayId, "AVAILABLE");
+
+    return {
+      resumed: false,
+      reason: `session_not_running_${session.status}`,
+    };
+  }
+
+  const expectedEndTimeMs =
+    Number(session.expectedEndTimeMs || 0) ||
+    (session.expectedEndTime &&
+    typeof session.expectedEndTime.toMillis === "function"
+      ? session.expectedEndTime.toMillis()
+      : 0);
+
+  const remainingSec = Math.max(
+    0,
+    Math.ceil((expectedEndTimeMs - Date.now()) / 1000),
+  );
+
+  if (remainingSec <= 0) {
+    await sessionRef.update({
+      status: "ended",
+      endedAt: admin.firestore.FieldValue.serverTimestamp(),
+      endedReason: "time_up_after_boot",
+    });
+
+    await clearBaySessionFields(bayId, {
+      status: "waiting",
+      isActive: true,
+      autoOffline: null,
+      lastSeen: admin.database.ServerValue.TIMESTAMP,
+    });
+
+    await safeSendBayCommand(bayId, "WAITING");
+
+    return {
+      resumed: false,
+      reason: "session_expired",
+    };
+  }
+
+  const packageId =
+    session.packageId || session.type || bayData.requestedPackage;
+  const tokensCost = Number(session.tokensCost || bayData.tokensCost || 0);
+
+  if (!packageId) {
+    await clearBaySessionFields(bayId, {
+      status: "available",
+      isActive: true,
+      autoOffline: null,
+      lastSeen: admin.database.ServerValue.TIMESTAMP,
+    });
+
+    await safeSendBayCommand(bayId, "AVAILABLE");
+
+    return {
+      resumed: false,
+      reason: "missing_package_id",
+    };
+  }
+
+  await rtdb.ref(`bays/${bayId}`).update({
+    status: "busy",
+    requestedPackage: packageId,
+    durationSec: remainingSec,
+    tokensCost,
+    currentSessionId: sessionId,
+    lastUserId: session.userId || bayData.lastUserId || null,
+    hardwareSelection: "",
+    pendingPackage: null,
+    pendingPackageSource: null,
+    pendingSelectionId: null,
+    pendingPackageAt: null,
+    updatedAt: admin.database.ServerValue.TIMESTAMP,
+  });
+
+  await setBayPresence(bayId, {
+    isActive: true,
+    autoOffline: null,
+    lastSeen: admin.database.ServerValue.TIMESTAMP,
+  });
+
+  const mqttOk = await safeSendBayCommand(
+    bayId,
+    `BUSY|${packageId}|${remainingSec}`,
+  );
+
+  return {
+    resumed: mqttOk,
+    reason: mqttOk ? "session_resumed" : "mqtt_resume_failed",
+    sessionId,
+    packageId,
+    remainingSec,
+  };
+};
+
 const clearWaitingBayAfterCancel = async (bayId, uid = null) => {
   const bayRef = rtdb.ref(`bays/${bayId}`);
   const baySnap = await bayRef.once("value");
@@ -613,9 +787,18 @@ const sendAdminAlert = async (bayId, type) => {
     return;
   }
 
+  let timeoutId = null;
+
   try {
+    const controller = new AbortController();
+
+    timeoutId = setTimeout(() => {
+      controller.abort();
+    }, 5000);
+
     const response = await fetch("https://api.brevo.com/v3/smtp/email", {
       method: "POST",
+      signal: controller.signal,
       headers: {
         accept: "application/json",
         "content-type": "application/json",
@@ -649,7 +832,16 @@ const sendAdminAlert = async (bayId, type) => {
       } bildirimi.`,
     );
   } catch (error) {
+    if (error.name === "AbortError") {
+      safeLog("❌ Mail API zaman aşımı: Brevo 5 saniye içinde yanıt vermedi.");
+      return;
+    }
+
     safeLog(`❌ Mail API Bağlantı Hatası: ${error.message}`);
+  } finally {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
   }
 };
 
@@ -814,33 +1006,17 @@ mqttClient.on("message", async (topic, messageBuffer) => {
       if (isBoot) {
         const bayData = snap.val() || {};
 
-        if (bayData.currentSessionId) {
-          const refundResult = await refundSessionIfNeeded(
-            bayData.currentSessionId,
-            "bay_reboot_during_session",
-          );
+        const bootResult = await resumeOrClearSessionAfterBoot(bayId, bayData);
 
-          if (refundResult.refunded) {
-            safeLog(
-              `💸 BOOT İADESİ: ${bayId} yeniden başladı, ${refundResult.tokens} jeton iade edildi.`,
-            );
-          } else {
-            safeLog(
-              `ℹ️ BOOT sırasında iade yapılmadı: ${bayId} - ${refundResult.reason}`,
-            );
-          }
+        if (bootResult.resumed) {
+          safeLog(
+            `🔄 BOOT DEVAM: ${bayId} session devam ettirildi. ` +
+              `Session=${bootResult.sessionId}, Paket=${bootResult.packageId}, Kalan=${bootResult.remainingSec}sn`,
+          );
+        } else {
+          safeLog(`🔄 BOOT TEMİZLİĞİ: ${bayId} result=${bootResult.reason}`);
         }
 
-        await clearBaySessionFields(bayId, {
-          status: "available",
-          isActive: true,
-          autoOffline: null,
-          lastSeen: admin.database.ServerValue.TIMESTAMP,
-        });
-
-        safeLog(
-          `🔄 BOOT TEMİZLİĞİ: ${bayId} eski session alanları temizlendi.`,
-        );
         return;
       }
 
@@ -1669,26 +1845,15 @@ app.post("/api/stop-session", verifyUser, async (req, res) => {
 // ---------------------------------------------------------
 app.post("/api/topup", verifyUser, async (req, res) => {
   const uid = req.user.uid;
-  const { tokens } = req.body;
+  const parsedTopup = topupSchema.safeParse(req.body);
 
-  if (!tokens) {
+  if (!parsedTopup.success) {
     return res.status(400).json({
-      error: "Eksik parametre gönderildi. tokens zorunludur.",
+      error: parsedTopup.error.issues[0]?.message || "Geçersiz istek.",
     });
   }
 
-  const eklenecekJeton = Number(tokens);
-
-  if (
-    !Number.isFinite(eklenecekJeton) ||
-    !Number.isInteger(eklenecekJeton) ||
-    eklenecekJeton <= 0 ||
-    eklenecekJeton > 100
-  ) {
-    return res.status(400).json({
-      error: "Geçersiz jeton miktarı.",
-    });
-  }
+  const eklenecekJeton = parsedTopup.data.tokens;
 
   try {
     const jetonPackageDoc = await db.collection("packages").doc("jeton").get();
@@ -1734,6 +1899,19 @@ app.post("/api/topup", verifyUser, async (req, res) => {
 
     const callbackUrl = `${APP_BASE_URL}/api/topup-callback?orderId=${orderRef.id}`;
 
+    const buyerIp = getClientIp(req);
+
+    if (!buyerIp) {
+      await orderRef.update({
+        status: "ip_missing",
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+
+      return res.status(400).json({
+        error: "Kullanıcı IP adresi alınamadı.",
+      });
+    }
+
     const iyzicoRequest = {
       locale: Iyzipay.LOCALE.TR,
       conversationId: orderRef.id,
@@ -1755,7 +1933,7 @@ app.post("/api/topup", verifyUser, async (req, res) => {
         lastLoginDate: "2026-01-01 12:00:00",
         registrationDate: "2026-01-01 12:00:00",
         registrationAddress: "QWash Mobil",
-        ip: req.ip || "85.34.78.112",
+        ip: buyerIp,
         city: "Istanbul",
         country: "Turkey",
         zipCode: "34000",
@@ -2537,9 +2715,9 @@ if (ENABLE_CRON) {
           await rtdb.ref().update(bayUpdates);
         }
 
-        mqttWaitingCommands.forEach((bayId) => {
-          safeSendBayCommand(bayId, "WAITING");
-        });
+        for (const bayId of mqttWaitingCommands) {
+          await safeSendBayCommand(bayId, "WAITING");
+        }
       }
 
       const waitingBaysSnap = await rtdb
@@ -2575,9 +2753,9 @@ if (ENABLE_CRON) {
           await rtdb.ref().update(waitingUpdates);
         }
 
-        mqttAvailableCommands.forEach((bayId) => {
-          safeSendBayCommand(bayId, "AVAILABLE");
-        });
+        for (const bayId of mqttAvailableCommands) {
+          await safeSendBayCommand(bayId, "AVAILABLE");
+        }
       }
 
       const timeoutMs = 2 * 60 * 1000;
