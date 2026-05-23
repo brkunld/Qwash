@@ -2836,7 +2836,19 @@ app.post(
 // =========================================================
 // STARTUP CLEAN
 // =========================================================
+// NOT:
+// Eski startup clean üretimde tehlikeliydi.
+// Render deploy/restart sırasında aktif yıkama devam ederken:
+// - running session refund ediliyordu
+// - tüm peronlar available yapılıyordu
+// Bu yüzden şimdilik non-destructive hale getirildi.
+// Geri almak gerekirse aşağıdaki eski kod kontrollü şekilde açılabilir.
 const systemStartupClean = async () => {
+  safeLog(
+    "ℹ️ Startup clean devre dışı: restart sırasında aktif session/peron state'i bozulmayacak.",
+  );
+
+  /*
   try {
     safeLog("🔄 Veritabanı temizliği yapılıyor...");
 
@@ -2890,6 +2902,7 @@ const systemStartupClean = async () => {
   } catch (error) {
     safeLog(`❌ Temizlik sırasında hata: ${error.message}`);
   }
+  */
 };
 
 // =========================================================
