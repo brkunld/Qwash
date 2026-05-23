@@ -1,7 +1,7 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Alert } from "react-native";
+import { Alert, InteractionManager } from "react-native";
 import * as WebBrowser from "expo-web-browser"; // <-- EN ÜSTE İMPORT EDİN
 
 import { onAuthStateChanged, signOut } from "firebase/auth";
@@ -239,10 +239,10 @@ export function useKullaniciIslemleri() {
 
             delete kasitliCikisRef.current[bayId];
 
-            // 3. React render çakışmasını engellemek için Router işlemini 10ms erteliyoruz
-            setTimeout(() => {
+            // 3. Alert ve state güncellemeleri bittikten sonra Router parametresini temizliyoruz.
+            InteractionManager.runAfterInteractions(() => {
               router.setParams({ bayId: "" });
-            }, 10);
+            });
           }
         } else {
           setBaylarData((prev) => {
@@ -363,9 +363,9 @@ export function useKullaniciIslemleri() {
 
         setAktifBayIdListesi((prev) => prev.filter((id) => id !== islemBayId));
 
-        setTimeout(() => {
+        InteractionManager.runAfterInteractions(() => {
           router.setParams({ bayId: "" });
-        }, 10);
+        });
 
         return;
       }
