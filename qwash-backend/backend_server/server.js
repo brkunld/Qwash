@@ -1214,11 +1214,9 @@ mqttClient.on("close", () => {
   safeLog(`⚠️ MQTT bağlantısı kapandı. clientId=${MQTT_CLIENT_ID}`);
 });
 
-
 mqttClient.on("offline", () => {
   safeLog(`⚠️ MQTT offline oldu. clientId=${MQTT_CLIENT_ID}`);
 });
-
 
 mqttClient.on("message", async (topic, messageBuffer) => {
   const message = messageBuffer.toString();
@@ -1321,6 +1319,10 @@ mqttClient.on("message", async (topic, messageBuffer) => {
     }
 
     if (eventType === "heartbeat") {
+      if (bayId === "bay_000000000000" || bayId.includes("000000000000")) {
+        safeLog(`⚠️ Geçersiz peron ID'si yoksayıldı: ${bayId}`);
+        return;
+      }
       const bayRef = rtdb.ref(`bays/${bayId}`);
       const snap = await bayRef.once("value");
       const isBoot = message === "BOOT";
