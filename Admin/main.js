@@ -123,9 +123,9 @@ if (!gotTheLock) {
     });
 
     // Production'da DevTools kapalı kalsın
-    if (!app.isPackaged) {
-      mainWindow.webContents.openDevTools();
-    }
+    //if (!app.isPackaged) {
+    //  mainWindow.webContents.openDevTools();
+    //}
   }
 
   app.whenReady().then(() => {

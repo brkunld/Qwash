@@ -2,13 +2,13 @@
 <html lang="tr">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width,initial-scale=1.0" />
-    <title>ESP32 Peron Simülatörü</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ESP32 MQTT Peron Simülatörü</title>
     <link
       href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@400;500;600;700;800;900&display=swap"
       rel="stylesheet"
     />
-    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+    <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
     <style>
       :root {
         --bg-main: #f0f2f5;
@@ -19,25 +19,18 @@
         --accent-yellow: #f5a623;
         --accent-dark: #111827;
         --success: #10b981;
-        --success-dim: rgba(16, 185, 129, 0.1);
         --warning: #f5a623;
-        --warning-dim: rgba(245, 166, 35, 0.12);
         --danger: #ef4444;
-        --danger-dim: rgba(239, 68, 68, 0.1);
         --info: #3b82f6;
-        --info-dim: rgba(59, 130, 246, 0.1);
         --font-ui: "Inter", sans-serif;
         --font-mono: "Space Mono", monospace;
         --radius-card: 18px;
-        --radius-inner: 12px;
       }
-
       * {
         box-sizing: border-box;
         margin: 0;
         padding: 0;
       }
-
       body {
         font-family: var(--font-ui);
         background: var(--bg-main);
@@ -48,29 +41,25 @@
         align-items: flex-start;
         padding: 28px 20px;
       }
-
       .app {
         width: 100%;
-        max-width: 1140px;
+        max-width: 1180px;
         display: grid;
         grid-template-columns: 400px minmax(0, 1fr);
         gap: 20px;
         align-items: stretch;
       }
-
       .device-col {
         display: flex;
         flex-direction: column;
         gap: 16px;
         height: 100%;
       }
-
       .device-col .card {
         height: 100%;
         display: flex;
         flex-direction: column;
       }
-
       .card {
         background: var(--bg-card);
         border: 1px solid var(--border);
@@ -78,36 +67,35 @@
         padding: 20px;
         box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
       }
-
-      .device-label {
+      .device-label,
+      .panel-eyebrow,
+      .section-label {
         font-family: var(--font-mono);
         font-size: 10px;
         font-weight: 700;
         letter-spacing: 1.2px;
         color: var(--text-muted);
         text-transform: uppercase;
+      }
+      .device-label {
         margin-bottom: 14px;
         display: flex;
         align-items: center;
         gap: 8px;
       }
-
       .device-label::before {
         content: "";
         width: 7px;
         height: 7px;
         background: var(--accent-yellow);
         border-radius: 50%;
-        flex-shrink: 0;
       }
-
       .screen-bezel {
         background: #1a1f2e;
         border-radius: 14px;
         padding: 10px;
         box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.4);
       }
-
       .screen {
         width: 100%;
         aspect-ratio: 4/3;
@@ -117,13 +105,11 @@
         overflow: hidden;
         min-height: 220px;
       }
-
       .screen-content {
         width: 100%;
         height: 100%;
         position: relative;
       }
-
       .center {
         display: flex;
         align-items: center;
@@ -133,20 +119,15 @@
         flex-direction: column;
         gap: 10px;
       }
-
       .big-text {
-        font-family: var(--font-ui);
         font-size: 30px;
         font-weight: 900;
         line-height: 1.2;
       }
-
       .medium-text {
-        font-family: var(--font-ui);
         font-size: 18px;
         font-weight: 700;
       }
-
       .timer {
         font-family: var(--font-mono);
         font-size: 52px;
@@ -154,16 +135,14 @@
         color: var(--warning);
         letter-spacing: 0.04em;
         text-align: center;
+        margin-top: 18px;
       }
-
       .package-title {
-        font-family: var(--font-ui);
         font-size: 24px;
         font-weight: 900;
         text-align: center;
         margin-top: 26px;
       }
-
       .qr-wrap {
         background: white;
         width: 100%;
@@ -174,92 +153,64 @@
         flex-direction: column;
         gap: 6px;
       }
-
       .select-title {
         position: absolute;
         top: 14px;
         width: 100%;
         text-align: center;
-        font-family: var(--font-ui);
         font-size: 14px;
         font-weight: 800;
         color: rgba(255, 255, 255, 0.9);
         letter-spacing: 0.8px;
         text-transform: uppercase;
       }
-
       .touch-btn {
         position: absolute;
+        top: 76px;
+        width: 130px;
+        height: 90px;
         border-radius: 10px;
         border: none;
-        font-family: var(--font-ui);
-        font-size: 13px;
+        font-size: 18px;
         font-weight: 900;
         cursor: pointer;
         letter-spacing: 0.8px;
-        transition: transform 0.12s;
         text-transform: uppercase;
       }
-
-      .touch-btn:hover:not(:disabled) {
-        transform: scale(1.05);
-      }
-
-      .touch-btn:active:not(:disabled) {
-        transform: scale(0.95);
-      }
-
-      .touch-btn:disabled {
-        opacity: 0.5;
-        cursor: not-allowed;
-      }
-
       .btn-water {
-        left: 16px;
-        top: 60px;
-        width: 104px;
-        height: 70px;
-        background: #3b82f6;
+        left: 20px;
+        background: #2563eb;
         color: white;
       }
-
       .btn-foam {
-        left: 132px;
-        top: 60px;
-        width: 104px;
-        height: 70px;
-        background: #10b981;
-        color: white;
+        left: 170px;
+        background: #22d3ee;
+        color: #111827;
       }
-
       .btn-cancel {
-        right: 16px;
-        top: 60px;
-        width: 86px;
-        height: 70px;
+        left: 112px;
+        top: 198px;
+        width: 120px;
+        height: 36px;
         background: #ef4444;
         color: white;
+        font-size: 14px;
       }
-
       .progress-bg {
         position: absolute;
-        left: 16px;
-        bottom: 14px;
-        width: calc(100% - 32px);
-        height: 5px;
-        background: #1f2937;
-        border-radius: 999px;
+        left: 20px;
+        bottom: 42px;
+        width: 280px;
+        height: 8px;
+        background: #111827;
         overflow: hidden;
       }
-
       .progress-fill {
         height: 100%;
-        background: var(--warning);
+        background: #22c55e;
         width: 100%;
         transition: width 0.15s linear;
-        border-radius: 999px;
       }
-
       .hardware-row {
         display: grid;
         grid-template-columns: 1fr 1fr;
@@ -267,13 +218,15 @@
         margin-top: auto;
         padding-top: 14px;
       }
-
-      .physical-btn {
+      button {
+        font-family: var(--font-ui);
+      }
+      .physical-btn,
+      .mini-btn {
         background: #f9fafb;
         border: 1.5px solid var(--border);
         border-radius: 10px;
         padding: 12px 10px;
-        font-family: var(--font-ui);
         font-size: 12px;
         font-weight: 800;
         color: var(--text-main);
@@ -282,18 +235,11 @@
         text-transform: uppercase;
         letter-spacing: 0.5px;
       }
-
-      .physical-btn:hover {
+      .physical-btn:hover,
+      .mini-btn:hover {
         border-color: var(--accent-dark);
         background: #fff;
       }
-
-      .physical-btn.danger {
-        border-color: rgba(239, 68, 68, 0.35);
-        color: #ef4444;
-        background: rgba(239, 68, 68, 0.06);
-      }
-
       .buzzer {
         background: #f9fafb;
         border: 1.5px solid var(--border);
@@ -308,22 +254,17 @@
         align-items: center;
         justify-content: center;
         gap: 6px;
-        transition: all 0.15s;
-        grid-column: 1 / -1;
       }
-
       .buzzer::before {
         content: "◉";
         font-size: 13px;
       }
-
       .buzzer.active {
-        background: var(--warning-dim);
+        background: rgba(245, 166, 35, 0.12);
         border-color: var(--warning);
         color: var(--warning);
         animation: bpulse 0.25s infinite alternate;
       }
-
       @keyframes bpulse {
         from {
           box-shadow: none;
@@ -332,52 +273,31 @@
           box-shadow: 0 0 10px rgba(245, 166, 35, 0.25);
         }
       }
-
       .panel-header {
         margin-bottom: 22px;
       }
-
-      .panel-eyebrow {
-        font-family: var(--font-mono);
-        font-size: 10px;
-        font-weight: 700;
-        letter-spacing: 1.2px;
-        color: var(--text-muted);
-        text-transform: uppercase;
-        margin-bottom: 6px;
-      }
-
       .panel-header h1 {
         font-size: 22px;
         font-weight: 900;
-        color: var(--text-main);
         letter-spacing: -0.4px;
+        margin-top: 6px;
       }
-
       .section-label {
-        font-size: 11px;
-        font-weight: 800;
-        color: var(--text-muted);
-        text-transform: uppercase;
-        letter-spacing: 1px;
         margin-bottom: 12px;
         padding-bottom: 8px;
         border-bottom: 1.5px solid var(--border);
       }
-
       .fields-grid {
         display: grid;
         grid-template-columns: 1fr 1fr;
         gap: 12px;
         margin-bottom: 14px;
       }
-
       .field-group {
         display: flex;
         flex-direction: column;
         gap: 5px;
       }
-
       .field-group label {
         font-size: 11px;
         font-weight: 700;
@@ -385,34 +305,30 @@
         text-transform: uppercase;
         letter-spacing: 0.5px;
       }
-
-      .field-group input {
+      .field-group input,
+      .field-group select {
         background: #f9fafb;
         border: 1.5px solid var(--border);
         border-radius: 9px;
         padding: 10px 12px;
-        font-family: var(--font-ui);
         font-size: 13px;
         font-weight: 600;
         color: var(--text-main);
         width: 100%;
-        transition: all 0.18s;
         outline: none;
       }
-
-      .field-group input:focus {
+      .field-group input:focus,
+      .field-group select:focus {
         border-color: var(--accent-yellow);
         background: #fff;
         box-shadow: 0 0 0 3px rgba(245, 166, 35, 0.12);
       }
-
       .field-group input[readonly] {
         color: var(--text-muted);
         background: var(--bg-main);
         cursor: default;
         border-color: transparent;
       }
-
       .btn-connect {
         background: var(--accent-dark);
         color: #fff;
@@ -420,70 +336,119 @@
         border: none;
         border-radius: 10px;
         padding: 13px 16px;
-        font-family: var(--font-ui);
         font-size: 13px;
         font-weight: 800;
         cursor: pointer;
-        transition: all 0.2s;
         text-transform: uppercase;
         letter-spacing: 0.8px;
-        margin-bottom: 22px;
+        margin-bottom: 18px;
       }
-
       .btn-connect:hover {
         background: #1f2937;
         transform: translateY(-1px);
       }
-
-      .btn-connect:active {
-        transform: translateY(0);
+      .cmd-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 10px;
+        margin-bottom: 14px;
       }
-
-      .note {
-        font-size: 12px;
-        color: var(--text-muted);
-        line-height: 1.55;
-        background: #f9fafb;
-        border: 1px solid var(--border);
+      .cmd-grid.two {
+        grid-template-columns: repeat(2, 1fr);
+      }
+      .cmd-primary {
+        background: #111827;
+        color: white;
+        border-color: #111827;
+      }
+      .cmd-blue {
+        background: #2563eb;
+        color: white;
+        border-color: #2563eb;
+      }
+      .cmd-green {
+        background: #10b981;
+        color: white;
+        border-color: #10b981;
+      }
+      .cmd-orange {
+        background: #f59e0b;
+        color: #111827;
+        border-color: #f59e0b;
+      }
+      .cmd-red {
+        background: #ef4444;
+        color: white;
+        border-color: #ef4444;
+      }
+      .logbox {
+        height: 210px;
+        overflow: auto;
+        background: #0b1020;
+        color: #d1d5db;
         border-radius: 12px;
         padding: 12px;
+        font-family: var(--font-mono);
+        font-size: 11px;
+        line-height: 1.55;
       }
-
-      @media (max-width: 860px) {
+      .pill-row {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 8px;
+        margin-bottom: 18px;
+      }
+      .pill {
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 10px;
+        background: #f9fafb;
+      }
+      .pill span {
+        display: block;
+        color: var(--text-muted);
+        font-size: 10px;
+        font-weight: 800;
+        text-transform: uppercase;
+        margin-bottom: 4px;
+      }
+      .pill strong {
+        font-size: 13px;
+        font-family: var(--font-mono);
+        word-break: break-word;
+      }
+      @media (max-width: 900px) {
         .app {
           grid-template-columns: 1fr;
         }
-
         .device-col {
           max-width: 420px;
           margin: auto;
           width: 100%;
         }
+        .cmd-grid,
+        .cmd-grid.two,
+        .fields-grid,
+        .pill-row {
+          grid-template-columns: 1fr;
+        }
       }
     </style>
   </head>
-
   <body>
     <div class="app">
       <div class="device-col">
         <div class="card">
-          <div class="device-label">ESP32 · TFT Ekran · Donanım Sim.</div>
-
+          <div class="device-label">ESP32 · MQTT · Simülasyon</div>
           <div class="screen-bezel">
             <div class="screen">
               <div id="screen" class="screen-content"></div>
             </div>
           </div>
-
           <div class="hardware-row">
             <button class="physical-btn" onclick="physicalFoamButton()">
               🔘 Fiziksel Köpük Btn
             </button>
-
-            <button class="physical-btn danger" onclick="physicalCancelButton()">
-              ⛔ Fiziksel İptal Btn
-            </button>
-
             <div id="buzzer" class="buzzer">BUZZER: PASİF</div>
           </div>
         </div>
@@ -491,148 +456,242 @@
 
       <div class="card" style="display: flex; flex-direction: column; gap: 0">
         <div class="panel-header">
-          <div class="panel-eyebrow">Bağlantı & Simülasyon</div>
-          <h1>Donanım Test Paneli</h1>
+          <div class="panel-eyebrow">MQTT Simülatör</div>
+          <h1>ESP Kod Akışını Taklit Eden Panel</h1>
         </div>
 
         <div style="margin-bottom: 20px">
-          <div class="section-label">Yetkilendirme</div>
-
+          <div class="section-label">MQTT Bağlantı</div>
           <div class="fields-grid">
             <div class="field-group">
-              <label>Firebase Email</label>
-              <input id="email" type="email" placeholder="ornek@email.com" />
+              <label>HiveMQ WebSocket URL</label
+              ><input
+                id="mqttUrl"
+                placeholder="wss://bce6bf753d664aa5b1126c2a541fd255.s1.eu.hivemq.cloud:8884/mqtt"
+              />
             </div>
-
             <div class="field-group">
-              <label>Şifre</label>
-              <input id="password" type="password" placeholder="••••••••" />
+              <label>Bay ID</label><input id="bayId" value="bay_SIMULATOR_01" />
             </div>
-
             <div class="field-group">
-              <label>Bay ID</label>
-              <input id="bayId" value="bay_42060_01_02" />
+              <label>MQTT Kullanıcı</label
+              ><input id="mqttUser" autocomplete="username" />
             </div>
-
             <div class="field-group">
-              <label>Sistem Durumu</label>
-              <input id="connectionState" value="Bağlı değil" readonly />
+              <label>MQTT Şifre</label
+              ><input
+                id="mqttPass"
+                type="password"
+                autocomplete="current-password"
+              />
+            </div>
+            <div class="field-group">
+              <label>Bağlantı</label
+              ><input id="connectionState" value="Bağlı değil" readonly />
+            </div>
+            <div class="field-group">
+              <label>Son ESP Seçimi</label
+              ><input id="lastSelection" value="Yok" readonly />
             </div>
           </div>
-
-          <button class="btn-connect" onclick="connectFirebase()">
-            Sisteme Bağlan
+          <button class="btn-connect" onclick="connectMqtt()">
+            Simülatörü MQTT'ye Bağla
           </button>
+        </div>
 
-          <div class="note">
-            Bu panel Firebase RTDB üzerinden ESP ekranını simüle eder.
-            </b> İptal testi için peron
-            doğrudan <b>available</b> yapılır ve session alanları temizlenir.
-            Gerçek cihazda kalıcı çözüm: MQTT
-            <b>qwash/bays/{bayId}/event → CANCEL</b>.
+        <div class="pill-row">
+          <div class="pill">
+            <span>Status</span><strong id="liveStatus">baslangic</strong>
           </div>
+          <div class="pill">
+            <span>Heartbeat</span><strong id="liveHeartbeat">-</strong>
+          </div>
+          <div class="pill">
+            <span>Selection</span><strong id="liveSelection">-</strong>
+          </div>
+          <div class="pill">
+            <span>Event</span><strong id="liveEvent">-</strong>
+          </div>
+        </div>
+
+        <div style="margin-bottom: 18px">
+          <div class="section-label">Komut / Test</div>
+          <div class="cmd-grid">
+            <button
+              class="mini-btn cmd-green"
+              onclick="sendCommand('AVAILABLE')"
+            >
+              AVAILABLE
+            </button>
+            <button
+              class="mini-btn cmd-orange"
+              onclick="sendCommand('WAITING')"
+            >
+              WAITING
+            </button>
+            <button class="mini-btn cmd-red" onclick="sendCommand('OFFLINE')">
+              OFFLINE
+            </button>
+            <button
+              class="mini-btn cmd-orange"
+              onclick="sendCommand('MAINTENANCE')"
+            >
+              MAINTENANCE
+            </button>
+            <button
+              class="mini-btn cmd-primary"
+              onclick="sendCommand('ACTIVE_ON')"
+            >
+              ACTIVE ON
+            </button>
+            <button
+              class="mini-btn cmd-red"
+              onclick="sendCommand('ACTIVE_OFF')"
+            >
+              ACTIVE OFF
+            </button>
+          </div>
+          <div class="fields-grid">
+            <div class="field-group">
+              <label>Paket</label
+              ><select id="package">
+                <option value="wash">wash / su</option>
+                <option value="foam">foam / köpük</option>
+              </select>
+            </div>
+            <div class="field-group">
+              <label>Süre (sn)</label
+              ><input
+                id="durationSec"
+                type="number"
+                min="10"
+                max="3600"
+                value="60"
+              />
+            </div>
+          </div>
+          <div class="cmd-grid two">
+            <button class="mini-btn cmd-blue" onclick="sendBusyFromForm()">
+              BUSY Komutu Gönder
+            </button>
+            <button class="mini-btn cmd-green" onclick="approveLastSelection()">
+              Son Seçimi Onayla
+            </button>
+          </div>
+          <div class="cmd-grid two">
+            <button class="mini-btn" onclick="simulateTouchSelection('wash')">
+              Ekrandan SU Seç
+            </button>
+            <button class="mini-btn" onclick="simulateCancel()">
+              Ekrandan İPTAL
+            </button>
+          </div>
+        </div>
+
+        <div>
+          <div class="section-label">Log</div>
+          <div id="logbox" class="logbox"></div>
         </div>
       </div>
     </div>
 
     <script src="./secrets.js"></script>
-
-    <script type="module">
-      import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
-      import {
-        getAuth,
-        signInWithEmailAndPassword,
-      } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
-      import {
-        getDatabase,
-        ref,
-        onValue,
-        update,
-        serverTimestamp,
-      } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-database.js";
-
+    <script>
       const defaultSecrets = window.SECRETS || {};
 
-      const firebaseConfig = {
-        apiKey: defaultSecrets.API_KEY || "",
-        databaseURL: defaultSecrets.DATABASE_URL || "",
-      };
-
-      const app = initializeApp(firebaseConfig);
-      const auth = getAuth(app);
-      const db = getDatabase(app);
-
-      let bayRef = null;
-      let unsubscribeBay = null;
+      let client = null;
       let connected = false;
-
       let currentStatus = "baslangic";
-      let isBayActive = true;
       let requestedPackage = "wash";
       let durationSec = 60;
+      let isBayActive = true;
 
       let bitisZamaniMs = 0;
-      let dokunmatikKilit = false;
-
       let beklemeBaslangicMs = 0;
-      let BEKLEME_SURESI_MS = 60000;
+      const BEKLEME_SURESI_MS = 60000;
+      const ODEME_BEKLEME_TIMEOUT_MS = 30000;
+      const CANCEL_BACKEND_TIMEOUT_MS = 1500;
+      const MIN_DURATION_SEC = 10;
+      const MAX_DURATION_SEC = 3600;
+
+      let odemeBekleniyor = false;
+      let dokunmatikKilit = false;
       let waitingTimeoutHandled = false;
+      let odemeBeklemeBaslangicMs = 0;
+      let cancelBackendCevabiBekleniyor = false;
+      let cancelBackendBeklemeBaslangicMs = 0;
 
-      let sonNabizZamani = 0;
-      const nabizAraligi = 30000;
-
-      let audioCtx = null;
       let lastShownSecond = -1;
       let lastHalfSecondBeep = 0;
       let finishPlayed = false;
-
-      let lastRenderedStatus = null;
-      let lastRenderedActive = null;
-      let lastRenderedPackage = null;
-      let lastRenderedDuration = null;
+      let audioCtx = null;
+      let lastSelectionPackage = "";
+      let lastSelectionPayload = null;
+      let eventCounter = 0;
+      let heartbeatTimer = null;
 
       const screen = document.getElementById("screen");
       const buzzerEl = document.getElementById("buzzer");
       const nowMs = () => Date.now();
 
+      function topics() {
+        const bayId =
+          document.getElementById("bayId").value.trim() || "bay_SIMULATOR_01";
+        return {
+          bayId,
+          commands: `qwash/bays/${bayId}/commands`,
+          status: `qwash/bays/${bayId}/status`,
+          heartbeat: `qwash/bays/${bayId}/heartbeat`,
+          selection: `qwash/bays/${bayId}/selection`,
+          event: `qwash/bays/${bayId}/event`,
+        };
+      }
+
       function log(msg) {
         const t = new Date().toLocaleTimeString("tr-TR");
+        const el = document.getElementById("logbox");
+        el.innerHTML = `<div>[${t}] ${escapeHtml(msg)}</div>` + el.innerHTML;
         console.log(`[${t}] ${msg}`);
       }
 
-      function setScreen(html, bg = "#000") {
-        screen.style.background = bg;
-        screen.innerHTML = html;
+      function escapeHtml(value) {
+        return String(value).replace(
+          /[&<>'"]/g,
+          (ch) =>
+            ({
+              "&": "&amp;",
+              "<": "&lt;",
+              ">": "&gt;",
+              "'": "&#39;",
+              '"': "&quot;",
+            })[ch],
+        );
       }
 
       function setConnectionState(text) {
         document.getElementById("connectionState").value = text;
       }
+      function setScreen(html, bg = "#000") {
+        screen.style.background = bg;
+        screen.innerHTML = html;
+      }
 
       function beep(freq = 2000, duration = 100) {
         try {
-          if (!audioCtx) {
-            audioCtx = new (window.AudioContext ||
-              window.webkitAudioContext)();
-          }
-
+          if (!audioCtx)
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
           const osc = audioCtx.createOscillator();
           const gain = audioCtx.createGain();
-
           osc.type = "square";
           osc.frequency.value = freq;
           gain.gain.value = 0.08;
-
           osc.connect(gain);
           gain.connect(audioCtx.destination);
-
           osc.start();
           setTimeout(() => osc.stop(), duration);
         } catch (e) {}
-
         buzzerEl.classList.add("active");
         buzzerEl.textContent = `BUZZER: ${freq}Hz`;
-
         setTimeout(
           () => {
             buzzerEl.classList.remove("active");
@@ -642,391 +701,471 @@
         );
       }
 
+      function publish(topic, payload, retained = false) {
+        if (!connected || !client) {
+          log("Önce MQTT'ye bağlan.");
+          return false;
+        }
+        client.publish(topic, payload, { qos: 0, retain: retained }, (err) => {
+          if (err) log("Publish hatası: " + err.message);
+          else log(`TX ${topic}: ${payload}`);
+        });
+        return true;
+      }
+
+      function publishStatus() {
+        publish(topics().status, currentStatus, true);
+        document.getElementById("liveStatus").textContent = currentStatus;
+      }
+
+      function publishHeartbeat(value = "ONLINE") {
+        publish(topics().heartbeat, value, false);
+        document.getElementById("liveHeartbeat").textContent = value;
+      }
+
+      function resetRuntime() {
+        requestedPackage = "wash";
+        durationSec = 60;
+        bitisZamaniMs = 0;
+        odemeBekleniyor = false;
+        dokunmatikKilit = false;
+        waitingTimeoutHandled = false;
+        cancelBackendCevabiBekleniyor = false;
+        lastShownSecond = -1;
+        lastHalfSecondBeep = 0;
+        finishPlayed = false;
+      }
+
+      function setSimStatus(status, publishIt = true) {
+        currentStatus = status;
+        document.getElementById("liveStatus").textContent = status;
+
+        if (status === "available") {
+          isBayActive = true;
+          resetRuntime();
+          drawQR();
+        } else if (status === "waiting") {
+          isBayActive = true;
+          requestedPackage = "";
+          durationSec = 60;
+          showWaiting();
+        } else if (status === "busy") {
+          isBayActive = true;
+          dokunmatikKilit = true;
+          odemeBekleniyor = false;
+          showBusy();
+        } else if (status === "maintenance") {
+          isBayActive = true;
+          resetRuntime();
+          showMaintenance();
+        } else if (status === "offline") {
+          isBayActive = false;
+          resetRuntime();
+          ekranaKapaliYaz();
+        } else {
+          showBaslangic();
+        }
+
+        if (publishIt) publishStatus();
+      }
+
       function showBaslangic() {
         setScreen(
-          `<div class="center">
-            <div class="medium-text" style="color:#6b7280">Sistem Hazır</div>
-            <div class="medium-text" style="color:#6b7280">Bekleniyor...</div>
-            <div style="margin-top:12px;font-family:'Space Mono',monospace;font-size:11px;color:#9ca3af">
-              Sağ panelden giriş yapın
-            </div>
-          </div>`,
+          `<div class="center"><div class="medium-text" style="color:#9ca3af">Durum Alınıyor...</div><div style="font-family:'Space Mono',monospace;font-size:11px;color:#6b7280">Simülatör MQTT bekliyor</div></div>`,
         );
       }
 
       function drawQR() {
-        const bayId =
-          document.getElementById("bayId").value.trim() || "bay_42060_01_02";
-
-        setScreen(
-          `<div class="qr-wrap">
-            <canvas id="qrCanvas" width="190" height="190"></canvas>
-            <div style="color:#111827;font-family:'Space Mono',monospace;font-size:11px;font-weight:700;margin-top:4px">
-              ${bayId}
-            </div>
-          </div>`,
-          "white",
-        );
-
-        const canvas = document.getElementById("qrCanvas");
-
-        if (window.QRCode && typeof window.QRCode.toCanvas === "function") {
-          window.QRCode.toCanvas(
-            canvas,
-            bayId,
-            {
-              width: 190,
-              margin: 1,
-              color: {
-                dark: "#000000",
-                light: "#ffffff",
-              },
-            },
-            (err) => {
-              if (err) {
-                log("❌ QR hatası: " + err.message);
-                showQrFallback(bayId);
-              } else {
-                log(`QR çizildi: ${bayId}`);
-              }
-            },
-          );
-        } else {
-          showQrFallback(bayId);
-        }
-      }
-
-      function showQrFallback(bayId) {
+        const { bayId } = topics();
         const url =
-          "https://api.qrserver.com/v1/create-qr-code/?size=190x190&data=" +
+          "https://api.qrserver.com/v1/create-qr-code/?size=190x190&margin=1&data=" +
           encodeURIComponent(bayId);
-
         setScreen(
-          `<div class="qr-wrap">
-            <img src="${url}" width="190" height="190"/>
-            <div style="color:#111;font-size:11px;font-family:monospace;font-weight:700">
-              ${bayId}
-            </div>
-          </div>`,
+          `<div class="qr-wrap"><img src="${url}" width="190" height="190" alt="QR" onerror="this.style.display='none';document.getElementById('qrTextFallback').style.display='block';"/><div id="qrTextFallback" style="display:none;color:#111827;font-family:'Space Mono',monospace;font-size:18px;font-weight:700;padding:20px;text-align:center;word-break:break-all">${escapeHtml(bayId)}</div><div style="color:#111;font-size:11px;font-family:monospace;font-weight:700">${escapeHtml(bayId)}</div></div>`,
           "white",
         );
       }
 
       function ekranaKapaliYaz() {
         setScreen(
-          `<div class="center">
-            <div class="big-text" style="color:#ef4444">BU PERON</div>
-            <div class="big-text" style="color:#ef4444">KAPALIDIR</div>
-          </div>`,
+          `<div class="center"><div class="big-text" style="color:#ef4444">BU PERON</div><div class="big-text" style="color:#ef4444">KAPALIDIR</div></div>`,
         );
-
-        log("DURUM: PERON KAPALI");
       }
 
       function showMaintenance() {
         setScreen(
-          `<div class="center">
-            <div class="big-text" style="color:#f5a623">BAKIM MODU</div>
-          </div>`,
+          `<div class="center"><div class="big-text" style="color:#f59e0b">BAKIM MODU</div></div>`,
         );
-
-        log("DURUM: BAKIM MODU");
       }
 
       function showWaiting() {
-        dokunmatikKilit = false;
-        waitingTimeoutHandled = false;
         beklemeBaslangicMs = nowMs();
-        BEKLEME_SURESI_MS = 60000;
-
-        setScreen(
-          `<div class="select-title">Lütfen Paket Seçiniz</div>
-          <button class="touch-btn btn-water" onclick="selectPackage('wash')">SU</button>
-          <button class="touch-btn btn-foam" onclick="selectPackage('foam')">KÖPÜK</button>
-          <button class="touch-btn btn-cancel" onclick="cancelFromDevice()">İPTAL</button>
-          <div class="progress-bg">
-            <div id="progressFill" class="progress-fill"></div>
-          </div>`,
-        );
-
-        log("DURUM: waiting / Paket seçimi bekleniyor");
+        waitingTimeoutHandled = false;
+        odemeBekleniyor = false;
+        dokunmatikKilit = false;
+        setScreen(`
+          <div class="select-title">Lütfen Paket Seçiniz</div>
+          <button class="touch-btn btn-water" onclick="simulateTouchSelection('wash')">SU</button>
+          <button class="touch-btn btn-foam" onclick="simulateTouchSelection('foam')">KÖPÜK</button>
+          <button class="touch-btn btn-cancel" onclick="simulateCancel()">İPTAL</button>
+          <div class="progress-bg"><div id="progressFill" class="progress-fill"></div></div>
+        `);
       }
 
       function showBusy() {
-        durationSec = durationSec || 60;
+        durationSec = Number(durationSec) || 60;
         requestedPackage = requestedPackage || "wash";
         bitisZamaniMs = nowMs() + durationSec * 1000;
         lastShownSecond = -1;
         finishPlayed = false;
-
-        const color = requestedPackage === "foam" ? "#10b981" : "#3b82f6";
+        const color = requestedPackage === "foam" ? "#22d3ee" : "#2563eb";
         const title = requestedPackage === "foam" ? "KÖPÜK MODU" : "SU MODU";
-
         setScreen(
-          `<div class="package-title" style="color:${color}">${title}</div>
-          <div id="timer" class="timer">00:00</div>`,
+          `<div class="package-title" style="color:${color}">${title}</div><div id="timer" class="timer">00:00</div>`,
         );
-
-        log(`DURUM: busy / ${requestedPackage} / ${durationSec} sn`);
+        log(`Sim BUSY başladı: ${requestedPackage} / ${durationSec} sn`);
       }
 
-      function applyStatusChange(force = false) {
-        const should =
-          force ||
-          lastRenderedStatus !== currentStatus ||
-          lastRenderedActive !== isBayActive ||
-          lastRenderedPackage !== requestedPackage ||
-          lastRenderedDuration !== durationSec;
+      function connectMqtt() {
+        const url = document.getElementById("mqttUrl").value.trim();
+        const username = document.getElementById("mqttUser").value.trim();
+        const password = document.getElementById("mqttPass").value;
+        if (!url)
+          return log("MQTT WebSocket URL gerekli. Örnek: wss://host:8884/mqtt");
+        if (!window.mqtt)
+          return log("mqtt.js yüklenemedi. İnternet/CDN erişimini kontrol et.");
 
-        if (!should) return;
-
-        lastRenderedStatus = currentStatus;
-        lastRenderedActive = isBayActive;
-        lastRenderedPackage = requestedPackage;
-        lastRenderedDuration = durationSec;
-
-        if (!isBayActive || currentStatus === "offline") {
-          return ekranaKapaliYaz();
+        if (client) {
+          try {
+            client.end(true);
+          } catch (e) {}
+          client = null;
         }
 
-        if (currentStatus === "available") {
-          drawQR();
-        } else if (currentStatus === "waiting") {
-          showWaiting();
-        } else if (currentStatus === "busy") {
-          showBusy();
-        } else if (currentStatus === "maintenance") {
-          showMaintenance();
-        } else {
-          showBaslangic();
-        }
-      }
+        const t = topics();
+        setConnectionState("Bağlanıyor...");
+        log(`Simülatör bağlanıyor: ${url}`);
 
-      function syncPanelFromData(data) {
-        if (!data) return;
+        client = mqtt.connect(url, {
+          username: username || undefined,
+          password: password || undefined,
+          clean: true,
+          reconnectPeriod: 2000,
+          connectTimeout: 8000,
+          clientId: `qwash_esp32_sim_${t.bayId}_${Math.random().toString(16).slice(2)}`,
+          will: { topic: t.status, payload: "offline", qos: 0, retain: true },
+        });
 
-        const oldStatus = currentStatus;
-        const oldActive = isBayActive;
-        const oldPackage = requestedPackage;
-        const oldDuration = durationSec;
-
-        if (typeof data.status === "string") currentStatus = data.status;
-        if (typeof data.isActive === "boolean") isBayActive = data.isActive;
-        if (typeof data.requestedPackage === "string") {
-          requestedPackage = data.requestedPackage;
-        }
-        if (typeof data.durationSec === "number") {
-          durationSec = data.durationSec;
-        }
-
-        data.__meaningfulChanged =
-          oldStatus !== currentStatus ||
-          oldActive !== isBayActive ||
-          oldPackage !== requestedPackage ||
-          oldDuration !== durationSec;
-      }
-
-      async function connectFirebase() {
-        const email = document.getElementById("email").value.trim();
-        const password = document.getElementById("password").value;
-        const bayId =
-          document.getElementById("bayId").value.trim() || "bay_42060_01_02";
-
-        if (!email || !password) {
-          return log("❌ Email ve şifre gerekli.");
-        }
-
-        try {
-          setConnectionState("Bağlanıyor...");
-
-          await signInWithEmailAndPassword(auth, email, password);
-
+        client.on("connect", () => {
           connected = true;
-          bayRef = ref(db, `/bays/${bayId}`);
-
-          if (unsubscribeBay) unsubscribeBay();
-
-          unsubscribeBay = onValue(
-            bayRef,
-            (snapshot) => {
-              const data = snapshot.val();
-              log("Firebase stream: " + JSON.stringify(data));
-
-              const liveData = data || {};
-              syncPanelFromData(liveData);
-
-              if (liveData.__meaningfulChanged) {
-                applyStatusChange();
-              }
+          setConnectionState("MQTT bağlı / sim aktif");
+          client.subscribe(
+            [t.commands, t.status, t.heartbeat, t.selection, t.event],
+            { qos: 0 },
+            (err) => {
+              if (err) log("Subscribe hatası: " + err.message);
+              else log(`Dinleniyor: ${t.commands}`);
             },
-            (err) => log("❌ Stream hatası: " + err.message),
           );
 
-          await update(bayRef, {
-            lastSeen: serverTimestamp(),
-          });
+          publishHeartbeat("BOOT");
+          setSimStatus("available", true);
 
-          setConnectionState("Sisteme Bağlandı");
-          log("✅ Firebase bağlandı: /bays/" + bayId);
-        } catch (err) {
+          if (heartbeatTimer) clearInterval(heartbeatTimer);
+          heartbeatTimer = setInterval(() => publishHeartbeat("ONLINE"), 30000);
+        });
+
+        client.on("reconnect", () =>
+          setConnectionState("Yeniden bağlanıyor..."),
+        );
+        client.on("close", () => {
           connected = false;
-          setConnectionState("Bağlantı hatası");
-          log("❌ " + err.message);
+          setConnectionState("Bağlı değil");
+        });
+        client.on("error", (err) => log("MQTT hata: " + err.message));
+        client.on("message", handleMqttMessage);
+      }
+
+      function handleMqttMessage(topic, payloadBuffer) {
+        const payload = payloadBuffer.toString();
+        const t = topics();
+        log(`RX ${topic}: ${payload}`);
+
+        if (topic === t.commands) {
+          applyCommand(payload.trim());
+          return;
+        }
+
+        if (topic === t.status) {
+          document.getElementById("liveStatus").textContent = payload;
+          return;
+        }
+
+        if (topic === t.heartbeat) {
+          document.getElementById("liveHeartbeat").textContent = payload;
+          return;
+        }
+
+        if (topic === t.selection) {
+          document.getElementById("liveSelection").textContent = payload;
+          lastSelectionPayload = parseMaybeJson(payload);
+          lastSelectionPackage = getPackageFromSelection(
+            lastSelectionPayload,
+            payload,
+          );
+          document.getElementById("lastSelection").value =
+            lastSelectionPackage || payload;
+          return;
+        }
+
+        if (topic === t.event) {
+          document.getElementById("liveEvent").textContent = payload;
+          return;
         }
       }
 
-      async function writeBayPatch(patch) {
-        if (!connected || !bayRef) {
-          return log("❌ Önce Firebase'e bağlan.");
-        }
+      function applyCommand(command) {
+        log(`Sim komut uygulanıyor: ${command}`);
 
+        if (command === "AVAILABLE") {
+          setSimStatus("available", true);
+        } else if (command === "WAITING") {
+          setSimStatus("waiting", true);
+        } else if (command === "OFFLINE" || command === "ACTIVE_OFF") {
+          setSimStatus("offline", true);
+        } else if (command === "MAINTENANCE") {
+          setSimStatus("maintenance", true);
+        } else if (command === "ACTIVE_ON") {
+          if (currentStatus === "offline") setSimStatus("available", true);
+          else publishStatus();
+        } else if (command === "RESET") {
+          publishHeartbeat("BOOT");
+          setSimStatus("available", true);
+        } else if (command.startsWith("BUSY|")) {
+          const parts = command.split("|");
+          const normalized = paketNormalizeEt(parts[1] || "");
+          const sure = Number(parts[2] || 0);
+
+          if (!durationGecerliMi(sure)) {
+            publishSelection("invalid_duration");
+            return;
+          }
+
+          if (!normalized) {
+            publishSelection("invalid_package");
+            return;
+          }
+
+          requestedPackage = normalized;
+          durationSec = sure;
+          setSimStatus("busy", true);
+        }
+      }
+
+      function parseMaybeJson(text) {
         try {
-          await update(bayRef, {
-            ...patch,
-            updatedAt: serverTimestamp(),
-          });
-        } catch (err) {
-          log("❌ Yazma hatası: " + err.message);
+          return JSON.parse(text);
+        } catch (e) {
+          return null;
         }
       }
 
-      async function clearBayForCancel(extraPatch = {}) {
-        await writeBayPatch({
-          status: "available",
-          isActive: true,
-          autoOffline: null,
-          currentSessionId: null,
-          lastUserId: null,
-          requestedPackage: null,
-          durationSec: null,
-          tokensCost: null,
-          lastSeen: serverTimestamp(),
-          ...extraPatch,
-        });
+      function getPackageFromSelection(obj, raw) {
+        if (obj && obj.type === "selection" && obj.packageId)
+          return String(obj.packageId);
+        const lower = String(raw || "").toLowerCase();
+        if (
+          lower.includes("foam") ||
+          lower.includes("kopuk") ||
+          lower.includes("köpük")
+        )
+          return "foam";
+        if (
+          lower.includes("wash") ||
+          lower.includes("water") ||
+          lower.includes("su")
+        )
+          return "wash";
+        return "";
       }
 
-      async function writeStatus(status) {
-        currentStatus = status;
-
-        await writeBayPatch({
-          status,
-        });
-
-        applyStatusChange();
+      function paketNormalizeEt(value) {
+        const v = String(value || "")
+          .trim()
+          .toLowerCase();
+        if (["foam", "kopuk", "köpük", "kopup"].includes(v)) return "foam";
+        if (["wash", "su", "water", "yikama", "yıkama"].includes(v))
+          return "wash";
+        return "";
       }
 
-      async function writeActive(active) {
-        isBayActive = active;
-
-        await writeBayPatch({
-          isActive: active,
-        });
-
-        applyStatusChange();
+      function durationGecerliMi(value) {
+        return (
+          Number.isFinite(value) &&
+          value >= MIN_DURATION_SEC &&
+          value <= MAX_DURATION_SEC
+        );
       }
 
-      async function selectPackage(pkg) {
-        if (currentStatus !== "waiting" || dokunmatikKilit) return;
+      function nextEventId(type) {
+        eventCounter += 1;
+        return `${topics().bayId}_${type}_${Date.now()}_${eventCounter}`;
+      }
+
+      function publishSelection(pkg) {
+        const normalized = paketNormalizeEt(pkg);
+        const payload = normalized
+          ? JSON.stringify({
+              type: "selection",
+              packageId: normalized,
+              eventId: nextEventId("selection"),
+            })
+          : String(pkg);
+
+        if (publish(topics().selection, payload, false)) {
+          lastSelectionPackage = normalized;
+          document.getElementById("lastSelection").value =
+            normalized || payload;
+          document.getElementById("liveSelection").textContent = payload;
+        }
+      }
+
+      function publishCancelEvent() {
+        const payload = JSON.stringify({
+          type: "cancel",
+          action: "CANCEL",
+          eventId: nextEventId("cancel"),
+        });
+        if (publish(topics().event, payload, false)) {
+          document.getElementById("liveEvent").textContent = payload;
+        }
+      }
+
+      function simulateTouchSelection(pkg) {
+        if (currentStatus !== "waiting" || dokunmatikKilit) {
+          return log("Seçim için sim durumunun waiting olması lazım.");
+        }
 
         dokunmatikKilit = true;
-        requestedPackage = pkg;
-
+        requestedPackage = paketNormalizeEt(pkg);
         setScreen(
-          `<div class="center medium-text" style="color:#f5a623">
-            Seçim simüle edildi...
-          </div>`,
+          `<div class="center medium-text" style="color:#f5a623">İstek iletiliyor...</div>`,
         );
-
-        log(
-          `Paket seçildi: ${pkg}.`,
-        );
-
-        setTimeout(
-          () =>
-            setScreen(
-              `<div class="center medium-text" style="color:#9ca3af">
-                Mobil uygulamadan paket başlatma bekleniyor...
-              </div>`,
-            ),
-          400,
-        );
-      }
-
-      async function cancelFromDevice() {
-        if (currentStatus !== "waiting" && currentStatus !== "starting") {
-          log(`İptal yok sayıldı. Mevcut durum: ${currentStatus}`);
-          return;
-        }
-
-        if (dokunmatikKilit && currentStatus === "waiting") {
-          log("İptal yok sayıldı. Dokunmatik kilit aktif.");
-          return;
-        }
-
-        dokunmatikKilit = true;
-
-        setScreen(
-          `<div class="center">
-            <div class="big-text" style="color:#ef4444">İPTAL</div>
-            <div class="medium-text" style="color:#9ca3af">Peron boşa çıkarılıyor...</div>
-          </div>`,
-        );
-
-        beep(700, 180);
-
-        log("ESP iptal simülasyonu: peron available yapılıyor...");
-
-        await clearBayForCancel();
+        publishSelection(requestedPackage);
 
         setTimeout(() => {
-          currentStatus = "available";
-          applyStatusChange(true);
-        }, 300);
+          if (currentStatus !== "waiting") return;
+          setScreen(
+            `<div class="center medium-text" style="color:#9ca3af">Ödeme bekleniyor...</div>`,
+          );
+          odemeBekleniyor = true;
+          odemeBeklemeBaslangicMs = nowMs();
+          beklemeBaslangicMs = nowMs();
+        }, 500);
       }
 
       function physicalFoamButton() {
-        log("Fiziksel KÖPÜK butonuna basıldı");
-        selectPackage("foam");
+        log("Fiziksel KÖPÜK buton simülasyonu");
+        simulateTouchSelection("foam");
       }
 
-      function physicalCancelButton() {
-        log("Fiziksel İPTAL butonuna basıldı");
-        cancelFromDevice();
+      function simulateCancel() {
+        if (currentStatus !== "waiting") {
+          return log("İptal için sim durumunun waiting olması lazım.");
+        }
+
+        dokunmatikKilit = true;
+        odemeBekleniyor = false;
+        setScreen(
+          `<div class="center medium-text" style="color:#ef4444">İptal ediliyor...</div>`,
+        );
+        publishCancelEvent();
+        cancelBackendCevabiBekleniyor = true;
+        cancelBackendBeklemeBaslangicMs = nowMs();
+      }
+
+      function sendCommand(command) {
+        publish(topics().commands, command, false);
+      }
+
+      function sendBusyFromForm() {
+        const pkg = document.getElementById("package").value;
+        const sure = Math.max(
+          10,
+          Math.min(
+            3600,
+            Number(document.getElementById("durationSec").value) || 60,
+          ),
+        );
+        sendCommand(`BUSY|${pkg}|${sure}`);
+      }
+
+      function approveLastSelection() {
+        if (!lastSelectionPackage) return log("Onaylanacak selection yok.");
+        const sure = Math.max(
+          10,
+          Math.min(
+            3600,
+            Number(document.getElementById("durationSec").value) || 60,
+          ),
+        );
+        sendCommand(`BUSY|${lastSelectionPackage}|${sure}`);
       }
 
       function updateWaitingProgress() {
-        if (currentStatus !== "waiting" || dokunmatikKilit) return;
+        if (currentStatus !== "waiting" || dokunmatikKilit || odemeBekleniyor)
+          return;
 
         const elapsed = nowMs() - beklemeBaslangicMs;
         const ratio = Math.max(0, 1 - elapsed / BEKLEME_SURESI_MS);
-
         const fill = document.getElementById("progressFill");
         if (fill) fill.style.width = `${ratio * 100}%`;
 
         if (elapsed >= BEKLEME_SURESI_MS && !waitingTimeoutHandled) {
           waitingTimeoutHandled = true;
-          dokunmatikKilit = true;
+          log("waiting_timeout: sim available moduna dönüyor.");
+          setSimStatus("available", true);
+        }
+      }
 
-          log("Bekleme süresi bitti. Durum available yapılıyor...");
+      function updateOdemeTimeout() {
+        if (!odemeBekleniyor || currentStatus !== "waiting") return;
+        if (nowMs() - odemeBeklemeBaslangicMs >= ODEME_BEKLEME_TIMEOUT_MS) {
+          log("odeme_timeout: CANCEL event yayınlandı.");
+          publishCancelEvent();
+          cancelBackendCevabiBekleniyor = true;
+          cancelBackendBeklemeBaslangicMs = nowMs();
+          odemeBekleniyor = false;
+          dokunmatikKilit = true;
+          setScreen(
+            `<div class="center medium-text" style="color:#ef4444">İptal ediliyor...</div>`,
+          );
+        }
+      }
+
+      function updateCancelBackendTimeout() {
+        if (!cancelBackendCevabiBekleniyor) return;
+        if (
+          nowMs() - cancelBackendBeklemeBaslangicMs >=
+          CANCEL_BACKEND_TIMEOUT_MS
+        ) {
+          log("CANCEL cevabı gelmedi: sim lokal AVAILABLE yapıyor.");
+          cancelBackendCevabiBekleniyor = false;
+          setSimStatus("available", true);
         }
       }
 
       function updateBusyTimer() {
         if (currentStatus !== "busy") return;
-
         const timer = document.getElementById("timer");
         if (!timer) return;
 
         const kalanMs = bitisZamaniMs - nowMs();
-
         if (kalanMs > 0) {
-          const toplamSaniye = Math.floor(kalanMs / 1000);
+          const toplamSaniye = Math.ceil(kalanMs / 1000);
           const saniye = toplamSaniye % 60;
           const dakika = Math.floor(toplamSaniye / 60);
-
-          timer.textContent = `${String(dakika).padStart(2, "0")}:${String(
-            saniye,
-          ).padStart(2, "0")}`;
+          timer.textContent = `${String(dakika).padStart(2, "0")}:${String(saniye).padStart(2, "0")}`;
 
           if (toplamSaniye >= 10) {
             if (toplamSaniye !== lastShownSecond) beep(2000, 100);
@@ -1039,67 +1178,50 @@
           finishPlayed = false;
         } else if (!finishPlayed) {
           setScreen(
-            `<div class="center big-text" style="color:#ef4444">
-              İŞLEM BİTTİ
-            </div>`,
+            `<div class="center big-text" style="color:#ef4444">İŞLEM BİTTİ</div>`,
           );
-
           beep(1000, 3000);
-          log("İŞLEM BİTTİ");
           finishPlayed = true;
+
+          setTimeout(() => {
+            if (currentStatus === "busy") setSimStatus("waiting", true);
+          }, 3000);
         }
       }
-
-      async function nabizGonder() {
-        if (!connected || !bayRef) return;
-
-        try {
-          await update(bayRef, {
-            lastSeen: serverTimestamp(),
-          });
-        } catch (err) {
-          log("❌ Nabız gönderilemedi: " + err.message);
-        }
-      }
-
-      function tick() {
-        updateWaitingProgress();
-        updateBusyTimer();
-
-        if (nowMs() - sonNabizZamani >= nabizAraligi) {
-          sonNabizZamani = nowMs();
-          nabizGonder();
-        }
-      }
-
-      window.connectFirebase = connectFirebase;
-      window.writeStatus = writeStatus;
-      window.writeActive = writeActive;
-      window.selectPackage = selectPackage;
-      window.cancelFromDevice = cancelFromDevice;
-      window.physicalFoamButton = physicalFoamButton;
-      window.physicalCancelButton = physicalCancelButton;
 
       function fillInputsFromSecrets() {
         if (!window.SECRETS) return;
-
-        if (window.SECRETS.USER_EMAIL) {
-          document.getElementById("email").value = window.SECRETS.USER_EMAIL;
-        }
-
-        if (window.SECRETS.USER_PASSWORD) {
-          document.getElementById("password").value =
-            window.SECRETS.USER_PASSWORD;
-        }
-
-        if (window.SECRETS.BAY_ID) {
+        if (window.SECRETS.MQTT_WS_URL)
+          document.getElementById("mqttUrl").value = window.SECRETS.MQTT_WS_URL;
+        if (window.SECRETS.MQTT_USER)
+          document.getElementById("mqttUser").value = window.SECRETS.MQTT_USER;
+        if (window.SECRETS.MQTT_PASS)
+          document.getElementById("mqttPass").value = window.SECRETS.MQTT_PASS;
+        if (window.SECRETS.BAY_ID)
           document.getElementById("bayId").value = window.SECRETS.BAY_ID;
-        }
       }
+
+      window.connectMqtt = connectMqtt;
+      window.sendCommand = sendCommand;
+      window.sendBusyFromForm = sendBusyFromForm;
+      window.approveLastSelection = approveLastSelection;
+      window.simulateTouchSelection = simulateTouchSelection;
+      window.simulateCancel = simulateCancel;
+      window.physicalFoamButton = physicalFoamButton;
 
       fillInputsFromSecrets();
       showBaslangic();
-      setInterval(tick, 120);
+
+      if (window.SECRETS && window.SECRETS.AUTO_CONNECT_MQTT === true) {
+        window.addEventListener("load", () => setTimeout(connectMqtt, 300));
+      }
+
+      setInterval(() => {
+        updateWaitingProgress();
+        updateOdemeTimeout();
+        updateCancelBackendTimeout();
+        updateBusyTimer();
+      }, 120);
     </script>
   </body>
 </html>

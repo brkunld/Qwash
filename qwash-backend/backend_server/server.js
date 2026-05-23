@@ -1332,6 +1332,8 @@ mqttClient.on("message", async (topic, messageBuffer) => {
         if (!hardwareTryingToFreeActiveSession) {
           await bayRef.update({
             status: nextStatus || currentStatus,
+            isActive: true,
+            autoOffline: null,
             updatedAt: admin.database.ServerValue.TIMESTAMP,
           });
         }
@@ -1364,6 +1366,8 @@ mqttClient.on("message", async (topic, messageBuffer) => {
 
         await bayRef.update({
           status: "available",
+          isActive: true,
+          autoOffline: null,
           currentSessionId: null,
           lastUserId: null,
           requestedPackage: null,
@@ -1374,6 +1378,7 @@ mqttClient.on("message", async (topic, messageBuffer) => {
           pendingSelectionId: null,
           pendingPackageAt: null,
           createdAt: now,
+          updatedAt: now,
         });
 
         await setBayPresence(bayId, {
@@ -1408,6 +1413,22 @@ mqttClient.on("message", async (topic, messageBuffer) => {
         isActive: true,
         autoOffline: null,
       });
+
+      // Legacy uyumluluk:
+      // prepare-bay halen bays/{bayId}.isActive alanına bakıyor.
+      // Eski kayıtta isActive=false kaldıysa heartbeat gelince düzelt.
+      const bayDataForActiveFix = snap.val() || {};
+
+      if (
+        bayDataForActiveFix.isActive === false ||
+        bayDataForActiveFix.autoOffline === true
+      ) {
+        await bayRef.update({
+          isActive: true,
+          autoOffline: null,
+          updatedAt: admin.database.ServerValue.TIMESTAMP,
+        });
+      }
 
       safeLog(`💓 MQTT HEARTBEAT: ${bayId}`);
       return;
