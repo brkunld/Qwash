@@ -948,6 +948,7 @@ const resumeOrClearSessionAfterBoot = async (bayId, bayData = {}) => {
       isActive: true,
       autoOffline: null,
       lastSeen: admin.database.ServerValue.TIMESTAMP,
+      lastUserId: session.userId || bayData.lastUserId || null, // <-- KULLANICIYI TUTUYORUZ
     });
 
     await safeSendBayCommand(bayId, "WAITING");
@@ -1972,6 +1973,7 @@ app.post(
 
         await clearBaySessionFields(bayId, {
           status: "waiting",
+          lastUserId: uid, // <-- KULLANICIYI TUTUYORUZ
         });
 
         safeLog(
@@ -2269,6 +2271,7 @@ app.post(
 
       await clearBaySessionFields(bayId, {
         status: "waiting",
+        lastUserId: uid, // <-- KULLANICIYI TUTUYORUZ
       });
 
       const mqttOk = await safeSendBayCommand(bayId, "WAITING");
