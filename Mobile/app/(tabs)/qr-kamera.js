@@ -15,6 +15,8 @@ import {
 // Örn: firebase.js içinde export const auth = getAuth(app); olmalı.
 import { auth } from "../../firebase";
 
+const API_TIMEOUT_MS = 10000;
+
 export default function QrKamera() {
   const [permission, requestPermission] = useCameraPermissions();
   const [kilit, setKilit] = useState(false);
@@ -98,16 +100,38 @@ export default function QrKamera() {
     console.log("Prepare Bay URL:", url);
     console.log("Prepare Bay bayId:", bayId);
 
-    const response = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${idToken}`,
-      },
-      body: JSON.stringify({
-        bayId,
-      }),
-    });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => {
+      controller.abort();
+    }, API_TIMEOUT_MS);
+
+    let response;
+
+    try {
+      response = await fetch(url, {
+        method: "POST",
+        signal: controller.signal,
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${idToken}`,
+        },
+        body: JSON.stringify({
+          bayId,
+        }),
+      });
+    } catch (error) {
+      if (error?.name === "AbortError") {
+        throw new Error(
+          "Sunucuya ulaşılamadı. Lütfen internet bağlantınızı kontrol edip tekrar deneyin.",
+        );
+      }
+
+      throw new Error(
+        "Sunucuya ulaşılamadı. Lütfen internet bağlantınızı kontrol edip tekrar deneyin.",
+      );
+    } finally {
+      clearTimeout(timeoutId);
+    }
 
     const text = await response.text();
 
