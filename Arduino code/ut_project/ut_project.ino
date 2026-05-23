@@ -9,6 +9,8 @@
 
 #include <TFT_eSPI.h>
 #include <time.h>
+#include <esp_task_wdt.h>
+#include <esp_idf_version.h>
 
 #include "qrcode.h"
 #include "secrets.h"
@@ -23,6 +25,76 @@
   #define LOG_PRINT(x)
   #define LOG_PRINTLN(x)
 #endif
+
+// ================= WATCHDOG =================
+// Task Watchdog Timer, ana loop ve MQTT task kilitlenirse ESP32'yi resetler.
+const int WDT_TIMEOUT_SEC = 15;
+bool wdtBaslatildi = false;
+bool loopTaskWdtKayitli = false;
+
+void watchdogBesle() {
+  if (wdtBaslatildi) {
+    esp_task_wdt_reset();
+  }
+}
+
+void watchdogBaslat() {
+#if ESP_IDF_VERSION_MAJOR >= 5
+  esp_task_wdt_config_t wdtConfig;
+  wdtConfig.timeout_ms = WDT_TIMEOUT_SEC * 1000;
+  wdtConfig.idle_core_mask = (1 << portNUM_PROCESSORS) - 1;
+  wdtConfig.trigger_panic = true;
+
+  esp_err_t result = esp_task_wdt_init(&wdtConfig);
+#else
+  esp_err_t result = esp_task_wdt_init(WDT_TIMEOUT_SEC, true);
+#endif
+
+  if (result == ESP_OK || result == ESP_ERR_INVALID_STATE) {
+    wdtBaslatildi = true;
+    LOG_PRINT(F("WDT aktif. Timeout sn: "));
+    LOG_PRINTLN(WDT_TIMEOUT_SEC);
+  } else {
+    LOG_PRINT(F("WDT baslatilamadi. Hata: "));
+    LOG_PRINTLN(result);
+  }
+}
+
+void watchdogLoopTaskKaydet() {
+  if (!wdtBaslatildi || loopTaskWdtKayitli) {
+    return;
+  }
+
+  esp_err_t result = esp_task_wdt_add(NULL);
+
+  if (result == ESP_OK || result == ESP_ERR_INVALID_STATE) {
+    loopTaskWdtKayitli = true;
+    LOG_PRINTLN(F("WDT loop task kaydedildi."));
+    watchdogBesle();
+  } else {
+    LOG_PRINT(F("WDT loop task kayit hatasi: "));
+    LOG_PRINTLN(result);
+  }
+}
+
+void watchdogCurrentTaskKaydet(const char* taskName) {
+  if (!wdtBaslatildi) {
+    return;
+  }
+
+  esp_err_t result = esp_task_wdt_add(NULL);
+
+  if (result == ESP_OK || result == ESP_ERR_INVALID_STATE) {
+    LOG_PRINT(F("WDT task kaydedildi: "));
+    LOG_PRINTLN(taskName);
+    esp_task_wdt_reset();
+  } else {
+    LOG_PRINT(F("WDT task kayit hatasi: "));
+    LOG_PRINT(taskName);
+    LOG_PRINT(F(" | "));
+    LOG_PRINTLN(result);
+  }
+}
 
 // ================= EKRAN =================
 TFT_eSPI tft = TFT_eSPI();
@@ -456,6 +528,7 @@ bool wifiBaglan(unsigned long timeoutMs) {
 
     while (WiFi.status() != WL_CONNECTED && millis() - baslangic < timeoutMs) {
       delay(500);
+      watchdogBesle();
       LOG_PRINT(F("."));
     }
 
@@ -491,6 +564,7 @@ void ntpBekle() {
 
   while (suAn < 100000 && millis() - baslangic < 20000) {
     delay(500);
+    watchdogBesle();
     LOG_PRINT(F("."));
     time(&suAn);
   }
@@ -917,9 +991,12 @@ bool mqttBaglan() {
 }
 
 void mqttBaglantiTask(void* parameter) {
+  watchdogCurrentTaskKaydet("mqttBaglantiTask");
+
   MqttPublishJob job;
 
   for (;;) {
+    watchdogBesle();
     if (WiFi.status() == WL_CONNECTED) {
       if (!mqttClient.connected()) {
         mqttBaglan();
@@ -945,6 +1022,7 @@ void mqttBaglantiTask(void* parameter) {
       }
     }
 
+    watchdogBesle();
     vTaskDelay(pdMS_TO_TICKS(10));
   }
 }
@@ -1070,6 +1148,8 @@ void setup() {
   Serial.begin(115200);
   delay(500);
 
+  watchdogBaslat();
+
   currentStatus.reserve(16);
   requestedPackage.reserve(16);
   bayId.reserve(32);
@@ -1137,6 +1217,7 @@ if (!wifiBaglan(WIFI_TIMEOUT_MS)) {
   isBayActive = false;
   ekranaBaglantiHatasiYaz();
   sonWifiDenemeMs = millis();
+  watchdogLoopTaskKaydet();
   return;
 }
 
@@ -1149,10 +1230,14 @@ if (!wifiBaglan(WIFI_TIMEOUT_MS)) {
 
   sonNabizZamani = millis();
   durumDegisti = true;
+
+  watchdogLoopTaskKaydet();
 }
 
 // ================= LOOP =================
 void loop() {
+  watchdogBesle();
+
   static String eskiDurum = "";
 
   wifiNonBlockingKontrolEt();
