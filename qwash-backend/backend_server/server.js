@@ -1227,6 +1227,12 @@ mqttClient.on("message", async (topic, messageBuffer) => {
   }
 
   const bayId = parts[2];
+
+  if (bayId === "bay_000000000000" || bayId === "000000000000") {
+    safeLog(`⚠️ Geçersiz peron ID'si yoksayıldı: ${bayId}`);
+    return;
+  }
+
   const eventType = parts[3];
 
   try {
