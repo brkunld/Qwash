@@ -1,406 +1,771 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
-  TextInput,
-  Pressable,
-  FlatList,
-  ActivityIndicator,
-  Alert,
   StyleSheet,
-  StatusBar,
-} from "react-native";
-import { BleManager } from "react-native-ble-plx";
-import base64 from "react-native-base64";
-import { signOut } from "firebase/auth";
-import { auth } from "../firebase";
-import { useRouter } from "expo-router";
-import { Ionicons } from "@expo/vector-icons";
+  ScrollView,
+  TouchableOpacity,
+  TextInput,
+  Alert,
+  ActivityIndicator,
+  SafeAreaView,
+  FlatList
+} from 'react-native';
+import { auth, database } from '../firebase'; 
+import { ref, onValue } from 'firebase/database';
+import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
 
-// Kullanıcı ekranındaki (kullanici.js) renk ve tema sabitleri
-const DARK = "#1a1a2e";
-const YELLOW = "#f5a623";
-const WHITE = "#ffffff";
-const GRAY_BG = "#f2f4f7";
-const GRAY_BORDER = "#e2e6ea";
-const GRAY_TEXT = "#6b7280";
-const DARK_TEXT = "#111827";
+// LÜTFEN KENDİ RENDER BACKEND URL'NİZİ BURAYA YAZIN
+const API_BASE_URL = 'https://qwash-****.onrender.com/api/admin'; 
 
-const SERVICE_UUID = "4fafc201-1fb5-459e-8fcc-c5c9c331914b";
-const CHARACTERISTIC_UUID = "beb5483e-36e1-4688-b7f5-ea07361b26a8";
+const THEME = {
+  bgMain: '#f8f9fb',
+  bgCard: '#ffffff',
+  sidebarBg: '#1a1a2e',
+  border: '#e5e7eb',
+  textMain: '#111827',
+  textMuted: '#6b7280',
+  accentYellow: '#f5a623',
+  accentDark: '#111827',
+  success: '#10b981',
+  danger: '#ef4444',
+  warning: '#f5a623',
+  info: '#3b82f6',
+};
 
-const bleManager = new BleManager();
+const STATUS_CYCLE = ["available", "maintenance", "offline"];
+const STATUS_LABELS = {
+  available: { text: "BOŞ", color: THEME.success },
+  busy: { text: "DOLU", color: THEME.warning },
+  maintenance: { text: "BAKIM", color: THEME.info },
+  offline: { text: "KAPALI", color: THEME.textMuted },
+  waiting: { text: "BEKLEMEDE", color: THEME.info },
+  starting: { text: "BAŞLIYOR", color: THEME.accentYellow },
+};
 
 export default function AdminPanel() {
-  const router = useRouter();
-  const [sifre, setSifre] = useState("1453");
-  const [taranıyor, setTaraniyor] = useState(false);
-  const [cihazlar, setCihazlar] = useState([]);
-  const [baglanilanCihaz, setBaglanilanCihaz] = useState(null);
-  const [islemDurumu, setIslemDurumu] = useState("Sistem kuruluma hazır.");
+  const [activeTab, setActiveTab] = useState('monitor');
+  const [bays, setBays] = useState([]);
+  const [logs, setLogs] = useState([]);
+  
+  // Arama / Kullanıcı State
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isSearching, setIsSearching] = useState(false);
+  const [userResult, setUserResult] = useState(null);
+  const [tokenAmount, setTokenAmount] = useState('');
+  const [isActionLoading, setIsActionLoading] = useState(false);
 
   useEffect(() => {
-    return () => {
-      bleManager.stopDeviceScan();
-    };
-  }, []);
-
-  const cihazlariTara = () => {
-    setIslemDurumu("Yakındaki peronlar aranıyor...");
-    setTaraniyor(true);
-    setCihazlar([]);
-
-    bleManager.startDeviceScan(null, null, (error, device) => {
-      if (error) {
-        console.log("BLE Tarama Hatası:", error);
-        setTaraniyor(false);
-        setIslemDurumu("Bluetooth taraması başlatılamadı.");
-        Alert.alert(
-          "Bağlantı Hatası",
-          "Lütfen konum ve Bluetooth izinlerinin açık olduğunu kontrol edin.",
-        );
-        return;
-      }
-
-      if (device.name && device.name.startsWith("Qwash_BLE")) {
-        setCihazlar((prev) => {
-          if (!prev.find((d) => d.id === device.id)) {
-            return [...prev, device];
-          }
-          return prev;
-        });
-      }
-    });
-
-    setTimeout(() => {
-      bleManager.stopDeviceScan();
-      setTaraniyor(false);
-      setIslemDurumu("Tarama tamamlandı.");
-    }, 6000);
-  };
-
-  const cihazaBaglanVeSifirla = async (device) => {
-    if (!sifre || sifre.length < 4) {
-      Alert.alert("Hata", "Lütfen geçerli bir kurulum şifresi girin.");
+    // Admin yetkisi kontrolü eklenebilir
+    if (!auth.currentUser) {
+      Alert.alert("Hata", "Oturum bulunamadı. Lütfen giriş yapın.");
+      router.replace('/login');
       return;
     }
 
+    const baysRef = ref(database, 'bays');
+    const unsubscribe = onValue(baysRef, (snapshot) => {
+      const data = snapshot.val();
+      if (data) {
+        const baysArray = Object.keys(data)
+          .map((key) => ({ id: key, ...data[key] }))
+          .sort((a, b) => a.id.localeCompare(b.id));
+        setBays(baysArray);
+      }
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  const addLog = (message) => {
+    const now = new Date();
+    const ts = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+    setLogs((prev) => [{ id: Date.now().toString(), time: ts, message }, ...prev].slice(0, 50));
+  };
+
+  const adminFetch = async (endpoint, payload) => {
+    const token = await auth.currentUser.getIdToken(true);
+    const res = await fetch(`${API_BASE_URL}${endpoint}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`
+      },
+      body: JSON.stringify(payload)
+    });
+    
+    if (!res.ok) {
+      const errorData = await res.json();
+      throw new Error(errorData.error || "İşlem başarısız.");
+    }
+    return await res.json();
+  };
+
+  // --- KULLANICI İŞLEMLERİ ---
+  const handleSearch = async () => {
+    if (!searchQuery.trim()) return;
+    setIsSearching(true);
+    setUserResult(null);
     try {
-      bleManager.stopDeviceScan();
-      setIslemDurumu(`${device.name} peronuna bağlanılıyor...`);
-      setBaglanilanCihaz(device.id);
-
-      const connectedDevice = await device.connect();
-      setIslemDurumu("Donanım servisleri okunuyor...");
-      await connectedDevice.discoverAllServicesAndCharacteristics();
-
-      const komut = `RESET_${sifre}`;
-      const base64Komut = base64.encode(komut);
-
-      setIslemDurumu("Sıfırlama komutu gönderiliyor...");
-      await connectedDevice.writeCharacteristicWithResponseForService(
-        SERVICE_UUID,
-        CHARACTERISTIC_UUID,
-        base64Komut,
-      );
-
-      setIslemDurumu("Komut başarıyla iletildi!");
-      Alert.alert(
-        "Başarılı",
-        `${device.name} sıfırlandı ve kurulum moduna geçirildi.`,
-      );
-    } catch (error) {
-      console.log("BLE İletişim Hatası:", error);
-      setIslemDurumu("Bağlantı başarısız oldu.");
-      Alert.alert(
-        "Hata",
-        "Cihaza bağlanırken bir sorun oluştu. Lütfen perona yakınlaşın.",
-      );
+      const data = await adminFetch('/search-user', { arama: searchQuery.trim() });
+      setUserResult(data.user);
+      addLog(`Kullanıcı arandı: ${searchQuery}`);
+    } catch (e) {
+      Alert.alert("Hata", e.message);
     } finally {
-      setBaglanilanCihaz(null);
+      setIsSearching(false);
     }
   };
 
-  const handleCikis = () => {
-    Alert.alert(
-      "Çıkış Yap",
-      "Admin oturumunu kapatmak istediğinize emin misiniz?",
-      [
-        { text: "Vazgeç", style: "cancel" },
-        {
-          text: "Çıkış Yap",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              await signOut(auth);
-              router.replace("/login");
-            } catch (e) {
-              Alert.alert("Hata", "Oturum kapatılamadı.", e);
-            }
-          },
-        },
-      ],
-    );
+  const handleToggleBlock = () => {
+    if (!userResult) return;
+    const isCurrentlyBlocked = userResult.isBlocked;
+    const msg = isCurrentlyBlocked 
+      ? "Kullanıcının engelini kaldırmak istediğinize emin misiniz?" 
+      : "Kullanıcıyı sistemden engellemek istediğinize emin misiniz?";
+
+    Alert.alert("Onay Bekleniyor", msg, [
+      { text: "İptal", style: "cancel" },
+      { 
+        text: "Onaylıyorum", 
+        style: isCurrentlyBlocked ? "default" : "destructive",
+        onPress: async () => {
+          setIsActionLoading(true);
+          try {
+            await adminFetch('/update-user', { 
+              userId: userResult.id, 
+              patch: { isBlocked: !isCurrentlyBlocked } 
+            });
+            setUserResult({ ...userResult, isBlocked: !isCurrentlyBlocked });
+            addLog(`Kullanıcı durumu güncellendi: ${userResult.id}`);
+            Alert.alert("Başarılı", "Kullanıcı durumu güncellendi.");
+          } catch (e) {
+            Alert.alert("Hata", e.message);
+          } finally {
+            setIsActionLoading(false);
+          }
+        }
+      }
+    ]);
   };
 
+  const handleTopup = async () => {
+    if (!userResult || !tokenAmount) return;
+    const amount = parseInt(tokenAmount, 10);
+    if (isNaN(amount) || amount <= 0) {
+      Alert.alert("Uyarı", "Lütfen geçerli bir jeton miktarı girin.");
+      return;
+    }
+
+    Alert.alert("Emin misiniz?", `${amount} adet jeton yüklenecek. Onaylıyor musunuz?`, [
+      { text: "İptal", style: "cancel" },
+      {
+        text: "Yükle",
+        onPress: async () => {
+          setIsActionLoading(true);
+          try {
+            const data = await adminFetch('/topup', { userId: userResult.id, tokens: amount });
+            setUserResult({ ...userResult, walletTokens: (userResult.walletTokens || 0) + amount });
+            setTokenAmount('');
+            addLog(`${userResult.id} adlı kullanıcıya ${amount} jeton yüklendi.`);
+            Alert.alert("Başarılı", `${data.tokensAdded} jeton (${data.amountTRY} ₺) başarıyla eklendi.`);
+          } catch (e) {
+            Alert.alert("Hata", e.message);
+          } finally {
+            setIsActionLoading(false);
+          }
+        }
+      }
+    ]);
+  };
+
+  // --- PERON İŞLEMLERİ ---
+  const handleBayStatusChange = (bay) => {
+    const isActive = bay.isActive ?? true;
+    if (!isActive) return;
+
+    const idx = STATUS_CYCLE.indexOf(bay.status || 'available');
+    const nextStatus = STATUS_CYCLE[idx === -1 ? 0 : (idx + 1) % STATUS_CYCLE.length];
+
+    const doChange = async () => {
+      try {
+        await adminFetch('/update-bay', { bayId: bay.id, patch: { status: nextStatus } });
+        addLog(`Peron güncellendi: ${bay.id} -> ${nextStatus}`);
+      } catch(e) { Alert.alert("Hata", e.message); }
+    };
+
+    if (bay.status === 'busy' || bay.currentSessionId) {
+      Alert.alert("DİKKAT", `${bay.id} peronunda yıkama işlemi var! Yine de durumu değiştirmek istiyor musunuz?`, [
+        { text: "İptal", style: "cancel" },
+        { text: "Değiştir", style: "destructive", onPress: doChange }
+      ]);
+    } else {
+      doChange();
+    }
+  };
+
+  const handleBayPowerToggle = (bay) => {
+    const isActive = bay.isActive ?? true;
+    
+    const doToggle = async () => {
+      try {
+        const patch = isActive ? { isActive: false, status: "offline" } : { isActive: true, status: "available" };
+        await adminFetch('/update-bay', { bayId: bay.id, patch });
+        addLog(`Peron gücü değişti: ${bay.id} -> ${isActive ? 'KAPALI' : 'AÇIK'}`);
+      } catch(e) { Alert.alert("Hata", e.message); }
+    };
+
+    if (isActive && (bay.status === 'busy' || bay.currentSessionId)) {
+      Alert.alert("DİKKAT", `${bay.id} peronunda yıkama işlemi var! Yine de gücü kapatmak istiyor musunuz?`, [
+        { text: "İptal", style: "cancel" },
+        { text: "Kapat", style: "destructive", onPress: doToggle }
+      ]);
+    } else {
+      doToggle();
+    }
+  };
+
+  const handleBulkAction = (action) => {
+    const busyCount = bays.filter(b => b.status === 'busy' || b.currentSessionId).length;
+    let msg = `Tüm peronlar ${action} yapılacak. Onaylıyor musunuz?`;
+    if (busyCount > 0) {
+      msg = `DİKKAT: ${busyCount} peronda yıkama var! Tüm peronları ${action} yapmak istediğinize emin misiniz?`;
+    }
+
+    Alert.alert("Toplu İşlem Onayı", msg, [
+      { text: "İptal", style: "cancel" },
+      { 
+        text: "Onaylıyorum", 
+        style: action === 'KAPAT' ? 'destructive' : 'default',
+        onPress: () => executeBulkAction(action)
+      }
+    ]);
+  };
+
+  const executeBulkAction = async (action) => {
+    let patch;
+    if (action === 'BOŞ') patch = { isActive: true, status: 'available' };
+    else if (action === 'BAKIM') patch = { isActive: true, status: 'maintenance' };
+    else if (action === 'KAPAT') patch = { isActive: false, status: 'offline' };
+    else if (action === 'AKTİF ET') patch = { isActive: true, status: 'available' };
+    else return;
+
+    try {
+      await Promise.all(bays.map(b => adminFetch('/update-bay', { bayId: b.id, patch })));
+      addLog(`Toplu işlem uygulandı: Tüm peronlar -> ${action}`);
+      Alert.alert("Başarılı", "Tüm peronlar güncellendi.");
+    } catch(_) {
+      Alert.alert("Hata", "Bazı peronlar güncellenemedi.");
+    }
+  };
+
+  const doLogout = () => {
+    auth.signOut().then(() => {
+      router.replace('/login');
+    });
+  };
+
+  // --- İSTATİSTİKLER ---
+  const activeCount = bays.filter(b => b.isActive !== false).length;
+  const availableCount = bays.filter(b => (b.status === 'available' || !b.status) && b.isActive !== false).length;
+  const busyCount = bays.filter(b => b.status === 'busy' && b.isActive !== false).length;
+  const maintCount = bays.filter(b => b.status === 'maintenance').length;
+  const offlineCount = bays.filter(b => b.status === 'offline' || b.isActive === false).length;
+
   return (
-    <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor={DARK} />
-
-      {/* Header Tasarımı (kullanici.js ile birebir aynı) */}
+    <SafeAreaView style={styles.container}>
+      {/* HEADER */}
       <View style={styles.header}>
-        <View style={styles.headerBadge}>
-          <Text style={styles.headerBadgeText}> Admin Paneli </Text>
+        <View style={styles.headerTitleRow}>
+          <Ionicons name="shield-checkmark" size={24} color={THEME.accentYellow} />
+          <Text style={styles.headerTitle}>QWash Admin</Text>
         </View>
-
-        <View style={styles.headerRight}>
-          <Pressable onPress={handleCikis} style={styles.headerBtn}>
-            <Ionicons name="log-out-outline" size={18} color={WHITE} />
-          </Pressable>
-        </View>
+        <TouchableOpacity style={styles.logoutBtn} onPress={doLogout}>
+          <Ionicons name="log-out-outline" size={20} color={THEME.danger} />
+        </TouchableOpacity>
       </View>
 
-      <FlatList
-        style={styles.scroll}
-        contentContainerStyle={{ paddingBottom: 24 }}
-        data={cihazlar}
-        keyExtractor={(item) => item.id}
-        showsVerticalScrollIndicator={false}
-        ListHeaderComponent={
-          <>
-            {/* Şifre Kartı */}
-            <View style={styles.card}>
-              <Text style={styles.cardLabel}>⚙️ Fabrika Sıfırlama Şifresi</Text>
-              <TextInput
-                style={styles.input}
-                value={sifre}
-                onChangeText={setSifre}
-                keyboardType="numeric"
-                placeholder="Şifre"
-                placeholderTextColor={GRAY_TEXT}
-              />
-              <Text style={styles.cardHint}>
-                * Gönderilecek komut otomatik olarak &apos;RESET_{sifre}&apos; halini
-                alacaktır.
-              </Text>
-            </View>
-
-            {/* Tarama Butonu */}
-            <Pressable
-              style={[styles.yellowBtn, taranıyor && styles.btnDisabled]}
-              onPress={cihazlariTara}
-              disabled={taranıyor}
+      {/* TABS */}
+      <View style={styles.tabContainer}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabScroll}>
+          {[
+            { id: 'monitor', icon: 'pulse', label: 'Monitör' },
+            { id: 'stats', icon: 'bar-chart', label: 'İstatistik' },
+            { id: 'users', icon: 'people', label: 'Kullanıcılar' },
+            { id: 'bays', icon: 'water', label: 'Peronlar' }
+          ].map(tab => (
+            <TouchableOpacity 
+              key={tab.id} 
+              style={[styles.tabBtn, activeTab === tab.id && styles.tabBtnActive]}
+              onPress={() => setActiveTab(tab.id)}
             >
-              {taranıyor ? (
-                <ActivityIndicator color={DARK} />
-              ) : (
-                <Text style={styles.yellowBtnText}>
-                  Yakındaki Peronları Ara
-                </Text>
-              )}
-            </Pressable>
+              <Ionicons name={tab.icon} size={18} color={activeTab === tab.id ? THEME.bgCard : THEME.textMuted} />
+              <Text style={[styles.tabLabel, activeTab === tab.id && styles.tabLabelActive]}>{tab.label}</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      </View>
 
-            <Text style={styles.statusText}>{islemDurumu}</Text>
-          </>
-        }
-        renderItem={({ item }) => (
-          <View style={styles.card}>
-            <View style={styles.cardHeaderRow}>
-              <View style={{ flexDirection: "row", alignItems: "center" }}>
-                <View style={styles.bayBadge}>
-                  <Ionicons
-                    name="bluetooth"
-                    size={14}
-                    color={DARK}
-                    style={{ marginRight: 4 }}
-                  />
-                  <Text style={styles.bayIdText}>{item.name}</Text>
-                </View>
-              </View>
-            </View>
-
-            <View style={styles.sessionBox}>
-              <Text style={styles.macAddressText}>MAC: {item.id}</Text>
-
-              <Pressable
-                style={[
-                  styles.redBtn,
-                  baglanilanCihaz !== null &&
-                    baglanilanCihaz !== item.id &&
-                    styles.btnDisabled,
-                ]}
-                onPress={() => cihazaBaglanVeSifirla(item)}
-                disabled={baglanilanCihaz !== null}
-              >
-                {baglanilanCihaz === item.id ? (
-                  <ActivityIndicator color={WHITE} size="small" />
-                ) : (
-                  <Text style={styles.redBtnText}>
-                    Sıfırla ve Kuruluma Geçir
-                  </Text>
+      {/* CONTENT */}
+      <View style={styles.content}>
+        
+        {/* MONITOR TAB */}
+        {activeTab === 'monitor' && (
+          <View style={styles.tabSection}>
+            <Text style={styles.sectionTitle}>Sistem Günlükleri (Son Olaylar)</Text>
+            <View style={styles.card}>
+               <FlatList
+                data={logs}
+                keyExtractor={item => item.id}
+                ListEmptyComponent={<Text style={{padding: 20, color: THEME.textMuted}}>Henüz log kaydı yok...</Text>}
+                renderItem={({item}) => (
+                  <View style={styles.logRow}>
+                    <Text style={styles.logTime}>{item.time}</Text>
+                    <Text style={styles.logMessage}>{item.message}</Text>
+                  </View>
                 )}
-              </Pressable>
+               />
             </View>
           </View>
         )}
-        ListEmptyComponent={() =>
-          !taranıyor && (
-            <Text style={styles.emptyText}>
-              Çevrede taranmış Qwash donanımı bulunamadı.
-            </Text>
-          )
-        }
-      />
-    </View>
+
+        {/* STATS TAB */}
+        {activeTab === 'stats' && (
+          <ScrollView style={styles.tabSection}>
+            <Text style={styles.sectionTitle}>Anlık Durum</Text>
+            <View style={styles.statsGrid}>
+              <View style={styles.statCard}><Text style={styles.statNum}>{bays.length}</Text><Text style={styles.statDesc}>Toplam Peron</Text></View>
+              <View style={styles.statCard}><Text style={[styles.statNum, {color: THEME.success}]}>{activeCount}</Text><Text style={styles.statDesc}>Aktif</Text></View>
+              <View style={styles.statCard}><Text style={[styles.statNum, {color: THEME.success}]}>{availableCount}</Text><Text style={styles.statDesc}>Boş</Text></View>
+              <View style={styles.statCard}><Text style={[styles.statNum, {color: THEME.warning}]}>{busyCount}</Text><Text style={styles.statDesc}>Çalışan</Text></View>
+              <View style={styles.statCard}><Text style={[styles.statNum, {color: THEME.info}]}>{maintCount}</Text><Text style={styles.statDesc}>Bakımda</Text></View>
+              <View style={styles.statCard}><Text style={[styles.statNum, {color: THEME.danger}]}>{offlineCount}</Text><Text style={styles.statDesc}>Kapalı</Text></View>
+            </View>
+          </ScrollView>
+        )}
+
+        {/* USERS TAB */}
+        {activeTab === 'users' && (
+          <ScrollView style={styles.tabSection} keyboardShouldPersistTaps="handled">
+            <Text style={styles.sectionTitle}>Kullanıcı Yönetimi</Text>
+            <View style={styles.card}>
+              <View style={styles.searchRow}>
+                <TextInput 
+                  style={styles.searchInput}
+                  placeholder="E-Posta, Telefon veya UID..."
+                  value={searchQuery}
+                  onChangeText={setSearchQuery}
+                  autoCapitalize="none"
+                  returnKeyType="search"
+                  onSubmitEditing={handleSearch}
+                />
+                <TouchableOpacity style={styles.searchBtn} onPress={handleSearch} disabled={isSearching}>
+                  {isSearching ? <ActivityIndicator color="#fff" /> : <Ionicons name="search" size={20} color="#fff" />}
+                </TouchableOpacity>
+              </View>
+
+              {userResult && (
+                <View style={styles.userResultCard}>
+                  <View style={styles.userResultHeader}>
+                    <View style={styles.userAvatar}><Text style={styles.userAvatarText}>{userResult.ad ? userResult.ad[0] : 'U'}</Text></View>
+                    <View style={{flex: 1}}>
+                      <Text style={styles.userName}>{(userResult.ad || '') + ' ' + (userResult.soyad || '')}</Text>
+                      <Text style={styles.userEmail}>{userResult.email}</Text>
+                      {userResult.isBlocked && <Text style={styles.blockedBadge}>SİSTEMDEN ENGELLİ</Text>}
+                    </View>
+                    <View style={{alignItems: 'flex-end'}}>
+                      <Text style={styles.tokenNum}>{userResult.walletTokens || 0}</Text>
+                      <Text style={styles.tokenLabel}>JETON</Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.topupRow}>
+                    <TextInput 
+                      style={[styles.searchInput, {flex: 1, marginBottom: 0}]}
+                      placeholder="Miktar (Örn: 5)"
+                      keyboardType="number-pad"
+                      value={tokenAmount}
+                      onChangeText={setTokenAmount}
+                    />
+                    <TouchableOpacity style={styles.topupBtn} onPress={handleTopup} disabled={isActionLoading}>
+                      <Text style={styles.topupBtnText}>Jeton Ekle</Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  <TouchableOpacity 
+                    style={[styles.blockBtn, userResult.isBlocked ? {backgroundColor: THEME.success} : {}]} 
+                    onPress={handleToggleBlock}
+                    disabled={isActionLoading}
+                  >
+                    <Text style={styles.blockBtnText}>
+                      {userResult.isBlocked ? "Engeli Kaldır" : "Kullanıcıyı Engelle"}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </View>
+          </ScrollView>
+        )}
+
+        {/* BAYS TAB */}
+        {activeTab === 'bays' && (
+          <View style={styles.tabSection}>
+            <View style={styles.bulkRow}>
+              <TouchableOpacity style={[styles.bulkBtn, {backgroundColor: THEME.success}]} onPress={() => handleBulkAction('BOŞ')}>
+                <Text style={styles.bulkBtnText}>Tümünü Boşalt</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.bulkBtn, {backgroundColor: THEME.info}]} onPress={() => handleBulkAction('BAKIM')}>
+                <Text style={styles.bulkBtnText}>Tümünü Bakıma Al</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.bulkBtn, {backgroundColor: THEME.danger}]} onPress={() => handleBulkAction('KAPAT')}>
+                <Text style={styles.bulkBtnText}>Tümünü Kapat</Text>
+              </TouchableOpacity>
+            </View>
+
+            <FlatList
+              data={bays}
+              keyExtractor={item => item.id}
+              contentContainerStyle={{paddingBottom: 20}}
+              renderItem={({item}) => {
+                const s = STATUS_LABELS[item.status || 'available'] || STATUS_LABELS.offline;
+                const isActive = item.isActive ?? true;
+                
+                return (
+                  <View style={[styles.bayCard, !isActive && {opacity: 0.6}]}>
+                    <View style={styles.bayHeader}>
+                      <Text style={styles.bayName}>{item.id}</Text>
+                      <View style={[styles.bayBadge, {backgroundColor: s.color + '20'}]}>
+                        <Text style={[styles.bayBadgeText, {color: s.color}]}>{isActive ? s.text : 'KAPALI'}</Text>
+                      </View>
+                    </View>
+                    
+                    <Text style={styles.bayMeta}>
+                      Sistem: <Text style={{fontWeight: '700', color: THEME.textMain}}>{item.currentSessionId ? "Aktif Yıkama Var" : "Boşta"}</Text>
+                    </Text>
+
+                    <View style={styles.bayActions}>
+                      <TouchableOpacity 
+                        style={[styles.bayActionBtn, {backgroundColor: THEME.bgMain}]} 
+                        onPress={() => handleBayStatusChange(item)}
+                        disabled={!isActive}
+                      >
+                        <Text style={styles.bayActionBtnText}>Durum Değiştir</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity 
+                        style={[styles.bayActionBtn, {backgroundColor: isActive ? THEME.danger + '20' : THEME.success + '20'}]}
+                        onPress={() => handleBayPowerToggle(item)}
+                      >
+                        <Text style={[styles.bayActionBtnText, {color: isActive ? THEME.danger : THEME.success}]}>
+                          {isActive ? "Gücü Kapat" : "Gücü Aç"}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                );
+              }}
+            />
+          </View>
+        )}
+
+      </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: GRAY_BG,
-  },
-  scroll: {
-    flex: 1,
-    paddingHorizontal: 12,
-    paddingTop: 10,
+    backgroundColor: THEME.bgMain,
   },
   header: {
-    backgroundColor: DARK,
-    paddingTop: 48,
-    paddingBottom: 10,
-    paddingHorizontal: 12,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: THEME.bgCard,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderColor: THEME.border,
   },
-  headerBadge: {
-    backgroundColor: YELLOW,
-    borderRadius: 6,
-    paddingHorizontal: 7,
-    paddingVertical: 3,
+  headerTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
-  headerBadgeText: {
-    fontSize: 15,
-    fontWeight: "900",
-    color: DARK_TEXT,
-    letterSpacing: 0.5,
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: THEME.textMain,
   },
-  headerRight: {
-    flexDirection: "row",
-    gap: 6,
-  },
-  headerBtn: {
-    backgroundColor: "rgba(255,255,255,0.12)",
+  logoutBtn: {
+    padding: 8,
     borderRadius: 8,
-    paddingHorizontal: 10,
+    backgroundColor: THEME.danger + '15',
+  },
+  tabContainer: {
+    backgroundColor: THEME.bgCard,
+    borderBottomWidth: 1,
+    borderColor: THEME.border,
+  },
+  tabScroll: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    gap: 12,
+  },
+  tabBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
     paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 99,
+    backgroundColor: THEME.bgMain,
+  },
+  tabBtnActive: {
+    backgroundColor: THEME.accentDark,
+  },
+  tabLabel: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: THEME.textMuted,
+  },
+  tabLabelActive: {
+    color: THEME.bgCard,
+  },
+  content: {
+    flex: 1,
+    padding: 16,
+  },
+  tabSection: {
+    flex: 1,
+  },
+  sectionTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: THEME.textMuted,
+    textTransform: 'uppercase',
+    marginBottom: 16,
   },
   card: {
-    backgroundColor: WHITE,
-    borderRadius: 14,
-    padding: 14,
-    marginBottom: 10,
-    shadowColor: "#000",
-    shadowOpacity: 0.06,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
-    overflow: "hidden",
+    backgroundColor: THEME.bgCard,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: THEME.border,
+    padding: 16,
+    flex: 1,
   },
-  cardHeaderRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 6,
+  logRow: {
+    flexDirection: 'row',
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderColor: THEME.bgMain,
   },
-  cardLabel: {
+  logTime: {
     fontSize: 12,
-    color: GRAY_TEXT,
-    fontWeight: "600",
-    marginBottom: 8,
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
+    fontWeight: '600',
+    color: THEME.textMuted,
+    width: 50,
   },
-  input: {
-    borderWidth: 1.5,
-    borderColor: GRAY_BORDER,
-    borderRadius: 12,
-    padding: 12,
-    fontSize: 15,
-    color: DARK_TEXT,
-    backgroundColor: GRAY_BG,
-  },
-  cardHint: {
-    color: GRAY_TEXT,
-    fontSize: 12,
-    marginTop: 8,
-    fontStyle: "italic",
-  },
-  yellowBtn: {
-    marginTop: 6,
-    backgroundColor: YELLOW,
-    padding: 14,
-    borderRadius: 12,
-    alignItems: "center",
-    marginBottom: 14,
-  },
-  yellowBtnText: {
-    color: DARK,
-    fontWeight: "800",
-    fontSize: 15,
-  },
-  btnDisabled: {
-    backgroundColor: "#c4c4c4",
-  },
-  statusText: {
-    color: GRAY_TEXT,
-    textAlign: "center",
-    fontStyle: "italic",
+  logMessage: {
     fontSize: 13,
+    fontWeight: '500',
+    color: THEME.textMain,
+    flex: 1,
+  },
+  statsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  statCard: {
+    width: '47%',
+    backgroundColor: THEME.bgCard,
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: THEME.border,
+  },
+  statNum: {
+    fontSize: 32,
+    fontWeight: '900',
+    color: THEME.textMain,
+  },
+  statDesc: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: THEME.textMuted,
+    marginTop: 4,
+  },
+  searchRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  searchInput: {
+    flex: 1,
+    backgroundColor: THEME.bgMain,
+    borderWidth: 1.5,
+    borderColor: THEME.border,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    height: 50,
+    fontSize: 15,
+    fontWeight: '500',
+    color: THEME.textMain,
+  },
+  searchBtn: {
+    backgroundColor: THEME.accentDark,
+    borderRadius: 12,
+    width: 50,
+    height: 50,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  userResultCard: {
+    marginTop: 20,
+    borderTopWidth: 1,
+    borderColor: THEME.border,
+    paddingTop: 20,
+  },
+  userResultHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
     marginBottom: 20,
   },
+  userAvatar: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: THEME.accentYellow,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  userAvatarText: {
+    fontSize: 20,
+    fontWeight: '900',
+    color: THEME.sidebarBg,
+  },
+  userName: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: THEME.textMain,
+  },
+  userEmail: {
+    fontSize: 13,
+    color: THEME.textMuted,
+    fontWeight: '500',
+  },
+  blockedBadge: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#fff',
+    backgroundColor: THEME.danger,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    alignSelf: 'flex-start',
+    marginTop: 4,
+  },
+  tokenNum: {
+    fontSize: 28,
+    fontWeight: '900',
+    color: THEME.textMain,
+  },
+  tokenLabel: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: THEME.textMuted,
+  },
+  topupRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 16,
+  },
+  topupBtn: {
+    backgroundColor: THEME.accentYellow,
+    borderRadius: 12,
+    paddingHorizontal: 20,
+    justifyContent: 'center',
+  },
+  topupBtnText: {
+    fontWeight: '800',
+    color: THEME.accentDark,
+    fontSize: 14,
+  },
+  blockBtn: {
+    backgroundColor: THEME.danger,
+    borderRadius: 12,
+    padding: 16,
+    alignItems: 'center',
+  },
+  blockBtnText: {
+    color: '#fff',
+    fontWeight: '800',
+    fontSize: 14,
+  },
+  bulkRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 16,
+  },
+  bulkBtn: {
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+  },
+  bulkBtnText: {
+    color: '#fff',
+    fontWeight: '700',
+    fontSize: 12,
+  },
+  bayCard: {
+    backgroundColor: THEME.bgCard,
+    borderWidth: 1,
+    borderColor: THEME.border,
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 12,
+  },
+  bayHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  bayName: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: THEME.textMain,
+  },
   bayBadge: {
-    backgroundColor: YELLOW,
     paddingHorizontal: 10,
     paddingVertical: 4,
-    borderRadius: 6,
-    flexDirection: "row",
-    alignItems: "center",
+    borderRadius: 8,
   },
-  bayIdText: {
-    fontSize: 15,
-    fontWeight: "900",
-    color: "#000",
+  bayBadgeText: {
+    fontSize: 11,
+    fontWeight: '800',
   },
-  sessionBox: {
-    marginTop: 6,
-    borderTopWidth: 1,
-    borderTopColor: GRAY_BORDER,
-    paddingTop: 10,
+  bayMeta: {
+    fontSize: 13,
+    color: THEME.textMuted,
+    marginBottom: 16,
   },
-  macAddressText: {
-    color: GRAY_TEXT,
-    fontSize: 12,
-    marginBottom: 10,
-    fontWeight: "500",
+  bayActions: {
+    flexDirection: 'row',
+    gap: 8,
   },
-  redBtn: {
-    backgroundColor: "#FF3B30",
-    padding: 13,
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
+  bayActionBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: 'center',
   },
-  redBtnText: {
-    color: WHITE,
-    fontWeight: "700",
-    fontSize: 14,
-  },
-  emptyText: {
-    textAlign: "center",
-    color: GRAY_TEXT,
-    marginTop: 20,
-    fontSize: 14,
-  },
+  bayActionBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: THEME.textMain,
+  }
 });

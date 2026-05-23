@@ -1458,6 +1458,80 @@ snprintf(bayId, sizeof(bayId), "bay_%s", macAdresi);
 // ================= LOOP =================
 void loop() {
   watchdogBesle();
+  static unsigned long kopukBasiliTutmaBaslangicMs = 0;
+  static bool kopukSifirlamaBasiliMi = false;
+  static int gosterilenSifirlamaSaniye = -1;
+  static bool wifiSifirlamaYapiliyor = false;
+
+  if (!wifiSifirlamaYapiliyor) {
+    if (digitalRead(btnKopukPin) == LOW) { // Butona basılıyorsa
+      if (!kopukSifirlamaBasiliMi) {
+        kopukSifirlamaBasiliMi = true;
+        kopukBasiliTutmaBaslangicMs = millis();
+        gosterilenSifirlamaSaniye = -1;
+      } else {
+        unsigned long basiliSure = millis() - kopukBasiliTutmaBaslangicMs;
+
+        // 2 saniyeyi geçtiyse (2000 ms) ekrana geri sayım basmaya başla
+        if (basiliSure >= 2000 && basiliSure < 10000) {
+          int kalanSaniye = 10 - (basiliSure / 1000); // 8, 7, 6... 1
+          
+          if (kalanSaniye != gosterilenSifirlamaSaniye) {
+            gosterilenSifirlamaSaniye = kalanSaniye;
+
+            // Diğer ekran güncellemelerinin araya girmesini engellemek için:
+            dokunmatikKilit = true; 
+            
+            tft.fillScreen(TFT_BLACK);
+            tft.setTextColor(TFT_ORANGE);
+            tft.setTextSize(2);
+            tft.setCursor(10, 80);
+            tft.println("WIFI SIFIRLANACAK:");
+            
+            tft.setTextColor(TFT_RED);
+            tft.setTextSize(6); // Saniye kocaman yazsın
+            tft.setCursor(140, 120);
+            tft.println(kalanSaniye);
+
+            tone(buzzerPin, 2000, 100); // Her saniye kısa uyarı "bip" sesi
+          }
+        }
+        // 10 saniye (10000 ms) dolduysa Wi-Fi'yi SIFIRLA
+        else if (basiliSure >= 10000) {
+          wifiSifirlamaYapiliyor = true;
+          LOG_PRINTLN(F("WIFI SIFIRLANIYOR..."));
+
+          tft.fillScreen(TFT_BLACK);
+          tft.setTextColor(TFT_RED);
+          tft.setTextSize(2);
+          tft.setCursor(20, 100);
+          tft.println("WIFI SIFIRLANDI!");
+          tft.setCursor(20, 140);
+          tft.println("Yeniden basliyor...");
+
+          tone(buzzerPin, 1000, 2000); // 2 saniye kesintisiz uzun bip
+          delay(2000);
+
+          WiFiManager wm;
+          wm.resetSettings(); // ESP32 içindeki kayıtlı Wi-Fi şifrelerini siler
+
+          ESP.restart(); // Cihazı yeniden başlatır ve Qwash-Kurulum moduna sokar
+        }
+      }
+    } else {
+      // Butondan elini 10 saniye dolmadan çektiyse İPTAL ET
+      if (kopukSifirlamaBasiliMi) {
+        kopukSifirlamaBasiliMi = false;
+        
+        // Eğer 2 saniyeyi geçmiş ve ekran değişmişse, ekranı eski haline döndür
+        if (gosterilenSifirlamaSaniye != -1) {
+          gosterilenSifirlamaSaniye = -1;
+          dokunmatikKilit = false;
+          durumDegisti = true; // Sistemin ana ekranı tekrar çizmesini tetikler
+        }
+      }
+    }
+  }
 
   static char eskiDurum[32] = {0};
 

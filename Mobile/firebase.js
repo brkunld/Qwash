@@ -67,4 +67,5 @@ try {
 
 export const auth = authInstance;
 export const db = getFirestore(app);
-export const rtdb = getDatabase(app);
+// firebase.js
+export const rtdb = getDatabase(app, process.env.EXPO_PUBLIC_FIREBASE_DATABASE_URL);
