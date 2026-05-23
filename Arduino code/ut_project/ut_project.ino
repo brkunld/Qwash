@@ -3,6 +3,7 @@
 #include <WebServer.h>
 #include <DNSServer.h>
 #include <WiFiManager.h>
+#include <esp_mac.h>
 
 #include <WiFiClientSecure.h>
 #include <PubSubClient.h>
@@ -136,12 +137,19 @@ const TouchButton BTN_IPTAL = {
   220, 235,
 };
 
-bool dokunmaButonIcindeMi(uint16_t x, uint16_t y, const TouchButton& button) {
+bool dokunmaButonIcindeMi(
+  uint16_t x,
+  uint16_t y,
+  uint16_t x1,
+  uint16_t y1,
+  uint16_t x2,
+  uint16_t y2
+) {
   return (
-    x >= button.x1 &&
-    x <= button.x2 &&
-    y >= button.y1 &&
-    y <= button.y2
+    x >= x1 &&
+    x <= x2 &&
+    y >= y1 &&
+    y <= y2
   );
 }
 
@@ -1368,19 +1376,29 @@ void setup() {
 
   WiFi.mode(WIFI_STA);
 
-  // Obtain MAC without using temporary heap Strings
-  uint8_t macBytes[6];
-  WiFi.macAddress(macBytes);
+uint8_t macBytes[6] = {0};
 
-  // Format mac as uppercase hex without separators, e.g. AABBCCDDEEFF
-  char rawMacBuf[13] = {0};
-  snprintf(rawMacBuf, sizeof(rawMacBuf), "%02X%02X%02X%02X%02X%02X",
-    macBytes[0], macBytes[1], macBytes[2], macBytes[3], macBytes[4], macBytes[5]
-  );
+esp_read_mac(macBytes, ESP_MAC_WIFI_STA);
 
-  strncpy(macAdresi, rawMacBuf, sizeof(macAdresi)-1);
-  // bay_<mac>
-  snprintf(bayId, sizeof(bayId), "bay_%s", macAdresi);
+snprintf(
+  macAdresi,
+  sizeof(macAdresi),
+  "%02X%02X%02X%02X%02X%02X",
+  macBytes[0],
+  macBytes[1],
+  macBytes[2],
+  macBytes[3],
+  macBytes[4],
+  macBytes[5]
+);
+
+if (strcmp(macAdresi, "000000000000") == 0 || strlen(macAdresi) != 12) {
+  LOG_PRINTLN(F("MAC okunamadi, cihaz yeniden baslatiliyor."));
+  delay(1000);
+  ESP.restart();
+}
+
+snprintf(bayId, sizeof(bayId), "bay_%s", macAdresi);
 
   mqttTopicleriHazirla();
 
@@ -1648,15 +1666,42 @@ void loop() {
       uint16_t x, y;
 
       if (tft.getTouch(&x, &y)) {
-        if (dokunmaButonIcindeMi(x, y, BTN_IPTAL)) {
-          strncpy(secilenPaket, "cancel", sizeof(secilenPaket)-1);
-        }
-        else if (dokunmaButonIcindeMi(x, y, BTN_KOPUK)) {
-          strncpy(secilenPaket, "foam", sizeof(secilenPaket)-1);
-        }
-        else if (dokunmaButonIcindeMi(x, y, BTN_SU)) {
-          strncpy(secilenPaket, "wash", sizeof(secilenPaket)-1);
-        }
+if (
+  dokunmaButonIcindeMi(
+    x,
+    y,
+    BTN_IPTAL.x1,
+    BTN_IPTAL.y1,
+    BTN_IPTAL.x2,
+    BTN_IPTAL.y2
+  )
+) {
+  strncpy(secilenPaket, "cancel", sizeof(secilenPaket) - 1);
+}
+else if (
+  dokunmaButonIcindeMi(
+    x,
+    y,
+    BTN_KOPUK.x1,
+    BTN_KOPUK.y1,
+    BTN_KOPUK.x2,
+    BTN_KOPUK.y2
+  )
+) {
+  strncpy(secilenPaket, "foam", sizeof(secilenPaket) - 1);
+}
+else if (
+  dokunmaButonIcindeMi(
+    x,
+    y,
+    BTN_SU.x1,
+    BTN_SU.y1,
+    BTN_SU.x2,
+    BTN_SU.y2
+  )
+) {
+  strncpy(secilenPaket, "wash", sizeof(secilenPaket) - 1);
+}
       }
     }
 

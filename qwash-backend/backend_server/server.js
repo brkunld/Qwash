@@ -72,7 +72,7 @@ let server = null;
 let isShuttingDown = false;
 let cronTask = null;
 
-app.set("trust proxy", true);
+app.set("trust proxy", 1);
 
 app.use(cors());
 app.use("/api/", apiLimiter);
@@ -733,7 +733,9 @@ const reserveBayForSession = async (bayId, uid) => {
     const nowMs = Date.now(); // <-- YENİ EKLENDİ
 
     const canReserveFromAvailable =
-      status === "available" && !bay.currentSessionId && bay.isActive !== false;
+      ["available", "baslangic"].includes(status) &&
+      !bay.currentSessionId &&
+      bay.isActive !== false;
 
     const canReserveFromWaiting =
       status === "waiting" &&
@@ -1643,7 +1645,7 @@ app.post(
         const status = bay.status || "available";
 
         if (
-          status === "available" &&
+          ["available", "baslangic"].includes(status) &&
           !bay.currentSessionId &&
           bay.isActive !== false
         ) {
@@ -1651,6 +1653,7 @@ app.post(
             ...bay,
             status: "waiting",
             lastUserId: uid,
+            updatedAt: admin.database.ServerValue.TIMESTAMP,
           };
         }
 
@@ -1712,6 +1715,17 @@ app.post(
         ) {
           return res.status(409).json({
             error: "Peron şu anda başka bir kullanıcı tarafından hazırlanıyor.",
+          });
+        }
+
+        if (
+          bayData.status === "baslangic" &&
+          !bayData.currentSessionId &&
+          bayData.isActive !== false
+        ) {
+          return res.status(409).json({
+            error:
+              "Peron henüz tam olarak hazır değil. Lütfen birkaç saniye sonra tekrar deneyin.",
           });
         }
 
