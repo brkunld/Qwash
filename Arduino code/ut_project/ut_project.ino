@@ -99,6 +99,20 @@ void watchdogCurrentTaskKaydet(const char* taskName) {
 // ================= EKRAN =================
 TFT_eSPI tft = TFT_eSPI();
 
+// ================= ZAMAN / NTP =================
+bool saatGecerli = false;
+bool saatHatasiNedeniyleOffline = false;
+unsigned long sonNtpDenemeMs = 0;
+const unsigned long NTP_RETRY_INTERVAL_MS = 30000;
+
+bool sistemSaatiGecerliMi() {
+  time_t suAn;
+  time(&suAn);
+
+  // 2023-01-01 sonrası yeterli kabul edilir.
+  return suAn > 1672531200;
+}
+
 // ================= DOKUNMATIK BUTON ALANLARI =================
 struct TouchButton {
   uint16_t x1;
@@ -245,14 +259,13 @@ bool oncekiKopukButonDurumu = HIGH;
 void availableModunaDon(const char* sebep, bool cancelEventGonder);
 void iptalIstegiGonder();
 void odemeBeklemeIptalEt(const char* sebep);
+
 // ================= YARDIMCI =================
 void resetSayacDurumu() {
   sayacSonEkranSaniye = -1;
   sayacSonYarimSaniyeMs = 0;
   sayacIslemBittiCalindi = false;
 }
-
-
 
 bool durationGecerliMi(int gelenSure) {
   if (gelenSure < MIN_DURATION_SEC || gelenSure > MAX_DURATION_SEC) {
@@ -322,6 +335,16 @@ void ekranaBaglantiHatasiYaz() {
   tft.println("Baglanti Hatasi");
   tft.setCursor(25, 120);
   tft.println("Tekrar deneniyor...");
+}
+
+void ekranaSaatHatasiYaz() {
+  tft.fillScreen(TFT_BLACK);
+  tft.setTextColor(TFT_RED);
+  tft.setTextSize(2);
+  tft.setCursor(25, 80);
+  tft.println("Saat Hatasi");
+  tft.setCursor(25, 115);
+  tft.println("NTP bekleniyor...");
 }
 
 void ekranaWaitingCiz() {
@@ -418,13 +441,13 @@ void geciciEkranKontrolEt() {
 
   unsigned long suAn = millis();
 
-if (
-  geciciEkranModu == GECICI_IPTAL &&
-  suAn - geciciEkranBaslangicMs >= IPTAL_EKRANI_MS
-) {
-  iptalIstegiGonder();
-  return;
-}
+  if (
+    geciciEkranModu == GECICI_IPTAL &&
+    suAn - geciciEkranBaslangicMs >= IPTAL_EKRANI_MS
+  ) {
+    iptalIstegiGonder();
+    return;
+  }
 
   if (
     geciciEkranModu == GECICI_ISTEK_ILETILIYOR &&
@@ -546,36 +569,51 @@ bool wifiBaglan(unsigned long timeoutMs) {
 }
 
 // ================= NTP =================
-void ntpBekle() {
+bool ntpDene(unsigned long timeoutMs, bool ekranaYaz) {
   configTime(3 * 3600, 0, "pool.ntp.org", "time.nist.gov");
 
-  tft.fillScreen(TFT_BLACK);
-  tft.setTextColor(TFT_WHITE);
-  tft.setTextSize(2);
-  tft.setCursor(20, 100);
-  tft.println("Saat Guncelleniyor...");
+  if (ekranaYaz) {
+    tft.fillScreen(TFT_BLACK);
+    tft.setTextColor(TFT_WHITE);
+    tft.setTextSize(2);
+    tft.setCursor(20, 100);
+    tft.println("Saat Guncelleniyor...");
+  }
 
   LOG_PRINT(F("NTP bekleniyor"));
 
-  time_t suAn;
-  time(&suAn);
-
   unsigned long baslangic = millis();
 
-  while (suAn < 100000 && millis() - baslangic < 20000) {
-    delay(500);
+  while (millis() - baslangic < timeoutMs) {
     watchdogBesle();
+
+    if (sistemSaatiGecerliMi()) {
+      LOG_PRINTLN("");
+      LOG_PRINTLN(F("Saat guncellendi."));
+      saatGecerli = true;
+      saatHatasiNedeniyleOffline = false;
+      return true;
+    }
+
+    delay(500);
     LOG_PRINT(F("."));
-    time(&suAn);
   }
 
   LOG_PRINTLN("");
+  LOG_PRINTLN(F("NTP basarisiz. TLS/MQTT baslatilmayacak."));
 
-  if (suAn < 100000) {
-    LOG_PRINTLN(F("NTP basarisiz, devam ediliyor."));
-  } else {
-    LOG_PRINTLN(F("Saat guncellendi."));
-  }
+  saatGecerli = false;
+  sonNtpDenemeMs = millis();
+
+  return false;
+}
+
+bool ntpBekle(unsigned long timeoutMs = 20000) {
+  return ntpDene(timeoutMs, true);
+}
+
+bool ntpSessizDene(unsigned long timeoutMs = 10000) {
+  return ntpDene(timeoutMs, false);
 }
 
 // ================= MQTT =================
@@ -731,22 +769,22 @@ void availableModunaDon(const char* sebep, bool cancelEventGonder) {
   isBayActive = true;
   durumDegisti = true;
 
-if (cancelEventGonder) {
-  unsigned long suAn = millis();
+  if (cancelEventGonder) {
+    unsigned long suAn = millis();
 
-  if (suAn - sonCancelEventMs >= CANCEL_EVENT_DEBOUNCE_MS) {
-    sonCancelEventMs = suAn;
+    if (suAn - sonCancelEventMs >= CANCEL_EVENT_DEBOUNCE_MS) {
+      sonCancelEventMs = suAn;
 
-    if (!mqttEventYayinla("CANCEL")) {
-      LOG_PRINTLN(F("CANCEL event gonderilemedi, eski selection fallback deneniyor."));
-      mqttSecimYayinla("cancel");
+      if (!mqttEventYayinla("CANCEL")) {
+        LOG_PRINTLN(F("CANCEL event gonderilemedi, eski selection fallback deneniyor."));
+        mqttSecimYayinla("cancel");
+      } else {
+        LOG_PRINTLN(F("CANCEL event gonderildi."));
+      }
     } else {
-      LOG_PRINTLN(F("CANCEL event gonderildi."));
+      LOG_PRINTLN(F("CANCEL event tekrar gonderilmedi debounce."));
     }
-  } else {
-    LOG_PRINTLN(F("CANCEL event tekrar gonderilmedi debounce."));
   }
-}
 
   mqttDurumYayinla();
 }
@@ -755,39 +793,42 @@ void mqttKomutUygula(const String& komut) {
   LOG_PRINT(F("MQTT Komut: "));
   LOG_PRINTLN(komut);
 
-if (komut == "AVAILABLE") {
-  cancelBackendCevabiBekleniyor = false;
-  odemeBekleniyor = false;
-  dokunmatikKilit = false;
-  hataEkraniGosteriliyor = false;
-  geciciEkranModu = GECICI_YOK;
-  bekleyenPaketSecimi = "";
+  if (komut == "AVAILABLE") {
+    saatHatasiNedeniyleOffline = false;
+    cancelBackendCevabiBekleniyor = false;
+    odemeBekleniyor = false;
+    dokunmatikKilit = false;
+    hataEkraniGosteriliyor = false;
+    geciciEkranModu = GECICI_YOK;
+    bekleyenPaketSecimi = "";
 
-  if (currentStatus == "available") {
-    LOG_PRINTLN(F("AVAILABLE zaten aktif, tekrar islenmedi."));
+    if (currentStatus == "available") {
+      LOG_PRINTLN(F("AVAILABLE zaten aktif, tekrar islenmedi."));
+      durumDegisti = true;
+      return;
+    }
+
+    currentStatus = "available";
+    isBayActive = true;
+    islemHafizasiniTemizle();
     durumDegisti = true;
-    return;
   }
+  else if (komut == "WAITING") {
+    saatHatasiNedeniyleOffline = false;
+    cancelBackendCevabiBekleniyor = false;
+    odemeBekleniyor = false;
+    dokunmatikKilit = false;
+    hataEkraniGosteriliyor = false;
+    geciciEkranModu = GECICI_YOK;
+    bekleyenPaketSecimi = "";
 
-  currentStatus = "available";
-  isBayActive = true;
-  islemHafizasiniTemizle();
-  durumDegisti = true;
-}
-else if (komut == "WAITING") {
-  cancelBackendCevabiBekleniyor = false;
-  odemeBekleniyor = false;
-  dokunmatikKilit = false;
-  hataEkraniGosteriliyor = false;
-  geciciEkranModu = GECICI_YOK;
-  bekleyenPaketSecimi = "";
-
-  currentStatus = "waiting";
-  isBayActive = true;
-  islemHafizasiniTemizle();
-  durumDegisti = true;
-}
+    currentStatus = "waiting";
+    isBayActive = true;
+    islemHafizasiniTemizle();
+    durumDegisti = true;
+  }
   else if (komut == "OFFLINE") {
+    saatHatasiNedeniyleOffline = false;
     currentStatus = "offline";
     isBayActive = false;
     odemeBekleniyor = false;
@@ -796,6 +837,7 @@ else if (komut == "WAITING") {
     durumDegisti = true;
   }
   else if (komut == "MAINTENANCE") {
+    saatHatasiNedeniyleOffline = false;
     currentStatus = "maintenance";
     isBayActive = true;
     odemeBekleniyor = false;
@@ -804,6 +846,7 @@ else if (komut == "WAITING") {
     durumDegisti = true;
   }
   else if (komut == "ACTIVE_ON") {
+    saatHatasiNedeniyleOffline = false;
     isBayActive = true;
 
     if (currentStatus == "offline") {
@@ -813,6 +856,7 @@ else if (komut == "WAITING") {
     durumDegisti = true;
   }
   else if (komut == "ACTIVE_OFF") {
+    saatHatasiNedeniyleOffline = false;
     currentStatus = "offline";
     isBayActive = false;
     odemeBekleniyor = false;
@@ -843,6 +887,7 @@ else if (komut == "WAITING") {
         return;
       }
 
+      saatHatasiNedeniyleOffline = false;
       requestedPackage = normalizedPackage;
       durationSec = gelenSure;
 
@@ -907,6 +952,33 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
 bool mqttBaglan() {
   if (WiFi.status() != WL_CONNECTED) {
     return false;
+  }
+
+  // KRITIK KORUMA:
+  // TLS sertifika dogrulamasi icin sistem saati gecersizse MQTT denenmez.
+  if (!sistemSaatiGecerliMi()) {
+    saatGecerli = false;
+
+    if (millis() - sonNtpDenemeMs >= NTP_RETRY_INTERVAL_MS) {
+      sonNtpDenemeMs = millis();
+      LOG_PRINTLN(F("MQTT oncesi saat gecersiz. NTP tekrar deneniyor."));
+      ntpSessizDene(10000);
+    }
+
+    return false;
+  }
+
+  saatGecerli = true;
+
+  if (saatHatasiNedeniyleOffline) {
+    LOG_PRINTLN(F("Saat gecerli oldu. NTP kaynakli offline temizleniyor."));
+    saatHatasiNedeniyleOffline = false;
+
+    if (currentStatus == "offline") {
+      currentStatus = "baslangic";
+      isBayActive = true;
+      durumDegisti = true;
+    }
   }
 
   if (mqttClient.connected()) {
@@ -997,6 +1069,7 @@ void mqttBaglantiTask(void* parameter) {
 
   for (;;) {
     watchdogBesle();
+
     if (WiFi.status() == WL_CONNECTED) {
       if (!mqttClient.connected()) {
         mqttBaglan();
@@ -1040,7 +1113,14 @@ void wifiNonBlockingKontrolEt() {
       wifiReconnectInProgress = false;
       sonWifiDenemeMs = millis();
 
-// WiFi geri gelince MQTT task ilk fırsatta yeniden denesin.
+      // WiFi geri gelince once saat tekrar kontrol edilsin.
+      saatGecerli = sistemSaatiGecerliMi();
+
+      if (!saatGecerli) {
+        sonNtpDenemeMs = 0;
+      }
+
+      // WiFi geri gelince MQTT task ilk firsatta yeniden denesin.
       sonMqttDenemeMs = 0;
 
       durumDegisti = true;
@@ -1192,39 +1272,52 @@ void setup() {
   macAdresi = rawMac;
   bayId = "bay_" + macAdresi;
 
-mqttTopicleriHazirla();
+  mqttTopicleriHazirla();
 
-if (mqttPublishQueue == NULL) {
-  mqttPublishQueue = xQueueCreate(20, sizeof(MqttPublishJob));
-}
+  if (mqttPublishQueue == NULL) {
+    mqttPublishQueue = xQueueCreate(20, sizeof(MqttPublishJob));
+  }
 
-if (!mqttTaskBaslatildi && mqttPublishQueue != NULL) {
-  xTaskCreatePinnedToCore(
-    mqttBaglantiTask,
-    "mqttBaglantiTask",
-    8192,
-    NULL,
-    1,
-    &mqttTaskHandle,
-    0
-  );
+  if (!mqttTaskBaslatildi && mqttPublishQueue != NULL) {
+    xTaskCreatePinnedToCore(
+      mqttBaglantiTask,
+      "mqttBaglantiTask",
+      8192,
+      NULL,
+      1,
+      &mqttTaskHandle,
+      0
+    );
 
-  mqttTaskBaslatildi = true;
-}
+    mqttTaskBaslatildi = true;
+  }
 
-if (!wifiBaglan(WIFI_TIMEOUT_MS)) {
-  currentStatus = "offline";
-  isBayActive = false;
-  ekranaBaglantiHatasiYaz();
-  sonWifiDenemeMs = millis();
-  watchdogLoopTaskKaydet();
-  return;
-}
+  if (!wifiBaglan(WIFI_TIMEOUT_MS)) {
+    currentStatus = "offline";
+    isBayActive = false;
+    saatHatasiNedeniyleOffline = false;
+    ekranaBaglantiHatasiYaz();
+    sonWifiDenemeMs = millis();
+    watchdogLoopTaskKaydet();
+    return;
+  }
 
   wifiWasConnected = true;
   wifiReconnectInProgress = false;
 
-  ntpBekle();
+  if (!ntpBekle()) {
+    currentStatus = "offline";
+    isBayActive = false;
+    saatHatasiNedeniyleOffline = true;
+    ekranaSaatHatasiYaz();
+    durumDegisti = true;
+
+    wifiWasConnected = WiFi.status() == WL_CONNECTED;
+    sonNabizZamani = millis();
+
+    watchdogLoopTaskKaydet();
+    return;
+  }
 
   wifiWasConnected = WiFi.status() == WL_CONNECTED;
 
@@ -1255,25 +1348,25 @@ void loop() {
   }
 
   if (
-  cancelBackendCevabiBekleniyor &&
-  millis() - cancelBackendBeklemeBaslangicMs >= CANCEL_BACKEND_TIMEOUT_MS
-) {
-  LOG_PRINTLN(F("CANCEL backend cevabi gelmedi, lokal AVAILABLE moduna geciliyor."));
+    cancelBackendCevabiBekleniyor &&
+    millis() - cancelBackendBeklemeBaslangicMs >= CANCEL_BACKEND_TIMEOUT_MS
+  ) {
+    LOG_PRINTLN(F("CANCEL backend cevabi gelmedi, lokal AVAILABLE moduna geciliyor."));
 
-  cancelBackendCevabiBekleniyor = false;
-  dokunmatikKilit = false;
-  odemeBekleniyor = false;
-  hataEkraniGosteriliyor = false;
-  geciciEkranModu = GECICI_YOK;
-  bekleyenPaketSecimi = "";
+    cancelBackendCevabiBekleniyor = false;
+    dokunmatikKilit = false;
+    odemeBekleniyor = false;
+    hataEkraniGosteriliyor = false;
+    geciciEkranModu = GECICI_YOK;
+    bekleyenPaketSecimi = "";
 
-  currentStatus = "available";
-  isBayActive = true;
-  islemHafizasiniTemizle();
-  durumDegisti = true;
+    currentStatus = "available";
+    isBayActive = true;
+    islemHafizasiniTemizle();
+    durumDegisti = true;
 
-  mqttDurumYayinla();
-}
+    mqttDurumYayinla();
+  }
 
   if (millis() - sonNabizZamani >= nabizAraligi) {
     sonNabizZamani = millis();
@@ -1294,8 +1387,17 @@ void loop() {
     if (durumDegisti) {
       durumDegisti = false;
       eskiDurum = currentStatus;
-      mqttDurumYayinla();
-      ekranaKapaliYaz();
+
+      if (mqttClient.connected()) {
+        mqttDurumYayinla();
+      }
+
+      if (saatHatasiNedeniyleOffline) {
+        ekranaSaatHatasiYaz();
+      } else {
+        ekranaKapaliYaz();
+      }
+
       LOG_PRINTLN(F("KAPALI"));
     }
 
@@ -1440,10 +1542,10 @@ void loop() {
           secilenPaket = "cancel";
         }
         else if (dokunmaButonIcindeMi(x, y, BTN_KOPUK)) {
-          secilenPaket = "wash";
+          secilenPaket = "foam";
         }
         else if (dokunmaButonIcindeMi(x, y, BTN_SU)) {
-          secilenPaket = "foam";
+          secilenPaket = "wash";
         }
       }
     }
@@ -1464,10 +1566,10 @@ void loop() {
     }
   }
 
-if (odemeBekleniyor && currentStatus == "waiting") {
-  if (millis() - odemeBeklemeBaslangicMs >= ODEME_BEKLEME_TIMEOUT_MS) {
-    odemeBeklemeIptalEt("odeme_timeout");
-    return;
+  if (odemeBekleniyor && currentStatus == "waiting") {
+    if (millis() - odemeBeklemeBaslangicMs >= ODEME_BEKLEME_TIMEOUT_MS) {
+      odemeBeklemeIptalEt("odeme_timeout");
+      return;
+    }
   }
-}
 }

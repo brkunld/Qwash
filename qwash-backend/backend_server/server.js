@@ -9,6 +9,13 @@ const cron = require("node-cron");
 const mqtt = require("mqtt");
 const Iyzipay = require("iyzipay");
 const { z } = require("zod");
+const rateLimit = require("express-rate-limit");
+
+const apiLimiter = rateLimit({
+  windowMs: 1 * 60 * 1000, // 1 dakika
+  max: 30, // IP başına 1 dakikada max 30 istek
+  message: { error: "Çok fazla istek attınız, lütfen biraz bekleyin." }
+});
 
 const APP_BASE_URL = process.env.APP_BASE_URL;
 
@@ -61,11 +68,27 @@ const rtdb = admin.database();
 
 const app = express();
 
+let server = null;
+let isShuttingDown = false;
+let cronTask = null;
+
 app.set("trust proxy", true);
 
 app.use(cors());
+app.use("/api/", apiLimiter);
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+app.use((req, res, next) => {
+  if (isShuttingDown) {
+    return res.status(503).json({
+      error:
+        "Sunucu yeniden başlatılıyor. Lütfen birkaç saniye sonra tekrar deneyin.",
+    });
+  }
+
+  return next();
+});
 
 // =========================================================
 // LOG
@@ -751,7 +774,7 @@ const resumeOrClearSessionAfterBoot = async (bayId, bayData = {}) => {
   const expectedEndTimeMs =
     Number(session.expectedEndTimeMs || 0) ||
     (session.expectedEndTime &&
-    typeof session.expectedEndTime.toMillis === "function"
+      typeof session.expectedEndTime.toMillis === "function"
       ? session.expectedEndTime.toMillis()
       : 0);
 
@@ -1015,8 +1038,7 @@ const sendAdminAlert = async (bayId, type) => {
     }
 
     safeLog(
-      `📧 E-Posta başarıyla gönderildi: ${
-        type === "down" ? "Kopma" : "Düzelme"
+      `📧 E-Posta başarıyla gönderildi: ${type === "down" ? "Kopma" : "Düzelme"
       } bildirimi.`,
     );
   } catch (error) {
@@ -1195,7 +1217,7 @@ mqttClient.on("message", async (topic, messageBuffer) => {
         if (bootResult.resumed) {
           safeLog(
             `🔄 BOOT DEVAM: ${bayId} session devam ettirildi. ` +
-              `Session=${bootResult.sessionId}, Paket=${bootResult.packageId}, Kalan=${bootResult.remainingSec}sn`,
+            `Session=${bootResult.sessionId}, Paket=${bootResult.packageId}, Kalan=${bootResult.remainingSec}sn`,
           );
         } else {
           safeLog(`🔄 BOOT TEMİZLİĞİ: ${bayId} result=${bootResult.reason}`);
@@ -1384,8 +1406,8 @@ const verifyAdmin = async (req, res, next) => {
 
     const authorizedEmails = process.env.AUTHORIZED_ADMINS
       ? process.env.AUTHORIZED_ADMINS.split(",")
-          .map((email) => email.trim().toLowerCase())
-          .filter(Boolean)
+        .map((email) => email.trim().toLowerCase())
+        .filter(Boolean)
       : [];
 
     const requestEmail = decodedToken.email
@@ -1439,10 +1461,6 @@ app.post("/api/prepare-bay", verifyUser, validateRequestBody(prepareBaySchema), 
   const uid = req.user.uid;
 
   safeLog(`🟡 PREPARE GELDİ: bayId="${bayId}", uid="${uid}"`);
-
-  if (!bayId) {
-    return res.status(400).json({ error: "bayId gerekli." });
-  }
 
   try {
     const bayRef = rtdb.ref(`bays/${bayId}`);
@@ -1577,10 +1595,6 @@ app.post("/api/prepare-bay", verifyUser, validateRequestBody(prepareBaySchema), 
 app.post("/api/start-session", verifyUser, validateRequestBody(startSessionSchema), async (req, res) => {
   const uid = req.user.uid;
   const { bayId, packageId } = req.validatedBody;
-
-  if (!bayId) {
-    return res.status(400).json({ error: "Peron bilgisi eksik." });
-  }
 
   if (!packageId || isCancelValue(packageId)) {
     safeLog(
@@ -1732,12 +1746,11 @@ app.post("/api/start-session", verifyUser, validateRequestBody(startSessionSchem
 
       safeLog(
         `💸 MQTT BAŞLATMA HATASI: ${bayId} başlatılamadı. ` +
-          `Session: ${newSessionId}. ` +
-          `İade: ${
-            refundResult.refunded
-              ? `${refundResult.tokens} jeton`
-              : refundResult.reason
-          }`,
+        `Session: ${newSessionId}. ` +
+        `İade: ${refundResult.refunded
+          ? `${refundResult.tokens} jeton`
+          : refundResult.reason
+        }`,
       );
 
       return res.status(503).json({
@@ -1843,10 +1856,6 @@ app.post("/api/start-session", verifyUser, validateRequestBody(startSessionSchem
 app.post("/api/cancel-waiting", verifyUser, validateRequestBody(cancelWaitingSchema), async (req, res) => {
   const { bayId } = req.validatedBody;
 
-  if (!bayId) {
-    return res.status(400).json({ error: "bayId gerekli." });
-  }
-
   try {
     const bayRef = rtdb.ref(`bays/${bayId}`);
     const baySnap = await bayRef.once("value");
@@ -1926,10 +1935,6 @@ app.post("/api/cancel-waiting", verifyUser, validateRequestBody(cancelWaitingSch
 app.post("/api/stop-session", verifyUser, validateRequestBody(stopSessionSchema), async (req, res) => {
   const { bayId, sessionId } = req.validatedBody;
   const uid = req.user.uid;
-
-  if (!bayId || !sessionId) {
-    return res.status(400).json({ error: "Eksik parametre." });
-  }
 
   try {
     const sessionRef = db.collection("sessions").doc(sessionId);
@@ -2152,8 +2157,7 @@ app.post("/api/topup", verifyUser, validateRequestBody(topupSchema), async (req,
       });
 
       safeLog(
-        `❌ Iyzico Form Başlatılamadı: ${
-          result?.errorMessage || "Iyzico yanıtı geçersiz."
+        `❌ Iyzico Form Başlatılamadı: ${result?.errorMessage || "Iyzico yanıtı geçersiz."
         }`,
       );
 
@@ -2233,9 +2237,9 @@ app.post("/api/topup-callback", validateRequestBody(topupCallbackBodySchema), va
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       });
 
-          safeLog(`❌ Ödeme Başarısız veya İptal Edildi. Order: ${orderId}`);
+      safeLog(`❌ Ödeme Başarısız veya İptal Edildi. Order: ${orderId}`);
 
-          return res.send(`
+      return res.send(`
             <html lang="tr">
               <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
               <body style="text-align:center; padding-top:50px; font-family:sans-serif; background-color:#fff3f3;">
@@ -2245,22 +2249,22 @@ app.post("/api/topup-callback", validateRequestBody(topupCallbackBodySchema), va
               </body>
             </html>
           `);
-        }
+    }
 
-        if (result.conversationId !== orderId || result.basketId !== orderId) {
-          await orderRef.update({
-            status: "iyzico_order_mismatch",
-            iyzicoConversationId: result.conversationId || null,
-            iyzicoBasketId: result.basketId || null,
-            paymentId: result.paymentId || null,
-            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-          });
+    if (result.conversationId !== orderId || result.basketId !== orderId) {
+      await orderRef.update({
+        status: "iyzico_order_mismatch",
+        iyzicoConversationId: result.conversationId || null,
+        iyzicoBasketId: result.basketId || null,
+        paymentId: result.paymentId || null,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
 
-          safeLog(
-            `🚨 IYZICO ORDER UYUŞMAZLIĞI: Order=${orderId}, Conversation=${result.conversationId}, Basket=${result.basketId}`,
-          );
+      safeLog(
+        `🚨 IYZICO ORDER UYUŞMAZLIĞI: Order=${orderId}, Conversation=${result.conversationId}, Basket=${result.basketId}`,
+      );
 
-          return res.status(400).send(`
+      return res.status(400).send(`
             <html lang="tr">
               <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
               <body style="text-align:center; padding-top:50px; font-family:sans-serif; background-color:#fff3f3;">
@@ -2270,35 +2274,35 @@ app.post("/api/topup-callback", validateRequestBody(topupCallbackBodySchema), va
               </body>
             </html>
           `);
-        }
+    }
 
-        const toKurus = (value) => Math.round(Number(value) * 100);
+    const toKurus = (value) => Math.round(Number(value) * 100);
 
-        const expectedAmount = Number(order.amountTRY);
-        const paidPrice = Number(result.paidPrice);
-        const expectedKurus = toKurus(order.amountTRY);
-        const paidKurus = toKurus(result.paidPrice);
+    const expectedAmount = Number(order.amountTRY);
+    const paidPrice = Number(result.paidPrice);
+    const expectedKurus = toKurus(order.amountTRY);
+    const paidKurus = toKurus(result.paidPrice);
 
-        if (
-          !Number.isFinite(expectedAmount) ||
-          !Number.isFinite(paidPrice) ||
-          expectedKurus !== paidKurus
-        ) {
-          await orderRef.update({
-            status: "amount_mismatch",
-            expectedAmountTRY: expectedAmount,
-            expectedKurus,
-            iyzicoPaidPrice: result.paidPrice || null,
-            iyzicoPaidKurus: paidKurus,
-            paymentId: result.paymentId || null,
-            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-          });
+    if (
+      !Number.isFinite(expectedAmount) ||
+      !Number.isFinite(paidPrice) ||
+      expectedKurus !== paidKurus
+    ) {
+      await orderRef.update({
+        status: "amount_mismatch",
+        expectedAmountTRY: expectedAmount,
+        expectedKurus,
+        iyzicoPaidPrice: result.paidPrice || null,
+        iyzicoPaidKurus: paidKurus,
+        paymentId: result.paymentId || null,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
 
-          safeLog(
-            `🚨 IYZICO TUTAR UYUŞMAZLIĞI: Order=${orderId}, Expected=${expectedAmount}, Paid=${result.paidPrice}`,
-          );
+      safeLog(
+        `🚨 IYZICO TUTAR UYUŞMAZLIĞI: Order=${orderId}, Expected=${expectedAmount}, Paid=${result.paidPrice}`,
+      );
 
-          return res.status(400).send(`
+      return res.status(400).send(`
             <html lang="tr">
               <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
               <body style="text-align:center; padding-top:50px; font-family:sans-serif; background-color:#fff3f3;">
@@ -2308,67 +2312,67 @@ app.post("/api/topup-callback", validateRequestBody(topupCallbackBodySchema), va
               </body>
             </html>
           `);
+    }
+
+    try {
+      await db.runTransaction(async (t) => {
+        const freshOrderDoc = await t.get(orderRef);
+
+        if (!freshOrderDoc.exists) {
+          throw new Error("Order_Bulunamadi");
         }
 
-        try {
-          await db.runTransaction(async (t) => {
-            const freshOrderDoc = await t.get(orderRef);
+        const freshOrder = freshOrderDoc.data();
 
-            if (!freshOrderDoc.exists) {
-              throw new Error("Order_Bulunamadi");
-            }
+        if (freshOrder.status !== "pending") {
+          throw new Error("Order_Zaten_Islendi");
+        }
 
-            const freshOrder = freshOrderDoc.data();
+        const userRef = db.collection("users").doc(freshOrder.userId);
+        const userDoc = await t.get(userRef);
 
-            if (freshOrder.status !== "pending") {
-              throw new Error("Order_Zaten_Islendi");
-            }
+        if (!userDoc.exists) {
+          throw new Error("Kullanici_Bulunamadi");
+        }
 
-            const userRef = db.collection("users").doc(freshOrder.userId);
-            const userDoc = await t.get(userRef);
+        const tokensToAdd = Number(freshOrder.tokens);
+        const amountTRY = Number(freshOrder.amountTRY);
+        const mevcutBakiye = Number(userDoc.data().walletTokens || 0);
 
-            if (!userDoc.exists) {
-              throw new Error("Kullanici_Bulunamadi");
-            }
+        t.update(userRef, {
+          walletTokens: mevcutBakiye + tokensToAdd,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
 
-            const tokensToAdd = Number(freshOrder.tokens);
-            const amountTRY = Number(freshOrder.amountTRY);
-            const mevcutBakiye = Number(userDoc.data().walletTokens || 0);
+        t.update(orderRef, {
+          status: "success",
+          paymentId: result.paymentId || null,
+          iyzicoPaidPrice: result.paidPrice || null,
+          iyzicoPrice: result.price || null,
+          iyzicoConversationId: result.conversationId || null,
+          iyzicoBasketId: result.basketId || null,
+          completedAt: admin.firestore.FieldValue.serverTimestamp(),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
 
-            t.update(userRef, {
-              walletTokens: mevcutBakiye + tokensToAdd,
-              updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-            });
+        t.set(db.collection("transactions").doc(), {
+          type: "topup",
+          status: "success",
+          paymentId: result.paymentId || null,
+          orderId,
+          tokens: tokensToAdd,
+          unitPriceTRY: amountTRY / tokensToAdd,
+          amountTRY,
+          userId: freshOrder.userId,
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+      });
 
-            t.update(orderRef, {
-              status: "success",
-              paymentId: result.paymentId || null,
-              iyzicoPaidPrice: result.paidPrice || null,
-              iyzicoPrice: result.price || null,
-              iyzicoConversationId: result.conversationId || null,
-              iyzicoBasketId: result.basketId || null,
-              completedAt: admin.firestore.FieldValue.serverTimestamp(),
-              updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-            });
+      safeLog(
+        `✅ CHECKOUT ÖDEMESİ BAŞARILI: Order=${orderId}, ${order.userId} -> ${order.tokens} jeton yüklendi.`,
+      );
 
-            t.set(db.collection("transactions").doc(), {
-              type: "topup",
-              status: "success",
-              paymentId: result.paymentId || null,
-              orderId,
-              tokens: tokensToAdd,
-              unitPriceTRY: amountTRY / tokensToAdd,
-              amountTRY,
-              userId: freshOrder.userId,
-              createdAt: admin.firestore.FieldValue.serverTimestamp(),
-            });
-          });
-
-          safeLog(
-            `✅ CHECKOUT ÖDEMESİ BAŞARILI: Order=${orderId}, ${order.userId} -> ${order.tokens} jeton yüklendi.`,
-          );
-
-          return res.send(`
+      return res.send(`
             <html lang="tr">
               <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
               <body style="text-align:center; padding-top:50px; font-family:sans-serif; background-color:#f4fbf7;">
@@ -2378,9 +2382,9 @@ app.post("/api/topup-callback", validateRequestBody(topupCallbackBodySchema), va
               </body>
             </html>
           `);
-        } catch (dbError) {
-          if (dbError.message === "Order_Zaten_Islendi") {
-            return res.send(`
+    } catch (dbError) {
+      if (dbError.message === "Order_Zaten_Islendi") {
+        return res.send(`
               <html lang="tr">
                 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
                 <body style="text-align:center; padding-top:50px; font-family:sans-serif;">
@@ -2389,16 +2393,16 @@ app.post("/api/topup-callback", validateRequestBody(topupCallbackBodySchema), va
                 </body>
               </html>
             `);
-          }
+      }
 
-          safeLog(`❌ Ödeme alındı ama DB yazma hatası: ${dbError.message}`);
+      safeLog(`❌ Ödeme alındı ama DB yazma hatası: ${dbError.message}`);
 
-          return res
-            .status(500)
-            .send(
-              "<h1>Ödeme Alındı fakat bir veritabanı hatası oluştu. Lütfen destekle iletişime geçin.</h1>",
-            );
-        }
+      return res
+        .status(500)
+        .send(
+          "<h1>Ödeme Alındı fakat bir veritabanı hatası oluştu. Lütfen destekle iletişime geçin.</h1>",
+        );
+    }
   } catch (error) {
     safeLog(`❌ Callback sunucu hatası: ${error.message}`);
     return res.status(500).send("<h1>Sunucu hatası oluştu.</h1>");
@@ -2435,10 +2439,6 @@ app.get("/api/admin/bays", verifyAdmin, async (req, res) => {
 // ---------------------------------------------------------
 app.post("/api/admin/update-bay", verifyAdmin, validateRequestBody(adminUpdateBaySchema), async (req, res) => {
   const { bayId, patch } = req.validatedBody;
-
-  if (!bayId || !patch) {
-    return res.status(400).json({ error: "Eksik parametre." });
-  }
 
   try {
     const allowedPatch = {};
@@ -2616,10 +2616,6 @@ app.post("/api/admin/search-user", verifyAdmin, validateRequestBody(adminSearchU
 app.post("/api/admin/update-user", verifyAdmin, validateRequestBody(adminUpdateUserSchema), async (req, res) => {
   const { userId, patch } = req.validatedBody;
 
-  if (!userId || !patch) {
-    return res.status(400).json({ error: "Eksik parametre gönderildi." });
-  }
-
   try {
     await db.collection("users").doc(userId).update({
       isBlocked: patch.isBlocked,
@@ -2648,12 +2644,6 @@ app.post("/api/admin/update-user", verifyAdmin, validateRequestBody(adminUpdateU
 // ---------------------------------------------------------
 app.post("/api/admin/topup", verifyAdmin, validateRequestBody(adminTopupSchema), async (req, res) => {
   const { userId, tokens } = req.validatedBody;
-
-  if (!userId || !tokens) {
-    return res.status(400).json({
-      error: "Kullanıcı ID ve Jeton miktarı gerekli.",
-    });
-  }
 
   try {
     const adet = Number(tokens);
@@ -2812,7 +2802,7 @@ const acquireCronLock = async () => {
     return {
       owner,
       lockedAt: now,
-      lockedUntil: now + 55 * 1000,
+      lockedUntil: now + 2 * 60 * 1000,
     };
   });
 
@@ -2820,7 +2810,7 @@ const acquireCronLock = async () => {
 };
 
 if (ENABLE_CRON) {
-  cron.schedule("* * * * *", async () => {
+  cronTask = cron.schedule("* * * * *", async () => {
     if (isHeartbeatCronRunning) {
       safeLog("⏭️ [CRON] Önceki kontrol hâlâ çalışıyor, bu tur atlandı.");
       return;
@@ -3042,6 +3032,78 @@ process.on("uncaughtException", (error) => {
   safeLog(`🚨 UNCAUGHT EXCEPTION: ${error.stack || error.message}`);
 });
 
+const waitForCronToFinish = async (timeoutMs = 10000) => {
+  const startedAt = Date.now();
+
+  while (isHeartbeatCronRunning && Date.now() - startedAt < timeoutMs) {
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+
+  if (isHeartbeatCronRunning) {
+    safeLog("⚠️ Cron hâlâ çalışıyor, kapanış devam ediyor.");
+  }
+};
+
+const gracefulShutdown = async (signal) => {
+  if (isShuttingDown) {
+    return;
+  }
+
+  isShuttingDown = true;
+
+  safeLog(`🛑 ${signal} alındı. Güvenli kapanış başlatılıyor...`);
+
+  const forceExitTimer = setTimeout(() => {
+    safeLog("⏰ Güvenli kapanış zaman aşımına uğradı. Zorla çıkılıyor.");
+    process.exit(1);
+  }, 25000);
+
+  try {
+if (cronTask) {
+  cronTask.stop();
+  safeLog("✅ Cron task yeni tetiklemelere kapatıldı.");
+}
+
+await waitForCronToFinish(10000);
+
+    if (server) {
+      await new Promise((resolve) => {
+        server.close(() => {
+          safeLog("✅ HTTP sunucusu yeni istekleri kapattı.");
+          resolve();
+        });
+      });
+    }
+
+if (mqttClient) {
+      mqttClient.options.reconnectPeriod = 0;
+      
+      await new Promise((resolve) => {
+        mqttClient.end(false, {}, () => {
+          safeLog("✅ MQTT bağlantısı düzgün kapatıldı.");
+          resolve();
+        });
+      });
+    }
+
+    await admin.app().delete();
+    safeLog("✅ Firebase Admin bağlantısı kapatıldı.");
+
+    clearTimeout(forceExitTimer);
+
+    safeLog("✅ Güvenli kapanış tamamlandı.");
+    process.exit(0);
+  } catch (error) {
+    clearTimeout(forceExitTimer);
+
+    safeLog(`❌ Güvenli kapanış hatası: ${error.message}`);
+    process.exit(1);
+  }
+};
+
+process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
+process.on("SIGINT", () => gracefulShutdown("SIGINT"));
+
 // =========================================================
 // START
 // =========================================================
@@ -3050,9 +3112,13 @@ const HOST = "0.0.0.0";
 const RUN_STARTUP_CLEAN = process.env.RUN_STARTUP_CLEAN === "true";
 
 const startServer = () => {
-  app.listen(PORT, HOST, () => {
+  server = app.listen(PORT, HOST, () => {
     safeLog("🚀 QWash Sunucusu Başarıyla Başlatıldı!");
     safeLog(`📡 API Portu: ${PORT}`);
+  });
+
+  server.on("error", (error) => {
+    safeLog(`❌ HTTP Server hatası: ${error.message}`);
   });
 };
 

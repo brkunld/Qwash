@@ -106,6 +106,7 @@ export default function QrKamera() {
     }, API_TIMEOUT_MS);
 
     let response;
+    let text = "";
 
     try {
       response = await fetch(url, {
@@ -119,6 +120,8 @@ export default function QrKamera() {
           bayId,
         }),
       });
+
+      text = await response.text();
     } catch (error) {
       if (error?.name === "AbortError") {
         throw new Error(
@@ -132,8 +135,6 @@ export default function QrKamera() {
     } finally {
       clearTimeout(timeoutId);
     }
-
-    const text = await response.text();
 
     console.log("Prepare Bay Status:", response.status);
     console.log("Prepare Bay Raw Response:", text);
