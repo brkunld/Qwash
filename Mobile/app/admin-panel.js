@@ -8,16 +8,17 @@ import {
   TextInput,
   Alert,
   ActivityIndicator,
-  SafeAreaView,
   FlatList
 } from 'react-native';
-import { auth, database } from '../firebase'; 
+
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { auth, rtdb } from '../firebase'; // database yerine rtdb import ediyoruz
 import { ref, onValue } from 'firebase/database';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 
 // LÜTFEN KENDİ RENDER BACKEND URL'NİZİ BURAYA YAZIN
-const API_BASE_URL = 'https://qwash-****.onrender.com/api/admin'; 
+const API_BASE_URL = "https://qwash-8q4y.onrender.com";
 
 const THEME = {
   bgMain: '#f8f9fb',
@@ -64,7 +65,7 @@ export default function AdminPanel() {
       return;
     }
 
-    const baysRef = ref(database, 'bays');
+    const baysRef = ref(rtdb, 'bays');
     const unsubscribe = onValue(baysRef, (snapshot) => {
       const data = snapshot.val();
       if (data) {
@@ -85,22 +86,47 @@ export default function AdminPanel() {
   };
 
   const adminFetch = async (endpoint, payload) => {
-    const token = await auth.currentUser.getIdToken(true);
-    const res = await fetch(`${API_BASE_URL}${endpoint}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`
-      },
-      body: JSON.stringify(payload)
+  const token = await auth.currentUser?.getIdToken(true);
+
+  if (!token) {
+    throw new Error("Oturum bulunamadı. Lütfen tekrar giriş yapın.");
+  }
+
+  const url = `${API_BASE_URL}/api/admin${endpoint}`;
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(payload),
+  });
+
+  const text = await res.text();
+
+  let data = null;
+
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    console.log("JSON olmayan cevap:", {
+      url,
+      status: res.status,
+      body: text.slice(0, 300),
     });
-    
-    if (!res.ok) {
-      const errorData = await res.json();
-      throw new Error(errorData.error || "İşlem başarısız.");
-    }
-    return await res.json();
-  };
+
+    throw new Error(
+      `Sunucu JSON olmayan cevap döndürdü. Status: ${res.status}`,
+    );
+  }
+
+  if (!res.ok) {
+    throw new Error(data?.error || "İşlem başarısız.");
+  }
+
+  return data;
+};
 
   // --- KULLANICI İŞLEMLERİ ---
   const handleSearch = async () => {
