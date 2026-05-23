@@ -31,32 +31,39 @@
         margin: 0;
         padding: 0;
       }
+
+      html,
+      body {
+        width: 100%;
+        min-height: 100%;
+        overflow-x: hidden;
+        overflow-y: auto;
+      }
+
       body {
         font-family: var(--font-ui);
         background: var(--bg-main);
         color: var(--text-main);
         min-height: 100vh;
-        display: flex;
-        justify-content: center;
-        align-items: flex-start;
+        display: block;
         padding: 28px 20px;
       }
       .app {
         width: 100%;
         max-width: 1180px;
+        margin: 0 auto;
         display: grid;
         grid-template-columns: 400px minmax(0, 1fr);
         gap: 20px;
-        align-items: stretch;
+        align-items: start;
+        padding-bottom: 36px;
       }
       .device-col {
         display: flex;
         flex-direction: column;
         gap: 16px;
-        height: 100%;
       }
       .device-col .card {
-        height: 100%;
         display: flex;
         flex-direction: column;
       }
@@ -315,6 +322,7 @@
         font-weight: 600;
         color: var(--text-main);
         width: 100%;
+        max-width: 100%;
         outline: none;
       }
       .field-group input:focus,
@@ -382,7 +390,7 @@
         border-color: #ef4444;
       }
       .logbox {
-        height: 210px;
+        height: 160px;
         overflow: auto;
         background: #0b1020;
         color: #d1d5db;
@@ -418,6 +426,9 @@
         word-break: break-word;
       }
       @media (max-width: 900px) {
+        body {
+          padding: 16px 12px;
+        }
         .app {
           grid-template-columns: 1fr;
         }

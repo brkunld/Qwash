@@ -336,6 +336,37 @@
         overflow-y: auto;
         padding: 32px;
       }
+
+      #tab-simulator {
+        height: auto !important;
+        min-height: calc(100vh - 120px);
+        display: none;
+      }
+
+      #tab-simulator.active {
+        display: flex;
+        flex-direction: column;
+        animation: fadein 0.3s ease;
+      }
+
+      .simulator-frame-wrap {
+        flex: 1;
+        min-height: calc(100vh - 190px);
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        box-shadow: var(--shadow-md);
+        overflow: hidden;
+      }
+
+      .simulator-frame {
+        width: 100%;
+        height: calc(100vh - 190px);
+        min-height: 720px;
+        border: 0;
+        background: #fff;
+        display: block;
+      }
       .tab {
         display: none;
       }
@@ -1698,21 +1729,17 @@
           </div>
         </div>
 
-        <div id="tab-simulator" class="tab" style="height: calc(100vh - 120px)">
+        <div id="tab-simulator" class="tab">
           <div class="sec-header">
             <div class="sec-title">Donanım Simülasyonu</div>
           </div>
-          <iframe
-            src="test.html"
-            style="
-              width: 100%;
-              height: calc(100% - 40px);
-              border: 1px solid var(--border);
-              border-radius: 16px;
-              background: #fff;
-            "
-            scrolling="no"
-          ></iframe>
+          <div class="simulator-frame-wrap">
+            <iframe
+              src="test.html"
+              class="simulator-frame"
+              scrolling="yes"
+            ></iframe>
+          </div>
         </div>
       </div>
     </div>

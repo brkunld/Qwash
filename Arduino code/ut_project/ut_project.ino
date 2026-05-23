@@ -1762,7 +1762,7 @@ else if (
     BTN_KOPUK.y2
   )
 ) {
-  strncpy(secilenPaket, "foam", sizeof(secilenPaket) - 1);
+  strncpy(secilenPaket, "wash", sizeof(secilenPaket) - 1);
 }
 else if (
   dokunmaButonIcindeMi(
@@ -1774,7 +1774,7 @@ else if (
     BTN_SU.y2
   )
 ) {
-  strncpy(secilenPaket, "wash", sizeof(secilenPaket) - 1);
+  strncpy(secilenPaket, "foam", sizeof(secilenPaket) - 1);
 }
       }
     }
