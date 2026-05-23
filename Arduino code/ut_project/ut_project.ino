@@ -149,12 +149,12 @@ bool dokunmaButonIcindeMi(uint16_t x, uint16_t y, const TouchButton& button) {
 WiFiClientSecure mqttSecureClient;
 PubSubClient mqttClient(mqttSecureClient);
 
-String mqttClientId = "";
-String mqttTopicCommands = "";
-String mqttTopicStatus = "";
-String mqttTopicHeartbeat = "";
-String mqttTopicSelection = "";
-String mqttTopicEvent = "";
+char mqttClientId[64] = {0};
+char mqttTopicCommands[128] = {0};
+char mqttTopicStatus[128] = {0};
+char mqttTopicHeartbeat[128] = {0};
+char mqttTopicSelection[128] = {0};
+char mqttTopicEvent[128] = {0};
 
 unsigned long sonMqttDenemeMs = 0;
 const unsigned long MQTT_RETRY_INTERVAL_MS = 15000;
@@ -171,7 +171,7 @@ struct MqttPublishJob {
 
 QueueHandle_t mqttPublishQueue = NULL;
 
-String sonYayinlananDurum = "";
+char sonYayinlananDurum[32] = {0};
 unsigned long sonDurumYayinMs = 0;
 const unsigned long DURUM_YAYIN_DEBOUNCE_MS = 1000;
 
@@ -190,11 +190,11 @@ const int buzzerPin = 25;
 const int btnKopukPin = 32;
 
 // ================= PERON =================
-String bayId = "";
-String macAdresi = "";
-String currentStatus = "baslangic";
+char bayId[32] = {0};
+char macAdresi[32] = {0};
+char currentStatus[32] = "baslangic";
 bool isBayActive = true;
-String requestedPackage = "";
+char requestedPackage[64] = {0};
 int durationSec = 60;
 
 bool yeniBusyKomutuGeldi = false;
@@ -249,7 +249,7 @@ GeciciEkranModu geciciEkranModu = GECICI_YOK;
 unsigned long geciciEkranBaslangicMs = 0;
 const unsigned long IPTAL_EKRANI_MS = 300;
 const unsigned long ISTEK_ILETILIYOR_EKRANI_MS = 500;
-String bekleyenPaketSecimi = "";
+char bekleyenPaketSecimi[64] = {0};
 
 // ================= SAYAC =================
 int sayacSonEkranSaniye = -1;
@@ -266,6 +266,17 @@ void availableModunaDon(const char* sebep, bool cancelEventGonder);
 void iptalIstegiGonder();
 void odemeBeklemeIptalEt(const char* sebep);
 
+const char* paketNormalizeEt_cstr(const char* paket);
+bool mqttCancelDegeriMi_cstr(const char* value);
+bool mqttKuyrugaEkle_cstr(const char* topic, const char* payload, bool retained = false);
+bool mqttDurumYayinla();
+bool mqttHeartbeatYayinla();
+bool mqttBootYayinla();
+bool mqttSecimYayinla(const char* secilenPaket);
+bool mqttEventYayinla(const char* eventMesaji);
+void setCurrentStatus(const char* s);
+bool currentStatusEquals(const char* s);
+
 // ================= YARDIMCI =================
 void resetSayacDurumu() {
   sayacSonEkranSaniye = -1;
@@ -281,29 +292,6 @@ bool durationGecerliMi(int gelenSure) {
   }
 
   return true;
-}
-
-const char* paketNormalizeEt(const String& paket) {
-  if (
-    paket.equalsIgnoreCase("foam") ||
-    paket.equalsIgnoreCase("kopuk") ||
-    paket.equalsIgnoreCase("köpük") ||
-    paket.equalsIgnoreCase("kopup")
-  ) {
-    return "foam";
-  }
-
-  if (
-    paket.equalsIgnoreCase("wash") ||
-    paket.equalsIgnoreCase("su") ||
-    paket.equalsIgnoreCase("water") ||
-    paket.equalsIgnoreCase("yikama") ||
-    paket.equalsIgnoreCase("yıkama")
-  ) {
-    return "wash";
-  }
-
-  return "";
 }
 
 void islemHafizasiniTemizle() {
@@ -420,10 +408,14 @@ void hataMesajiGoster(const char* mesaj) {
   dokunmatikKilit = true;
 }
 
-void geciciEkranBaslat(GeciciEkranModu mod, const String& paket = "") {
+void geciciEkranBaslat(GeciciEkranModu mod, const char* paket = "") {
   geciciEkranModu = mod;
   geciciEkranBaslangicMs = millis();
-  bekleyenPaketSecimi = paket;
+  bekleyenPaketSecimi[0] = '\0';
+  if (paket && paket[0]) {
+    strncpy(bekleyenPaketSecimi, paket, sizeof(bekleyenPaketSecimi) - 1);
+    bekleyenPaketSecimi[sizeof(bekleyenPaketSecimi) - 1] = '\0';
+  }
   dokunmatikKilit = true;
 
   tft.fillScreen(TFT_BLACK);
@@ -439,9 +431,9 @@ void geciciEkranBaslat(GeciciEkranModu mod, const String& paket = "") {
 void geciciEkranKontrolEt() {
   if (geciciEkranModu == GECICI_YOK) return;
 
-  if (currentStatus != "waiting") {
+  if (!currentStatusEquals("waiting")) {
     geciciEkranModu = GECICI_YOK;
-    bekleyenPaketSecimi = "";
+    bekleyenPaketSecimi[0] = '\0';
     return;
   }
 
@@ -468,7 +460,7 @@ void geciciEkranKontrolEt() {
     odemeBeklemeBaslangicMs = millis();
     beklemeBaslangicMs = millis();
 
-    bekleyenPaketSecimi = "";
+    bekleyenPaketSecimi[0] = '\0';
     return;
   }
 }
@@ -501,13 +493,13 @@ static void qrCizimGorevi(esp_qrcode_handle_t qrcode) {
   }
 }
 
-void ekranaQRCiz(const String& metin) {
+void ekranaQRCiz(const char* metin) {
   esp_qrcode_config_t cfg = ESP_QRCODE_CONFIG_DEFAULT();
   cfg.display_func = qrCizimGorevi;
   cfg.max_qrcode_version = 10;
   cfg.qrcode_ecc_level = ESP_QRCODE_ECC_LOW;
 
-  esp_qrcode_generate(&cfg, metin.c_str());
+  esp_qrcode_generate(&cfg, metin);
 }
 
 // ================= WIFI =================
@@ -517,7 +509,10 @@ bool wifiBaglan(unsigned long timeoutMs) {
   WiFiManager wm;
 
   if (!wm.getWiFiIsSaved()) {
-    String apName = "Qwash-Kurulum-" + macAdresi.substring(8);
+    char apName[32] = {0};
+    // use last 4 chars of macAdresi (macAdresi is a 12-char hex string)
+    const char* macTail = (strlen(macAdresi) > 8) ? &macAdresi[8] : macAdresi;
+    snprintf(apName, sizeof(apName), "Qwash-Kurulum-%s", macTail);
 
     tft.fillScreen(TFT_BLACK);
     tft.setTextColor(TFT_YELLOW);
@@ -541,7 +536,7 @@ bool wifiBaglan(unsigned long timeoutMs) {
     tft.println("Tarayici: 192.168.4.1");
 
     wm.setConfigPortalTimeout(180);
-    bool res = wm.autoConnect(apName.c_str());
+    bool res = wm.autoConnect(apName);
 
     if (!res) {
       delay(3000);
@@ -624,48 +619,22 @@ bool ntpSessizDene(unsigned long timeoutMs = 10000) {
 
 // ================= MQTT =================
 void mqttTopicleriHazirla() {
-  mqttClientId = "qwash_esp32_" + macAdresi;
-
-  mqttTopicCommands = "qwash/bays/" + bayId + "/commands";
-  mqttTopicStatus = "qwash/bays/" + bayId + "/status";
-  mqttTopicHeartbeat = "qwash/bays/" + bayId + "/heartbeat";
-  mqttTopicSelection = "qwash/bays/" + bayId + "/selection";
-  mqttTopicEvent = "qwash/bays/" + bayId + "/event";
+  // Fill fixed-size C-string buffers to avoid heap allocations
+  snprintf(mqttClientId, sizeof(mqttClientId), "qwash_esp32_%s", macAdresi);
+  snprintf(mqttTopicCommands, sizeof(mqttTopicCommands), "qwash/bays/%s/commands", bayId);
+  snprintf(mqttTopicStatus, sizeof(mqttTopicStatus), "qwash/bays/%s/status", bayId);
+  snprintf(mqttTopicHeartbeat, sizeof(mqttTopicHeartbeat), "qwash/bays/%s/heartbeat", bayId);
+  snprintf(mqttTopicSelection, sizeof(mqttTopicSelection), "qwash/bays/%s/selection", bayId);
+  snprintf(mqttTopicEvent, sizeof(mqttTopicEvent), "qwash/bays/%s/event", bayId);
 }
 
-bool mqttKuyrugaEkle(const String& topic, const String& payload, bool retained = false) {
-  if (mqttPublishQueue == NULL) {
-    return false;
-  }
-
-  MqttPublishJob job;
-  memset(&job, 0, sizeof(job));
-
-  topic.toCharArray(job.topic, sizeof(job.topic));
-  payload.toCharArray(job.payload, sizeof(job.payload));
-  job.retained = retained;
-
-  bool ok = xQueueSend(
-    mqttPublishQueue,
-    &job,
-    pdMS_TO_TICKS(50)
-  ) == pdTRUE;
-
-  if (!ok) {
-    LOG_PRINT(F("MQTT kuyruk dolu, mesaj eklenemedi: "));
-    LOG_PRINT(topic);
-    LOG_PRINT(F(" -> "));
-    LOG_PRINTLN(payload);
-  }
-
-  return ok;
-}
+// Removed String-based mqttKuyrugaEkle to prefer C-string enqueue helper
 
 bool mqttDurumYayinla() {
   unsigned long suAn = millis();
 
   if (
-    currentStatus == sonYayinlananDurum &&
+    strcmp(currentStatus, sonYayinlananDurum) == 0 &&
     suAn - sonDurumYayinMs < DURUM_YAYIN_DEBOUNCE_MS
   ) {
     LOG_PRINT(F("Durum tekrar yayinlanmadi: "));
@@ -673,130 +642,160 @@ bool mqttDurumYayinla() {
     return true;
   }
 
-  bool ok = mqttKuyrugaEkle(mqttTopicStatus, currentStatus, true);
+  // Use C-string enqueue to avoid temporary String allocations
+  bool ok = mqttKuyrugaEkle_cstr(mqttTopicStatus, currentStatus, true);
 
   if (ok) {
-    sonYayinlananDurum = currentStatus;
+    strncpy(sonYayinlananDurum, currentStatus, sizeof(sonYayinlananDurum)-1);
+    sonYayinlananDurum[sizeof(sonYayinlananDurum)-1] = '\0';
     sonDurumYayinMs = suAn;
+  }
+
+  return ok;
+
+}
+
+bool mqttHeartbeatYayinla() {
+  return mqttKuyrugaEkle_cstr(mqttTopicHeartbeat, "ONLINE", false);
+}
+
+// mqttBootYayinla uses C-string enqueue helper
+bool mqttBootYayinla() {
+  return mqttKuyrugaEkle_cstr(mqttTopicHeartbeat, "BOOT", false);
+}
+
+// Removed String-returning mqttJsonEscape to avoid heap allocations.
+// Use mqttJsonEscape_cstr() for JSON escaping into fixed buffers instead.
+
+// C-string based helpers to avoid dynamic String allocations
+bool mqttYeniEventId_cstr(const char* eventType, char* outBuf, size_t outBufSize) {
+  if (!outBuf || outBufSize == 0) return false;
+  mqttEventCounter++;
+  unsigned long m = millis();
+  unsigned int cnt = (unsigned int)mqttEventCounter;
+  int written = snprintf(outBuf, outBufSize, "%s_%s_%lu_%u", bayId, eventType, (unsigned long)m, cnt);
+  return written > 0 && (size_t)written < outBufSize;
+}
+
+// JSON-escape into destination buffer (returns true if fully written)
+bool mqttJsonEscape_cstr(const char* src, char* dst, size_t dstSize) {
+  if (!src || !dst || dstSize == 0) return false;
+
+  size_t di = 0;
+  for (size_t si = 0; src[si] != '\0'; ++si) {
+    char c = src[si];
+    const char* rep = NULL;
+    char repch = '\0';
+
+    if (c == '\\') rep = "\\\\";
+    else if (c == '"') rep = "\\\"";
+    else if (c == '\n') rep = "\\n";
+    else if (c == '\r') rep = "\\r";
+    else if (c == '\t') rep = "\\t";
+    else repch = c;
+
+    if (rep) {
+      size_t rlen = strlen(rep);
+      if (di + rlen >= dstSize) return false;
+      memcpy(&dst[di], rep, rlen);
+      di += rlen;
+    } else {
+      if (di + 1 >= dstSize) return false;
+      dst[di++] = repch;
+    }
+  }
+
+  if (di >= dstSize) return false;
+  dst[di] = '\0';
+  return true;
+}
+
+// C-string enqueue helper (avoids creating temporary Strings)
+bool mqttKuyrugaEkle_cstr(const char* topic, const char* payload, bool retained) {
+  if (mqttPublishQueue == NULL) return false;
+
+  MqttPublishJob job;
+  memset(&job, 0, sizeof(job));
+
+  // copy safely
+  strncpy(job.topic, topic ? topic : "", sizeof(job.topic) - 1);
+  strncpy(job.payload, payload ? payload : "", sizeof(job.payload) - 1);
+  job.retained = retained;
+
+  bool ok = xQueueSend(mqttPublishQueue, &job, pdMS_TO_TICKS(50)) == pdTRUE;
+
+  if (!ok) {
+    LOG_PRINT(F("MQTT kuyruk dolu, mesaj eklenemedi: "));
+    LOG_PRINT(topic ? topic : "");
+    LOG_PRINT(F(" -> "));
+    LOG_PRINTLN(payload ? payload : "");
   }
 
   return ok;
 }
 
-bool mqttHeartbeatYayinla() {
-  return mqttKuyrugaEkle(mqttTopicHeartbeat, "ONLINE", false);
-}
+bool mqttSelectionPayloadHazirla_cstr(const char* secilenPaket, char* outBuf, size_t outBufSize) {
+  if (!outBuf || outBufSize == 0) return false;
 
-bool mqttBootYayinla() {
-  return mqttKuyrugaEkle(mqttTopicHeartbeat, "BOOT", false);
-}
+  char eventId[64];
+  char escaped[192];
 
-String mqttJsonEscape(const String& value) {
-  String escaped = "";
-  escaped.reserve(value.length() + 8);
-
-  for (unsigned int i = 0; i < value.length(); i++) {
-    char c = value.charAt(i);
-
-    if (c == '\\') {
-      escaped += "\\\\";
-    } else if (c == '"') {
-      escaped += "\\\"";
-    } else if (c == '\n') {
-      escaped += "\\n";
-    } else if (c == '\r') {
-      escaped += "\\r";
-    } else if (c == '\t') {
-      escaped += "\\t";
-    } else {
-      escaped += c;
-    }
+  if (mqttCancelDegeriMi_cstr(secilenPaket)) {
+    if (!mqttYeniEventId_cstr("selection_cancel", eventId, sizeof(eventId))) return false;
+    if (!mqttJsonEscape_cstr(eventId, escaped, sizeof(escaped))) return false;
+    int n = snprintf(outBuf, outBufSize, "{\"type\":\"cancel\",\"eventId\":\"%s\"}", escaped);
+    return n > 0 && (size_t)n < outBufSize;
   }
 
-  return escaped;
+  const char* normalizedPackage = paketNormalizeEt_cstr(secilenPaket);
+  const char* packageIdC = normalizedPackage[0] ? normalizedPackage : (secilenPaket ? secilenPaket : "");
+
+  if (!mqttYeniEventId_cstr("selection", eventId, sizeof(eventId))) return false;
+  if (!mqttJsonEscape_cstr(packageIdC, escaped, sizeof(escaped))) return false;
+  char escapedEvent[192];
+  if (!mqttJsonEscape_cstr(eventId, escapedEvent, sizeof(escapedEvent))) return false;
+
+  int n = snprintf(outBuf, outBufSize, "{\"type\":\"selection\",\"packageId\":\"%s\",\"eventId\":\"%s\"}", escaped, escapedEvent);
+  return n > 0 && (size_t)n < outBufSize;
 }
 
-String mqttYeniEventId(const char* eventType) {
-  mqttEventCounter++;
+bool mqttEventPayloadHazirla_cstr(const char* eventMesaji, char* outBuf, size_t outBufSize) {
+  if (!outBuf || outBufSize == 0) return false;
 
-  String eventId = bayId;
-  eventId += "_";
-  eventId += eventType;
-  eventId += "_";
-  eventId += String(millis());
-  eventId += "_";
-  eventId += String(mqttEventCounter);
+  const char* eventType = mqttCancelDegeriMi_cstr(eventMesaji) ? "cancel" : "event";
+  char eventId[64];
+  char escapedType[64];
+  char escapedAction[192];
 
-  return eventId;
-}
+  if (!mqttYeniEventId_cstr(eventType, eventId, sizeof(eventId))) return false;
+  if (!mqttJsonEscape_cstr(eventType, escapedType, sizeof(escapedType))) return false;
+  if (!mqttJsonEscape_cstr(eventMesaji ? eventMesaji : "", escapedAction, sizeof(escapedAction))) return false;
 
-bool mqttCancelDegeriMi(const String& value) {
-  return (
-    value.equalsIgnoreCase("cancel") ||
-    value.equalsIgnoreCase("cancelled") ||
-    value.equalsIgnoreCase("canceled") ||
-    value.equalsIgnoreCase("iptal") ||
-    value.equalsIgnoreCase("abort") ||
-    value.equalsIgnoreCase("stop") ||
-    value.equalsIgnoreCase("back") ||
-    value.equalsIgnoreCase("geri")
-  );
-}
+  char escapedEvent[192];
+  if (!mqttJsonEscape_cstr(eventId, escapedEvent, sizeof(escapedEvent))) return false;
 
-String mqttSelectionPayloadHazirla(const String& secilenPaket) {
-  if (mqttCancelDegeriMi(secilenPaket)) {
-    String payload = "{\"type\":\"cancel\",\"eventId\":\"";
-    payload += mqttJsonEscape(mqttYeniEventId("selection_cancel"));
-    payload += "\"}";
-    return payload;
-  }
-
-  const char* normalizedPackage = paketNormalizeEt(secilenPaket);
-  String packageId = normalizedPackage;
-
-  if (packageId.length() == 0) {
-    packageId = secilenPaket;
-  }
-
-  String payload = "{\"type\":\"selection\",\"packageId\":\"";
-  payload += mqttJsonEscape(packageId);
-  payload += "\",\"eventId\":\"";
-  payload += mqttJsonEscape(mqttYeniEventId("selection"));
-  payload += "\"}";
-
-  return payload;
-}
-
-String mqttEventPayloadHazirla(const String& eventMesaji) {
-  String eventType = mqttCancelDegeriMi(eventMesaji) ? "cancel" : "event";
-
-  String payload = "{\"type\":\"";
-  payload += mqttJsonEscape(eventType);
-  payload += "\",\"action\":\"";
-  payload += mqttJsonEscape(eventMesaji);
-  payload += "\",\"eventId\":\"";
-  payload += mqttJsonEscape(mqttYeniEventId(eventType.c_str()));
-  payload += "\"}";
-
-  return payload;
+  int n = snprintf(outBuf, outBufSize, "{\"type\":\"%s\",\"action\":\"%s\",\"eventId\":\"%s\"}", escapedType, escapedAction, escapedEvent);
+  return n > 0 && (size_t)n < outBufSize;
 }
 
 
-bool mqttSecimYayinla(const String& secilenPaket) {
-  String payload = mqttSelectionPayloadHazirla(secilenPaket);
-  return mqttKuyrugaEkle(mqttTopicSelection, payload, false);
+bool mqttSecimYayinla(const char* secilenPaket) {
+  char payload[192];
+  if (!mqttSelectionPayloadHazirla_cstr(secilenPaket, payload, sizeof(payload))) return false;
+  return mqttKuyrugaEkle_cstr(mqttTopicSelection, payload, false);
 }
 
-bool mqttEventYayinla(const String& eventMesaji) {
-  String payload = mqttEventPayloadHazirla(eventMesaji);
-  return mqttKuyrugaEkle(mqttTopicEvent, payload, false);
+bool mqttEventYayinla(const char* eventMesaji) {
+  char payload[192];
+  if (!mqttEventPayloadHazirla_cstr(eventMesaji, payload, sizeof(payload))) return false;
+  return mqttKuyrugaEkle_cstr(mqttTopicEvent, payload, false);
 }
 
 void iptalIstegiGonder() {
   LOG_PRINTLN(F("Kullanici iptal istegi gonderiyor. Backend cevabi beklenecek."));
 
   geciciEkranModu = GECICI_YOK;
-  bekleyenPaketSecimi = "";
+  bekleyenPaketSecimi[0] = '\0';
 
   odemeBekleniyor = false;
   dokunmatikKilit = true;
@@ -828,24 +827,25 @@ void odemeBeklemeIptalEt(const char* sebep) {
   LOG_PRINTLN(sebep);
 
   geciciEkranModu = GECICI_YOK;
-  bekleyenPaketSecimi = "";
+  bekleyenPaketSecimi[0] = '\0';
 
   odemeBekleniyor = false;
-  dokunmatikKilit = false;
+  dokunmatikKilit = true;
   hataEkraniGosteriliyor = false;
-  cancelBackendCevabiBekleniyor = false;
+  cancelBackendCevabiBekleniyor = true;
+  cancelBackendBeklemeBaslangicMs = millis();
 
-  requestedPackage = "";
+  requestedPackage[0] = '\0';
   durationSec = 60;
 
   islemHafizasiniTemizle();
 
-  currentStatus = "available";
-  isBayActive = true;
-  durumDegisti = true;
+  if (!mqttEventYayinla("CANCEL")) {
+    mqttSecimYayinla("cancel");
+  }
 
-  mqttDurumYayinla();
-  mqttEventYayinla("CANCEL");
+  tft.fillScreen(TFT_BLACK);
+  ekranaMesajYaz("Iptal ediliyor...", TFT_RED);
 }
 
 void availableModunaDon(const char* sebep, bool cancelEventGonder) {
@@ -853,18 +853,18 @@ void availableModunaDon(const char* sebep, bool cancelEventGonder) {
   LOG_PRINTLN(sebep);
 
   geciciEkranModu = GECICI_YOK;
-  bekleyenPaketSecimi = "";
+  bekleyenPaketSecimi[0] = '\0';
 
   odemeBekleniyor = false;
   dokunmatikKilit = false;
   hataEkraniGosteriliyor = false;
 
-  requestedPackage = "";
+  requestedPackage[0] = '\0';
   durationSec = 60;
 
   islemHafizasiniTemizle();
 
-  currentStatus = "available";
+  setCurrentStatus("available");
   isBayActive = true;
   durumDegisti = true;
 
@@ -888,124 +888,133 @@ void availableModunaDon(const char* sebep, bool cancelEventGonder) {
   mqttDurumYayinla();
 }
 
-void mqttKomutUygula(const String& komut) {
+void mqttKomutUygula(const char* komut) {
   LOG_PRINT(F("MQTT Komut: "));
   LOG_PRINTLN(komut);
 
-  if (komut == "AVAILABLE") {
+  if (strcmp(komut, "AVAILABLE") == 0) {
     saatHatasiNedeniyleOffline = false;
     cancelBackendCevabiBekleniyor = false;
     odemeBekleniyor = false;
     dokunmatikKilit = false;
     hataEkraniGosteriliyor = false;
     geciciEkranModu = GECICI_YOK;
-    bekleyenPaketSecimi = "";
+    bekleyenPaketSecimi[0] = '\0';
 
-    if (currentStatus == "available") {
+    if (currentStatusEquals("available")) {
       LOG_PRINTLN(F("AVAILABLE zaten aktif, tekrar islenmedi."));
       durumDegisti = true;
       return;
     }
 
-    currentStatus = "available";
+    setCurrentStatus("available");
     isBayActive = true;
     islemHafizasiniTemizle();
     durumDegisti = true;
   }
-  else if (komut == "WAITING") {
+  else if (strcmp(komut, "WAITING") == 0) {
     saatHatasiNedeniyleOffline = false;
     cancelBackendCevabiBekleniyor = false;
     odemeBekleniyor = false;
     dokunmatikKilit = false;
     hataEkraniGosteriliyor = false;
     geciciEkranModu = GECICI_YOK;
-    bekleyenPaketSecimi = "";
+    bekleyenPaketSecimi[0] = '\0';
 
-    currentStatus = "waiting";
+    setCurrentStatus("waiting");
     isBayActive = true;
     islemHafizasiniTemizle();
     durumDegisti = true;
   }
-  else if (komut == "OFFLINE") {
+  else if (strcmp(komut, "OFFLINE") == 0) {
     saatHatasiNedeniyleOffline = false;
-    currentStatus = "offline";
+    setCurrentStatus("offline");
     isBayActive = false;
     odemeBekleniyor = false;
     dokunmatikKilit = false;
     islemHafizasiniTemizle();
     durumDegisti = true;
   }
-  else if (komut == "MAINTENANCE") {
+  else if (strcmp(komut, "MAINTENANCE") == 0) {
     saatHatasiNedeniyleOffline = false;
-    currentStatus = "maintenance";
+    setCurrentStatus("maintenance");
     isBayActive = true;
     odemeBekleniyor = false;
     dokunmatikKilit = false;
     islemHafizasiniTemizle();
     durumDegisti = true;
   }
-  else if (komut == "ACTIVE_ON") {
+  else if (strcmp(komut, "ACTIVE_ON") == 0) {
     saatHatasiNedeniyleOffline = false;
     isBayActive = true;
 
-    if (currentStatus == "offline") {
-      currentStatus = "available";
+    if (currentStatusEquals("offline")) {
+      setCurrentStatus("available");
     }
 
     durumDegisti = true;
   }
-  else if (komut == "ACTIVE_OFF") {
+  else if (strcmp(komut, "ACTIVE_OFF") == 0) {
     saatHatasiNedeniyleOffline = false;
-    currentStatus = "offline";
+    setCurrentStatus("offline");
     isBayActive = false;
     odemeBekleniyor = false;
     dokunmatikKilit = false;
     islemHafizasiniTemizle();
     durumDegisti = true;
   }
-  else if (komut == "RESET") {
+  else if (strcmp(komut, "RESET") == 0) {
     ESP.restart();
-  }
-  else if (komut.startsWith("BUSY|")) {
-    int firstSep = komut.indexOf('|');
-    int secondSep = komut.indexOf('|', firstSep + 1);
+  } else {
+    // Check BUSY|<package>|<duration>
+    if (strncmp(komut, "BUSY|", 5) == 0) {
+      const char* firstSep = strchr(komut, '|');
+      const char* secondSep = firstSep ? strchr(firstSep + 1, '|') : NULL;
 
-    if (firstSep > 0 && secondSep > firstSep) {
-      String gelenPaket = komut.substring(firstSep + 1, secondSep);
-      int gelenSure = komut.substring(secondSep + 1).toInt();
+      if (firstSep && secondSep && secondSep > firstSep + 1) {
+        char gelenPaketBuf[32] = {0};
+        size_t len = (size_t)(secondSep - (firstSep + 1));
+        if (len >= sizeof(gelenPaketBuf)) len = sizeof(gelenPaketBuf) - 1;
+        memcpy(gelenPaketBuf, firstSep + 1, len);
+        gelenPaketBuf[len] = '\0';
 
-      if (!durationGecerliMi(gelenSure)) {
-        mqttSecimYayinla("invalid_duration");
-        return;
+        int gelenSure = atoi(secondSep + 1);
+
+        if (!durationGecerliMi(gelenSure)) {
+          mqttSecimYayinla("invalid_duration");
+          return;
+        }
+
+        const char* normalizedPackage = paketNormalizeEt_cstr(gelenPaketBuf);
+
+        if (normalizedPackage[0] == '\0') {
+          mqttSecimYayinla("invalid_package");
+          return;
+        }
+
+        saatHatasiNedeniyleOffline = false;
+        strncpy(requestedPackage, normalizedPackage, sizeof(requestedPackage)-1);
+        requestedPackage[sizeof(requestedPackage)-1] = '\0';
+        durationSec = gelenSure;
+
+        cancelBackendCevabiBekleniyor = false;
+        odemeBekleniyor = false;
+        hataEkraniGosteriliyor = false;
+        geciciEkranModu = GECICI_YOK;
+        bekleyenPaketSecimi[0] = '\0';
+
+        islemBaslangicMs = 0;
+        islemSuresiMs = 0;
+        resetSayacDurumu();
+        yeniBusyKomutuGeldi = true;
+        setCurrentStatus("busy");
+        isBayActive = true;
+        odemeBekleniyor = false;
+        dokunmatikKilit = true;
+        durumDegisti = true;
       }
-
-      const char* normalizedPackage = paketNormalizeEt(gelenPaket);
-
-      if (normalizedPackage[0] == '\0') {
-        mqttSecimYayinla("invalid_package");
-        return;
-      }
-
-      saatHatasiNedeniyleOffline = false;
-      requestedPackage = normalizedPackage;
-      durationSec = gelenSure;
-
-      cancelBackendCevabiBekleniyor = false;
-      odemeBekleniyor = false;
-      hataEkraniGosteriliyor = false;
-      geciciEkranModu = GECICI_YOK;
-      bekleyenPaketSecimi = "";
-
-      islemBaslangicMs = 0;
-      islemSuresiMs = 0;
-      resetSayacDurumu();
-      yeniBusyKomutuGeldi = true;
-      currentStatus = "busy";
-      isBayActive = true;
-      odemeBekleniyor = false;
-      dokunmatikKilit = true;
-      durumDegisti = true;
     }
+
   }
 
   mqttDurumYayinla();
@@ -1045,7 +1054,7 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
 
   if (baslangic[0] == '\0') return;
 
-  mqttKomutUygula(String(baslangic));
+  mqttKomutUygula(baslangic);
 }
 
 bool mqttBaglan() {
@@ -1073,8 +1082,8 @@ bool mqttBaglan() {
     LOG_PRINTLN(F("Saat gecerli oldu. NTP kaynakli offline temizleniyor."));
     saatHatasiNedeniyleOffline = false;
 
-    if (currentStatus == "offline") {
-      currentStatus = "baslangic";
+    if (currentStatusEquals("offline")) {
+      setCurrentStatus("baslangic");
       isBayActive = true;
       durumDegisti = true;
     }
@@ -1110,7 +1119,8 @@ bool mqttBaglan() {
 
   mqttClient.setServer(MQTT_HOST, MQTT_PORT);
   mqttClient.setCallback(mqttCallback);
-  mqttClient.setBufferSize(256);
+  // Increase buffer to safely fit topic + payload (avoid silent drops)
+  mqttClient.setBufferSize(512);
   mqttClient.setKeepAlive(30);
   mqttClient.setSocketTimeout(3);
 
@@ -1119,10 +1129,10 @@ bool mqttBaglan() {
   LOG_PRINTLN(F("MQTT baglaniliyor..."));
 
   bool baglandi = mqttClient.connect(
-    mqttClientId.c_str(),
+    mqttClientId,
     MQTT_USER,
     MQTT_PASS,
-    mqttTopicStatus.c_str(),
+    mqttTopicStatus,
     1,
     true,
     "offline"
@@ -1133,11 +1143,11 @@ bool mqttBaglan() {
   if (baglandi) {
     LOG_PRINTLN(F("MQTT baglandi."));
 
-    mqttClient.subscribe(mqttTopicCommands.c_str(), 1);
+    mqttClient.subscribe(mqttTopicCommands, 1);
 
     if (!ilkMqttBaglantiTamamlandi) {
-      if (currentStatus == "baslangic" || currentStatus == "") {
-        currentStatus = "available";
+      if (currentStatusEquals("baslangic") || currentStatus[0] == '\0') {
+        setCurrentStatus("available");
         isBayActive = true;
         islemHafizasiniTemizle();
         durumDegisti = true;
@@ -1233,7 +1243,7 @@ void wifiNonBlockingKontrolEt() {
 
     wifiWasConnected = false;
 
-    if (currentStatus != "busy") {
+    if (!currentStatusEquals("busy")) {
       durumDegisti = true;
     }
   }
@@ -1314,7 +1324,7 @@ void ekrandaSayaciGuncelle() {
     islemBaslangicMs = 0;
     islemSuresiMs = 0;
 
-    currentStatus = "waiting";
+    setCurrentStatus("waiting");
     odemeBekleniyor = false;
     dokunmatikKilit = false;
     durumDegisti = true;
@@ -1329,17 +1339,15 @@ void setup() {
 
   watchdogBaslat();
 
-  currentStatus.reserve(16);
-  requestedPackage.reserve(16);
-  bayId.reserve(32);
-  macAdresi.reserve(16);
-  mqttClientId.reserve(48);
-  mqttTopicCommands.reserve(64);
-  mqttTopicStatus.reserve(64);
-  mqttTopicHeartbeat.reserve(64);
-  mqttTopicSelection.reserve(64);
-  mqttTopicEvent.reserve(64);
-  bekleyenPaketSecimi.reserve(16);
+  // requestedPackage is now a fixed buffer
+  // bayId and macAdresi are fixed buffers now; no reserve()
+  mqttClientId[0] = '\0';
+  mqttTopicCommands[0] = '\0';
+  mqttTopicStatus[0] = '\0';
+  mqttTopicHeartbeat[0] = '\0';
+  mqttTopicSelection[0] = '\0';
+  mqttTopicEvent[0] = '\0';
+  // bekleyenPaketSecimi will be converted to C-string later
 
   pinMode(buzzerPin, OUTPUT);
   digitalWrite(buzzerPin, LOW);
@@ -1360,16 +1368,19 @@ void setup() {
 
   WiFi.mode(WIFI_STA);
 
-  String rawMac = WiFi.macAddress();
+  // Obtain MAC without using temporary heap Strings
+  uint8_t macBytes[6];
+  WiFi.macAddress(macBytes);
 
-  while (rawMac == "00:00:00:00:00:00" || rawMac == "") {
-    delay(100);
-    rawMac = WiFi.macAddress();
-  }
+  // Format mac as uppercase hex without separators, e.g. AABBCCDDEEFF
+  char rawMacBuf[13] = {0};
+  snprintf(rawMacBuf, sizeof(rawMacBuf), "%02X%02X%02X%02X%02X%02X",
+    macBytes[0], macBytes[1], macBytes[2], macBytes[3], macBytes[4], macBytes[5]
+  );
 
-  rawMac.replace(":", "");
-  macAdresi = rawMac;
-  bayId = "bay_" + macAdresi;
+  strncpy(macAdresi, rawMacBuf, sizeof(macAdresi)-1);
+  // bay_<mac>
+  snprintf(bayId, sizeof(bayId), "bay_%s", macAdresi);
 
   mqttTopicleriHazirla();
 
@@ -1392,7 +1403,7 @@ void setup() {
   }
 
   if (!wifiBaglan(WIFI_TIMEOUT_MS)) {
-    currentStatus = "offline";
+    setCurrentStatus("offline");
     isBayActive = false;
     saatHatasiNedeniyleOffline = false;
     ekranaBaglantiHatasiYaz();
@@ -1405,7 +1416,7 @@ void setup() {
   wifiReconnectInProgress = false;
 
   if (!ntpBekle()) {
-    currentStatus = "offline";
+    setCurrentStatus("offline");
     isBayActive = false;
     saatHatasiNedeniyleOffline = true;
     ekranaSaatHatasiYaz();
@@ -1430,12 +1441,12 @@ void setup() {
 void loop() {
   watchdogBesle();
 
-  static String eskiDurum = "";
+  static char eskiDurum[32] = {0};
 
   wifiNonBlockingKontrolEt();
 
   if (WiFi.status() != WL_CONNECTED) {
-    if (currentStatus != "busy" && !hataEkraniGosteriliyor && durumDegisti) {
+    if (!currentStatusEquals("busy") && !hataEkraniGosteriliyor && durumDegisti) {
       ekranaBaglantiHatasiYaz();
       durumDegisti = false;
     }
@@ -1457,9 +1468,9 @@ void loop() {
     odemeBekleniyor = false;
     hataEkraniGosteriliyor = false;
     geciciEkranModu = GECICI_YOK;
-    bekleyenPaketSecimi = "";
+    bekleyenPaketSecimi[0] = '\0';
 
-    currentStatus = "available";
+    setCurrentStatus("available");
     isBayActive = true;
     islemHafizasiniTemizle();
     durumDegisti = true;
@@ -1482,10 +1493,10 @@ void loop() {
     return;
   }
 
-  if (!isBayActive || currentStatus == "offline") {
+  if (!isBayActive || currentStatusEquals("offline")) {
     if (durumDegisti) {
       durumDegisti = false;
-      eskiDurum = currentStatus;
+      strncpy(eskiDurum, currentStatus, sizeof(eskiDurum)-1); eskiDurum[sizeof(eskiDurum)-1] = '\0';
 
       if (mqttClient.connected()) {
         mqttDurumYayinla();
@@ -1511,13 +1522,13 @@ void loop() {
 
     mqttDurumYayinla();
 
-    if (currentStatus == "available") {
+    if (currentStatusEquals("available")) {
       dokunmatikKilit = false;
       odemeBekleniyor = false;
       islemHafizasiniTemizle();
       ekranaQRCiz(bayId);
     }
-    else if (currentStatus == "maintenance") {
+    else if (currentStatusEquals("maintenance")) {
       dokunmatikKilit = false;
       odemeBekleniyor = false;
       islemHafizasiniTemizle();
@@ -1528,13 +1539,13 @@ void loop() {
       tft.setCursor(40, 100);
       tft.println("BAKIM MODU");
     }
-    else if (currentStatus == "waiting") {
+    else if (currentStatusEquals("waiting")) {
       dokunmatikKilit = false;
       odemeBekleniyor = false;
       islemHafizasiniTemizle();
       ekranaWaitingCiz();
     }
-    else if (currentStatus == "busy") {
+    else if (currentStatusEquals("busy")) {
       dokunmatikKilit = true;
       odemeBekleniyor = false;
 
@@ -1543,13 +1554,13 @@ void loop() {
       tft.setTextColor(TFT_GREEN, TFT_BLACK);
       tft.setCursor(30, 40);
 
-      if (requestedPackage == "foam") {
+      if (strcmp(requestedPackage, "foam") == 0) {
         tft.println("KOPUK MODU");
       } else {
         tft.println("SU MODU");
       }
 
-      if (eskiDurum != "busy" || yeniBusyKomutuGeldi) {
+      if (strcmp(eskiDurum, "busy") != 0 || yeniBusyKomutuGeldi) {
         islemBaslangicMs = millis();
         islemSuresiMs = durationSec * 1000UL;
         yeniBusyKomutuGeldi = false;
@@ -1562,7 +1573,7 @@ void loop() {
         resetSayacDurumu();
       }
     }
-    else if (currentStatus == "baslangic") {
+    else if (currentStatusEquals("baslangic")) {
       tft.fillScreen(TFT_BLACK);
       tft.setTextColor(TFT_WHITE);
       tft.setTextSize(2);
@@ -1577,13 +1588,13 @@ void loop() {
       tft.println("Bilinmeyen Durum");
     }
 
-    eskiDurum = currentStatus;
+    strncpy(eskiDurum, currentStatus, sizeof(eskiDurum)-1); eskiDurum[sizeof(eskiDurum)-1] = '\0';
   }
 
-  if (currentStatus == "busy") {
+  if (currentStatusEquals("busy")) {
     ekrandaSayaciGuncelle();
   }
-  else if (currentStatus == "waiting" && !dokunmatikKilit && !odemeBekleniyor) {
+  else if (currentStatusEquals("waiting") && !dokunmatikKilit && !odemeBekleniyor) {
     unsigned long gecenZaman = millis() - beklemeBaslangicMs;
 
     if (gecenZaman >= BEKLEME_SURESI_MS) {
@@ -1617,8 +1628,8 @@ void loop() {
     }
   }
 
-  if (currentStatus == "waiting" && !dokunmatikKilit && !hataEkraniGosteriliyor) {
-    String secilenPaket = "";
+  if (currentStatusEquals("waiting") && !dokunmatikKilit && !hataEkraniGosteriliyor) {
+    char secilenPaket[16] = {0};
 
     bool kopukButonDurumu = digitalRead(btnKopukPin);
 
@@ -1628,29 +1639,29 @@ void loop() {
       millis() - sonKopukButonMs > BUTON_DEBOUNCE_MS
     ) {
       sonKopukButonMs = millis();
-      secilenPaket = "foam";
+      strncpy(secilenPaket, "foam", sizeof(secilenPaket)-1);
     }
 
     oncekiKopukButonDurumu = kopukButonDurumu;
 
-    if (secilenPaket == "") {
+    if (secilenPaket[0] == '\0') {
       uint16_t x, y;
 
       if (tft.getTouch(&x, &y)) {
         if (dokunmaButonIcindeMi(x, y, BTN_IPTAL)) {
-          secilenPaket = "cancel";
+          strncpy(secilenPaket, "cancel", sizeof(secilenPaket)-1);
         }
         else if (dokunmaButonIcindeMi(x, y, BTN_KOPUK)) {
-          secilenPaket = "foam";
+          strncpy(secilenPaket, "foam", sizeof(secilenPaket)-1);
         }
         else if (dokunmaButonIcindeMi(x, y, BTN_SU)) {
-          secilenPaket = "wash";
+          strncpy(secilenPaket, "wash", sizeof(secilenPaket)-1);
         }
       }
     }
 
-    if (secilenPaket != "") {
-      if (secilenPaket == "cancel") {
+    if (secilenPaket[0] != '\0') {
+      if (strcmp(secilenPaket, "cancel") == 0) {
         geciciEkranBaslat(GECICI_IPTAL);
         return;
       }
@@ -1665,10 +1676,64 @@ void loop() {
     }
   }
 
-  if (odemeBekleniyor && currentStatus == "waiting") {
+  if (odemeBekleniyor && currentStatusEquals("waiting")) {
     if (millis() - odemeBeklemeBaslangicMs >= ODEME_BEKLEME_TIMEOUT_MS) {
       odemeBeklemeIptalEt("odeme_timeout");
       return;
     }
   }
+}
+
+// C-string variant of paketNormalizeEt
+const char* paketNormalizeEt_cstr(const char* paket) {
+  if (!paket) return "";
+  // simple case-insensitive checks
+  auto eqi = [](const char* a, const char* b) {
+    for (; *a && *b; ++a, ++b) {
+      char ca = *a; if (ca >= 'A' && ca <= 'Z') ca += 'a' - 'A';
+      char cb = *b; if (cb >= 'A' && cb <= 'Z') cb += 'a' - 'A';
+      if (ca != cb) return false;
+    }
+    return *a == '\0' && *b == '\0';
+  };
+
+  if (eqi(paket, "foam") || eqi(paket, "kopuk") || eqi(paket, "köpük") || eqi(paket, "kopup")) return "foam";
+  if (eqi(paket, "wash") || eqi(paket, "su") || eqi(paket, "water") || eqi(paket, "yikama") || eqi(paket, "yıkama")) return "wash";
+  return "";
+}
+
+// C-string variant of cancel value check
+bool mqttCancelDegeriMi_cstr(const char* value) {
+  if (!value) return false;
+  auto eqiToken = [](const char* a, const char* b) {
+    for (; *a && *b; ++a, ++b) {
+      char ca = *a; if (ca >= 'A' && ca <= 'Z') ca += 'a' - 'A';
+      char cb = *b; if (cb >= 'A' && cb <= 'Z') cb += 'a' - 'A';
+      if (ca != cb) return false;
+    }
+    return *a == '\0' && *b == '\0';
+  };
+
+  if (eqiToken(value, "cancel")) return true;
+  if (eqiToken(value, "cancelled")) return true;
+  if (eqiToken(value, "canceled")) return true;
+  if (eqiToken(value, "iptal")) return true;
+  if (eqiToken(value, "abort")) return true;
+  if (eqiToken(value, "stop")) return true;
+  if (eqiToken(value, "back")) return true;
+  if (eqiToken(value, "geri")) return true;
+  return false;
+}
+
+// Helpers for currentStatus handling (C-strings)
+void setCurrentStatus(const char* s) {
+  if (!s) s = "";
+  strncpy(currentStatus, s, sizeof(currentStatus)-1);
+  currentStatus[sizeof(currentStatus)-1] = '\0';
+  durumDegisti = true;
+}
+
+bool currentStatusEquals(const char* s) {
+  if (!s) s = "";
+  return strcmp(currentStatus, s) == 0;
 }

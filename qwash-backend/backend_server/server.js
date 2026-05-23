@@ -184,8 +184,7 @@ if (!MQTT_HOST || !MQTT_USER || !MQTT_PASS) {
 
 const mqttUrl = `mqtts://${MQTT_HOST}:${MQTT_PORT}`;
 
-const MQTT_CLIENT_ID =
-  process.env.MQTT_CLIENT_ID || "qwash_backend_server";
+const MQTT_CLIENT_ID = process.env.MQTT_CLIENT_ID || "qwash_backend_server";
 
 const mqttClient = mqtt.connect(mqttUrl, {
   clientId: MQTT_CLIENT_ID,
@@ -665,11 +664,8 @@ const refundSessionIfNeeded = async (sessionId, reason = "bay_power_loss") => {
       };
     }
 
-    const currentWallet = Number(userDoc.data().walletTokens || 0);
-    const newWallet = currentWallet + tokensCost;
-
     tx.update(userRef, {
-      walletTokens: newWallet,
+      walletTokens: admin.firestore.FieldValue.increment(tokensCost),
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     });
 
@@ -1851,7 +1847,7 @@ app.post(
         newSessionId = sessionRef.id;
 
         t.update(userRef, {
-          walletTokens: mevcutBakiye - finalTokensCost,
+          walletTokens: admin.firestore.FieldValue.increment(-finalTokensCost),
           updatedAt: admin.firestore.FieldValue.serverTimestamp(),
         });
 
@@ -2544,7 +2540,7 @@ app.post(
           const mevcutBakiye = Number(userDoc.data().walletTokens || 0);
 
           t.update(userRef, {
-            walletTokens: mevcutBakiye + tokensToAdd,
+            walletTokens: admin.firestore.FieldValue.increment(tokensToAdd),
             updatedAt: admin.firestore.FieldValue.serverTimestamp(),
           });
 
@@ -2932,10 +2928,8 @@ app.post(
         const uDoc = await tx.get(userRef);
         if (!uDoc.exists) throw new Error("Kullanıcı_Bulunamadi");
 
-        const yeniBakiye = Number(uDoc.data().walletTokens || 0) + adet;
-
         tx.update(userRef, {
-          walletTokens: yeniBakiye,
+          walletTokens: admin.firestore.FieldValue.increment(adet),
           updatedAt: admin.firestore.FieldValue.serverTimestamp(),
         });
 
@@ -3392,6 +3386,26 @@ const gracefulShutdown = async (signal) => {
 
 process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
 process.on("SIGINT", () => gracefulShutdown("SIGINT"));
+
+// =========================================================
+// Global Express Error Middleware
+// Catches synchronous errors in middleware/routers and ensures a JSON response
+// so clients don't hang waiting for a response.
+// =========================================================
+app.use((err, req, res, next) => {
+  const message = err instanceof Error ? err.stack || err.message : String(err);
+  safeLog(`🚨 EXPRESS ERROR MIDDLEWARE: ${message}`);
+
+  if (res.headersSent) {
+    return next(err);
+  }
+
+  const statusCode = (err && err.status && Number(err.status)) || 500;
+
+  return res.status(statusCode).json({
+    error: err && err.message ? err.message : "Sunucu hatası.",
+  });
+});
 
 // =========================================================
 // START

@@ -122,28 +122,28 @@ export function useKullaniciIslemleri() {
   }, []);
 
   // ESP32 ekranından gelen paket seçimini mobil token ile başlatma
-useEffect(() => {
-  Object.entries(baylarData).forEach(([bayId, data]) => {
-    const pendingPackage = data?.pendingPackage;
-    const pendingSelectionId = data?.pendingSelectionId;
+  useEffect(() => {
+    Object.entries(baylarData).forEach(([bayId, data]) => {
+      const pendingPackage = data?.pendingPackage;
+      const pendingSelectionId = data?.pendingSelectionId;
 
-    if (!pendingPackage || !pendingSelectionId) return;
+      if (!pendingPackage || !pendingSelectionId) return;
 
-    if (data?.pendingPackageSource !== "esp32") return;
-    if (data?.lastUserId !== uid) return;
-    if (data?.status !== "waiting") return;
-    if (data?.currentSessionId) return;
-    if (islemdekiBaylar[bayId]) return;
+      if (data?.pendingPackageSource !== "esp32") return;
+      if (data?.lastUserId !== uid) return;
+      if (data?.status !== "waiting") return;
+      if (data?.currentSessionId) return;
+      if (islemdekiBaylar[bayId]) return;
 
-    if (islenenPendingSelectionRef.current[bayId] === pendingSelectionId) {
-      return;
-    }
+      if (islenenPendingSelectionRef.current[bayId] === pendingSelectionId) {
+        return;
+      }
 
-    islenenPendingSelectionRef.current[bayId] = pendingSelectionId;
+      islenenPendingSelectionRef.current[bayId] = pendingSelectionId;
 
-    sessionBaslat(bayId, pendingPackage);
-  });
-}, [baylarData, uid, islemdekiBaylar]);
+      sessionBaslat(bayId, pendingPackage);
+    });
+  }, [baylarData, uid, islemdekiBaylar]);
 
   useEffect(() => {
     if (!uid) return;
