@@ -184,7 +184,9 @@ if (!MQTT_HOST || !MQTT_USER || !MQTT_PASS) {
 
 const mqttUrl = `mqtts://${MQTT_HOST}:${MQTT_PORT}`;
 
-const MQTT_CLIENT_ID = process.env.MQTT_CLIENT_ID || "qwash_backend_server";
+const MQTT_CLIENT_ID =
+  process.env.MQTT_CLIENT_ID ||
+  `qwash_backend_${process.env.RENDER_INSTANCE_ID || process.pid}_${Date.now()}`;
 
 const mqttClient = mqtt.connect(mqttUrl, {
   clientId: MQTT_CLIENT_ID,
@@ -192,7 +194,7 @@ const mqttClient = mqtt.connect(mqttUrl, {
   password: MQTT_PASS,
   reconnectPeriod: 3000,
   connectTimeout: 20000,
-  clean: false,
+  clean: true,
   queueQoSZero: false,
 });
 
@@ -204,10 +206,28 @@ const mqttTopic = {
   event: (bayId) => `qwash/bays/${bayId}/event`,
 };
 
-const mqttPublish = (topic, payload, options = {}) => {
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const waitForMqttConnected = async (timeoutMs = 3000) => {
+  const startedAt = Date.now();
+
+  while (Date.now() - startedAt < timeoutMs) {
+    if (mqttClient.connected) {
+      return true;
+    }
+
+    await sleep(100);
+  }
+
+  return mqttClient.connected;
+};
+
+const mqttPublish = async (topic, payload, options = {}) => {
   return withTimeout(
-    new Promise((resolve, reject) => {
-      if (!mqttClient.connected) {
+    new Promise(async (resolve, reject) => {
+      const connected = await waitForMqttConnected(3000);
+
+      if (!connected) {
         return reject(new Error("MQTT broker bağlı değil."));
       }
 
@@ -1172,7 +1192,7 @@ const sendAdminAlert = async (bayId, type) => {
 // MQTT EVENTS
 // =========================================================
 mqttClient.on("connect", () => {
-  safeLog("✅ MQTT Broker bağlantısı başarılı.");
+  safeLog(`✅ MQTT Broker bağlantısı başarılı. clientId=${MQTT_CLIENT_ID}`);
 
   mqttClient.subscribe("qwash/bays/+/status", { qos: 1 });
   mqttClient.subscribe("qwash/bays/+/heartbeat", { qos: 0 });
@@ -1191,8 +1211,14 @@ mqttClient.on("error", (error) => {
 });
 
 mqttClient.on("close", () => {
-  safeLog("⚠️ MQTT bağlantısı kapandı.");
+  safeLog(`⚠️ MQTT bağlantısı kapandı. clientId=${MQTT_CLIENT_ID}`);
 });
+
+
+mqttClient.on("offline", () => {
+  safeLog(`⚠️ MQTT offline oldu. clientId=${MQTT_CLIENT_ID}`);
+});
+
 
 mqttClient.on("message", async (topic, messageBuffer) => {
   const message = messageBuffer.toString();
