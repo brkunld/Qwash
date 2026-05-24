@@ -110,7 +110,6 @@ app.use((req, res, next) => {
 });
 
 const EXTERNAL_TIMEOUT_MS = Number(process.env.EXTERNAL_TIMEOUT_MS || 10000);
-const BREVO_TIMEOUT_MS = Number(process.env.BREVO_TIMEOUT_MS || 5000);
 const IYZICO_TIMEOUT_MS = Number(process.env.IYZICO_TIMEOUT_MS || 10000);
 const MQTT_PUBLISH_TIMEOUT_MS = Number(
   process.env.MQTT_PUBLISH_TIMEOUT_MS || 5000,
@@ -128,24 +127,6 @@ const withTimeout = (promise, timeoutMs, label) => {
   return Promise.race([promise, timeoutPromise]).finally(() => {
     if (timeoutId) clearTimeout(timeoutId);
   });
-};
-
-const fetchWithTimeout = async (
-  url,
-  options = {},
-  timeoutMs = EXTERNAL_TIMEOUT_MS,
-) => {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-
-  try {
-    return await fetch(url, {
-      ...options,
-      signal: controller.signal,
-    });
-  } finally {
-    clearTimeout(timeoutId);
-  }
 };
 
 const initializeIyzicoCheckoutForm = (request) => {
@@ -1095,129 +1076,6 @@ const clearWaitingBayAfterCancel = async (bayId, uid = null) => {
 };
 
 // =========================================================
-// MAIL
-// =========================================================
-const MAIL_COOLDOWN_MS = 10 * 60 * 1000;
-
-const sendAdminAlert = async (bayId, type) => {
-  if (isInvalidBayId(bayId)) {
-    safeLog(`🚨 Mail uyarısı atlandı, geçersiz bayId: ${bayId}`);
-    return;
-  }
-
-  const now = Date.now();
-  const alertRef = rtdb.ref(`bayAlerts/${bayId}/${type}`);
-
-  const claimResult = await alertRef.transaction((currentAlert) => {
-    const lastSent = Number(currentAlert?.lastSent || 0);
-
-    if (now - lastSent < MAIL_COOLDOWN_MS) {
-      return;
-    }
-
-    return {
-      lastSent: now,
-      updatedAt: now, // <-- DEĞİŞTİRİLDİ: ServerValue.TIMESTAMP yerine 'now' kullanıyoruz.
-    };
-  });
-
-  if (!claimResult.committed) {
-    safeLog(`📧 Mail atlandı: ${bayId} ${type} bildirimi cooldown içinde.`);
-    return;
-  }
-
-  let subject;
-  let htmlBody;
-
-  if (type === "down") {
-    subject = `🚨 DİKKAT: ${bayId} Bağlantısı Koptu!`;
-    htmlBody = `
-      <h2 style="color: red;">Sistem Uyarısı: Peron Çevrimdışı</h2>
-      <p>
-        <b>${bayId}</b> isimli perondan 2 dakikadan uzun süredir haber alınamıyor.
-        Sistem, müşterilerin mağdur olmaması için peronu otomatik olarak
-        <b>KAPALI</b> durumuna aldı.
-      </p>
-    `;
-  } else if (type === "up") {
-    subject = `✅ DÜZELDİ: ${bayId} Yeniden Çevrimiçi!`;
-    htmlBody = `
-      <h2 style="color: green;">Sistem Bilgilendirmesi: Bağlantı Geldi</h2>
-      <p>
-        <b>${bayId}</b> isimli peronun bağlantısı tekrar sağlandı.
-        Sistem peronu otomatik olarak kullanıma <b>BOŞ</b> açtı.
-      </p>
-    `;
-  } else {
-    safeLog(`❌ Mail tipi bilinmiyor: ${type}`);
-    return;
-  }
-
-  if (!process.env.BREVO_API_KEY) {
-    safeLog("❌ Mail gönderilemedi: BREVO_API_KEY eksik.");
-    return;
-  }
-
-  if (!process.env.EMAIL_FROM) {
-    safeLog("❌ Mail gönderilemedi: EMAIL_FROM eksik.");
-    return;
-  }
-
-  if (!process.env.ADMIN_EMAIL) {
-    safeLog("❌ Mail gönderilemedi: ADMIN_EMAIL eksik.");
-    return;
-  }
-
-  try {
-    const response = await fetchWithTimeout(
-      "https://api.brevo.com/v3/smtp/email",
-      {
-        method: "POST",
-        headers: {
-          accept: "application/json",
-          "content-type": "application/json",
-          "api-key": process.env.BREVO_API_KEY,
-        },
-        body: JSON.stringify({
-          sender: {
-            name: "QWash Sistem",
-            email: process.env.EMAIL_FROM,
-          },
-          to: [
-            {
-              email: process.env.ADMIN_EMAIL,
-            },
-          ],
-          subject,
-          htmlContent: htmlBody,
-        }),
-      },
-      BREVO_TIMEOUT_MS,
-    );
-
-    const responseText = await response.text();
-
-    if (!response.ok) {
-      safeLog(`❌ Mail API Hatası: ${response.status} - ${responseText}`);
-      return;
-    }
-
-    safeLog(
-      `📧 E-Posta başarıyla gönderildi: ${
-        type === "down" ? "Kopma" : "Düzelme"
-      } bildirimi.`,
-    );
-  } catch (error) {
-    if (error.name === "AbortError") {
-      safeLog("❌ Mail API zaman aşımı: Brevo 5 saniye içinde yanıt vermedi.");
-      return;
-    }
-
-    safeLog(`❌ Mail API Bağlantı Hatası: ${error.message}`);
-  }
-};
-
-// =========================================================
 // MQTT EVENTS
 // =========================================================
 mqttClient.on("connect", () => {
@@ -1306,8 +1164,6 @@ mqttClient.on("message", async (topic, messageBuffer, packet) => {
           offlineAt: admin.database.ServerValue.TIMESTAMP,
           updatedAt: admin.database.ServerValue.TIMESTAMP,
         });
-
-        await sendAdminAlert(bayId, "down");
 
         safeLog(`📥 MQTT STATUS: ${bayId} -> ${nextStatus}`);
         return;
@@ -1417,24 +1273,11 @@ mqttClient.on("message", async (topic, messageBuffer, packet) => {
 
         return;
       }
-
-      const presenceRef = rtdb.ref(`bayPresence/${bayId}`);
-      const presenceSnap = await presenceRef.once("value");
-      const oldPresence = presenceSnap.val() || {};
-      const wasAutoOffline = oldPresence.autoOffline === true;
-
       await setBayPresence(bayId, {
         lastSeen: admin.database.ServerValue.TIMESTAMP,
         isActive: true,
         autoOffline: null,
       });
-
-      if (wasAutoOffline) {
-        safeLog(`✅ HEARTBEAT GERİ GELDİ: ${bayId} yeniden çevrimiçi.`);
-        await sendAdminAlert(bayId, "up");
-      }
-
-      // Legacy uyumluluk:
 
       // Legacy uyumluluk:
       // prepare-bay halen bays/{bayId}.isActive alanına bakıyor.
@@ -3289,7 +3132,6 @@ if (ENABLE_CRON) {
           }
 
           const isTimedOut = now - lastSeen > timeoutMs;
-          const isBackOnline = presence.autoOffline === true && !isTimedOut;
 
           if (isTimedOut) {
             if (
@@ -3334,30 +3176,10 @@ if (ENABLE_CRON) {
                 isActive: false,
                 autoOffline: true,
               });
-
-              await sendAdminAlert(bayId, "down");
             }
 
             continue;
           }
-
-          // if (isBackOnline) {
-          //   safeLog(
-          //     `✅ [CRON] İNTERNET GELDİ: ${bayId} otomatik olarak açılıyor...`,
-          //   );
-
-          //   await clearBaySessionFields(bayId, {
-          //     status: "available",
-          //   });
-
-          //   await setBayPresence(bayId, {
-          //     isActive: true,
-          //     autoOffline: null,
-          //   });
-
-          //   await safeSendBayCommand(bayId, "AVAILABLE");
-          //   await sendAdminAlert(bayId, "up");
-          // }
         }
       }
     } catch (error) {
