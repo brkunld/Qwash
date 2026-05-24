@@ -1702,143 +1702,90 @@ app.post(
 
     safeLog(`🟡 PREPARE GELDİ: bayId="${bayId}", uid="${uid}"`);
 
-    try {
-      const bayRef = rtdb.ref(`bays/${bayId}`);
+try {
+  const bayRef = rtdb.ref(`bays/${bayId}`);
 
-      const beforeSnap = await bayRef.once("value");
-      const beforeBay = beforeSnap.val();
+  const snap = await bayRef.once("value");
+  const bay = snap.val();
 
-      safeLog(
-        `🟡 PREPARE BEFORE: exists=${beforeSnap.exists()} data=${JSON.stringify(
-          beforeBay,
-        )}`,
-      );
+  safeLog(
+    `🟡 PREPARE CURRENT: exists=${snap.exists()} data=${JSON.stringify(bay)}`,
+  );
 
-      if (!beforeSnap.exists() || !beforeBay) {
-        return res.status(404).json({
-          error: `Peron bulunamadı: ${bayId}`,
-        });
-      }
+  if (!snap.exists() || !bay) {
+    return res.status(404).json({
+      error: `Peron bulunamadı: ${bayId}`,
+    });
+  }
 
-      const result = await bayRef.transaction((currentBay) => {
-        safeLog(
-          `🟡 PREPARE TX CURRENT: bayId=${bayId} data=${JSON.stringify(currentBay)}`,
-        );
+  const status = bay.status || "available";
 
-        const bay = currentBay || beforeBay;
-        if (!bay) return;
+  if (
+    bay.isActive === false ||
+    status === "offline" ||
+    status === "maintenance"
+  ) {
+    return res.status(409).json({
+      error: "Peron şu anda aktif değil veya bakım modunda.",
+    });
+  }
 
-        const status = bay.status || "available";
+  if (bay.currentSessionId) {
+    return res.status(409).json({
+      error: "Peron şu anda aktif bir yıkama oturumunda.",
+    });
+  }
 
-        if (
-          ["available", "baslangic"].includes(status) &&
-          !bay.currentSessionId &&
-          bay.isActive !== false
-        ) {
-          return {
-            ...bay,
-            status: "waiting",
-            lastUserId: uid,
-            updatedAt: admin.database.ServerValue.TIMESTAMP,
-          };
-        }
+  if (
+    status === "waiting" &&
+    bay.lastUserId &&
+    bay.lastUserId !== uid
+  ) {
+    return res.status(409).json({
+      error: "Peron şu anda başka bir kullanıcı tarafından hazırlanıyor.",
+    });
+  }
 
-        if (
-          status === "waiting" &&
-          (!bay.lastUserId || bay.lastUserId === uid) &&
-          !bay.currentSessionId &&
-          bay.isActive !== false
-        ) {
-          return {
-            ...bay,
-            lastUserId: uid,
-            updatedAt: Date.now(),
-          };
-        }
+  if (!["available", "baslangic", "waiting"].includes(status)) {
+    return res.status(409).json({
+      error:
+        "Peron şu anda başka bir kullanıcı tarafından kullanılıyor veya hazırlanıyor.",
+    });
+  }
 
-        return;
-      });
+  await bayRef.update({
+    status: "waiting",
+    lastUserId: uid,
+    currentSessionId: null,
+    requestedPackage: null,
+    durationSec: null,
+    tokensCost: null,
+    hardwareSelection: "",
+    pendingPackage: null,
+    pendingPackageSource: null,
+    pendingSelectionId: null,
+    pendingPackageAt: null,
+    updatedAt: Date.now(),
+  });
 
-      safeLog(
-        `🟡 PREPARE RESULT: committed=${result.committed} snapshot=${JSON.stringify(
-          result.snapshot?.val(),
-        )}`,
-      );
+  const mqttOk = await safeSendBayCommand(bayId, "WAITING");
 
-      if (!result.committed) {
-        const bayData = result.snapshot?.val() || beforeBay;
+  safeLog(`🟢 PREPARE OK: bayId=${bayId}, mqttOk=${mqttOk}`);
 
-        safeLog(
-          `🟠 PREPARE REDDEDİLDİ: bayId=${bayId} data=${JSON.stringify(bayData)}`,
-        );
+  return res.status(200).json({
+    success: true,
+    mqttOk,
+    message: mqttOk
+      ? "Peron seçim ekranına alındı."
+      : "Peron waiting yapıldı ama MQTT komutu gönderilemedi.",
+  });
+} catch (error) {
+  safeLog(`❌ Prepare Bay Hatası: ${error.message}`);
 
-        if (!bayData) {
-          return res.status(404).json({
-            error: `Peron bulunamadı: ${bayId}`,
-          });
-        }
-
-        if (
-          bayData.isActive === false ||
-          bayData.status === "offline" ||
-          bayData.status === "maintenance"
-        ) {
-          return res.status(409).json({
-            error: "Peron şu anda aktif değil veya bakım modunda.",
-          });
-        }
-
-        if (bayData.currentSessionId) {
-          return res.status(409).json({
-            error: "Peron şu anda aktif bir yıkama oturumunda.",
-          });
-        }
-
-        if (
-          bayData.status === "waiting" &&
-          bayData.lastUserId &&
-          bayData.lastUserId !== uid
-        ) {
-          return res.status(409).json({
-            error: "Peron şu anda başka bir kullanıcı tarafından hazırlanıyor.",
-          });
-        }
-
-        if (
-          bayData.status === "baslangic" &&
-          !bayData.currentSessionId &&
-          bayData.isActive !== false
-        ) {
-          return res.status(409).json({
-            error:
-              "Peron henüz tam olarak hazır değil. Lütfen birkaç saniye sonra tekrar deneyin.",
-          });
-        }
-
-        return res.status(409).json({
-          error:
-            "Peron şu anda başka bir kullanıcı tarafından kullanılıyor veya hazırlanıyor.",
-        });
-      }
-
-      const mqttOk = await safeSendBayCommand(bayId, "WAITING");
-
-      safeLog(`🟢 PREPARE OK: bayId=${bayId}, mqttOk=${mqttOk}`);
-
-      return res.status(200).json({
-        success: true,
-        mqttOk,
-        message: mqttOk
-          ? "Peron seçim ekranına alındı."
-          : "Peron waiting yapıldı ama MQTT komutu gönderilemedi.",
-      });
-    } catch (error) {
-      safeLog(`❌ Prepare Bay Hatası: ${error.message}`);
-
-      return res.status(500).json({
-        error: "Peron hazırlanırken sunucu hatası oluştu.",
-      });
-    }
+  return res.status(500).json({
+    error: "Peron hazırlanırken sunucu hatası oluştu.",
+  });
+}
   },
 );
 
