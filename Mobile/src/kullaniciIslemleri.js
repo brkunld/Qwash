@@ -262,21 +262,6 @@ export function useKullaniciIslemleri() {
     const unsubs = [];
     Object.entries(baylarData).forEach(([bayId, data]) => {
       const sId = data?.currentSessionId;
-      const lokalSession = sessionsData[bayId];
-
-      // ZOMBİ SESSION TEMİZLİĞİ
-      if (!sId && lokalSession?.status === "running") {
-        const sRef = doc(db, "sessions", lokalSession.id);
-        setDoc(
-          sRef,
-          {
-            status: "ended",
-            endedAt: firestoreServerTimestamp(),
-            endedReason: "machine_timeout_background",
-          },
-          { merge: true },
-        ).catch((err) => console.log("Zombi session kapatılamadı:", err));
-      }
 
       if (sId) {
         const sRef = doc(db, "sessions", sId);

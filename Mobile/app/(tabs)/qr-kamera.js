@@ -1,6 +1,6 @@
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { router, useFocusEffect } from "expo-router";
-import { useCallback, useState } from "react";
+import { useCallback, useState, useRef, useEffect } from "react";
 import { getApiUrl } from "../../src/config/api";
 import {
   ActivityIndicator,
@@ -21,6 +21,14 @@ export default function QrKamera() {
   const [permission, requestPermission] = useCameraPermissions();
   const [kilit, setKilit] = useState(false);
   const [yukleniyor, setYukleniyor] = useState(false);
+  
+  const isMounted = useRef(true);
+  
+  useEffect(() => {
+    return () => {
+      isMounted.current = false;
+    };
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
@@ -163,29 +171,33 @@ export default function QrKamera() {
     const { raw, bayId } = bayIdTemizle(data);
 
     if (!bayId || !bayId.toLowerCase().startsWith("bay_")) {
-      setYukleniyor(false);
+      if (isMounted.current) setYukleniyor(false);
 
       Alert.alert(
         "Geçersiz QR",
         `Okunan: "${raw}"\nLütfen geçerli bir Qwash peron QR kodu okutun.`,
       );
 
-      setTimeout(() => setKilit(false), 1200);
+      setTimeout(() => {
+        if (isMounted.current) setKilit(false);
+      }, 1200);
       return;
     }
 
     try {
       const result = await prepareBay(bayId);
 
-      setYukleniyor(false);
-
+      if (isMounted.current) setYukleniyor(false);
+      
       if (!result?.success) {
         Alert.alert("Hata", "Peron seçim ekranına alınamadı.");
-        setTimeout(() => setKilit(false), 1200);
+        setTimeout(() => {
+          if (isMounted.current) setKilit(false);
+        }, 1200);
         return;
       }
 
-      setKilit(false);
+      if (isMounted.current) setKilit(false);
 
       router.navigate({
         pathname: "/kullanici",
@@ -194,7 +206,7 @@ export default function QrKamera() {
     } catch (error) {
       console.error("Prepare Bay Hatası:", error);
 
-      setYukleniyor(false);
+      if (isMounted.current) setYukleniyor(false);
 
       const mesaj =
         error.message === "API_BASE_URL_MISSING"
@@ -203,7 +215,9 @@ export default function QrKamera() {
 
       Alert.alert("Hata", mesaj);
 
-      setTimeout(() => setKilit(false), 1500);
+      setTimeout(() => {
+        if (isMounted.current) setKilit(false);
+      }, 1500);
     }
   };
 

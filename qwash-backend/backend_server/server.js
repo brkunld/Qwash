@@ -75,8 +75,13 @@ let cronTask = null;
 app.set("trust proxy", 1);
 
 app.use(cors());
-app.use("/api/", apiLimiter);
-app.use(express.json());
+app.use("/api/", (req, res, next) => {
+  // İyzico webhook'unu rate limit engeline takılmaması için muaf tutuyoruz
+  if (req.path === "/topup-callback") {
+    return next();
+  }
+  return apiLimiter(req, res, next);
+});app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 app.use((req, res, next) => {
@@ -3162,10 +3167,10 @@ const acquireCronLock = async () => {
       return;
     }
 
-    return {
+return {
       owner,
       lockedAt: now,
-      lockedUntil: now + 2 * 60 * 1000,
+      lockedUntil: now + 55 * 1000, // 55 saniye (Cron her 1 dakikada bir rahatça çalışsın)
     };
   });
 
