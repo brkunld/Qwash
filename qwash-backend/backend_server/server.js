@@ -81,7 +81,8 @@ app.use("/api/", (req, res, next) => {
     return next();
   }
   return apiLimiter(req, res, next);
-});app.use(express.json());
+});
+app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 app.use((req, res, next) => {
@@ -1246,7 +1247,7 @@ mqttClient.on("offline", () => {
   safeLog(`⚠️ MQTT offline oldu. clientId=${MQTT_CLIENT_ID}`);
 });
 
-mqttClient.on("message", async (topic, messageBuffer) => {
+mqttClient.on("message", async (topic, messageBuffer, packet) => {
   const message = messageBuffer.toString();
   const parts = topic.split("/");
 
@@ -1269,6 +1270,10 @@ mqttClient.on("message", async (topic, messageBuffer) => {
       const bayRef = rtdb.ref(`bays/${bayId}`);
       const presenceRef = rtdb.ref(`bayPresence/${bayId}`);
       const nextStatus = String(message || "").trim();
+      if (packet?.retain === true && nextStatus === "offline") {
+        safeLog(`ℹ️ Retained OFFLINE status yok sayıldı: ${bayId}`);
+        return;
+      }
 
       if (nextStatus === "offline") {
         const baySnap = await bayRef.once("value");
@@ -1298,7 +1303,7 @@ mqttClient.on("message", async (topic, messageBuffer) => {
         await presenceRef.update({
           isActive: false,
           autoOffline: true,
-          lastSeen: admin.database.ServerValue.TIMESTAMP,
+          offlineAt: admin.database.ServerValue.TIMESTAMP,
           updatedAt: admin.database.ServerValue.TIMESTAMP,
         });
 
@@ -1413,23 +1418,23 @@ mqttClient.on("message", async (topic, messageBuffer) => {
         return;
       }
 
-const presenceRef = rtdb.ref(`bayPresence/${bayId}`);
-const presenceSnap = await presenceRef.once("value");
-const oldPresence = presenceSnap.val() || {};
-const wasAutoOffline = oldPresence.autoOffline === true;
+      const presenceRef = rtdb.ref(`bayPresence/${bayId}`);
+      const presenceSnap = await presenceRef.once("value");
+      const oldPresence = presenceSnap.val() || {};
+      const wasAutoOffline = oldPresence.autoOffline === true;
 
-await setBayPresence(bayId, {
-  lastSeen: admin.database.ServerValue.TIMESTAMP,
-  isActive: true,
-  autoOffline: null,
-});
+      await setBayPresence(bayId, {
+        lastSeen: admin.database.ServerValue.TIMESTAMP,
+        isActive: true,
+        autoOffline: null,
+      });
 
-if (wasAutoOffline) {
-  safeLog(`✅ HEARTBEAT GERİ GELDİ: ${bayId} yeniden çevrimiçi.`);
-  await sendAdminAlert(bayId, "up");
-}
+      if (wasAutoOffline) {
+        safeLog(`✅ HEARTBEAT GERİ GELDİ: ${bayId} yeniden çevrimiçi.`);
+        await sendAdminAlert(bayId, "up");
+      }
 
-// Legacy uyumluluk:
+      // Legacy uyumluluk:
 
       // Legacy uyumluluk:
       // prepare-bay halen bays/{bayId}.isActive alanına bakıyor.
@@ -1714,90 +1719,86 @@ app.post(
 
     safeLog(`🟡 PREPARE GELDİ: bayId="${bayId}", uid="${uid}"`);
 
-try {
-  const bayRef = rtdb.ref(`bays/${bayId}`);
+    try {
+      const bayRef = rtdb.ref(`bays/${bayId}`);
 
-  const snap = await bayRef.once("value");
-  const bay = snap.val();
+      const snap = await bayRef.once("value");
+      const bay = snap.val();
 
-  safeLog(
-    `🟡 PREPARE CURRENT: exists=${snap.exists()} data=${JSON.stringify(bay)}`,
-  );
+      safeLog(
+        `🟡 PREPARE CURRENT: exists=${snap.exists()} data=${JSON.stringify(bay)}`,
+      );
 
-  if (!snap.exists() || !bay) {
-    return res.status(404).json({
-      error: `Peron bulunamadı: ${bayId}`,
-    });
-  }
+      if (!snap.exists() || !bay) {
+        return res.status(404).json({
+          error: `Peron bulunamadı: ${bayId}`,
+        });
+      }
 
-  const status = bay.status || "available";
+      const status = bay.status || "available";
 
-  if (
-    bay.isActive === false ||
-    status === "offline" ||
-    status === "maintenance"
-  ) {
-    return res.status(409).json({
-      error: "Peron şu anda aktif değil veya bakım modunda.",
-    });
-  }
+      if (
+        bay.isActive === false ||
+        status === "offline" ||
+        status === "maintenance"
+      ) {
+        return res.status(409).json({
+          error: "Peron şu anda aktif değil veya bakım modunda.",
+        });
+      }
 
-  if (bay.currentSessionId) {
-    return res.status(409).json({
-      error: "Peron şu anda aktif bir yıkama oturumunda.",
-    });
-  }
+      if (bay.currentSessionId) {
+        return res.status(409).json({
+          error: "Peron şu anda aktif bir yıkama oturumunda.",
+        });
+      }
 
-  if (
-    status === "waiting" &&
-    bay.lastUserId &&
-    bay.lastUserId !== uid
-  ) {
-    return res.status(409).json({
-      error: "Peron şu anda başka bir kullanıcı tarafından hazırlanıyor.",
-    });
-  }
+      if (status === "waiting" && bay.lastUserId && bay.lastUserId !== uid) {
+        return res.status(409).json({
+          error: "Peron şu anda başka bir kullanıcı tarafından hazırlanıyor.",
+        });
+      }
 
-  if (!["available", "baslangic", "waiting"].includes(status)) {
-    return res.status(409).json({
-      error:
-        "Peron şu anda başka bir kullanıcı tarafından kullanılıyor veya hazırlanıyor.",
-    });
-  }
+      if (!["available", "baslangic", "waiting"].includes(status)) {
+        return res.status(409).json({
+          error:
+            "Peron şu anda başka bir kullanıcı tarafından kullanılıyor veya hazırlanıyor.",
+        });
+      }
 
-  await bayRef.update({
-    status: "waiting",
-    lastUserId: uid,
-    currentSessionId: null,
-    requestedPackage: null,
-    durationSec: null,
-    tokensCost: null,
-    hardwareSelection: "",
-    pendingPackage: null,
-    pendingPackageSource: null,
-    pendingSelectionId: null,
-    pendingPackageAt: null,
-    updatedAt: Date.now(),
-  });
+      await bayRef.update({
+        status: "waiting",
+        lastUserId: uid,
+        currentSessionId: null,
+        requestedPackage: null,
+        durationSec: null,
+        tokensCost: null,
+        hardwareSelection: "",
+        pendingPackage: null,
+        pendingPackageSource: null,
+        pendingSelectionId: null,
+        pendingPackageAt: null,
+        updatedAt: Date.now(),
+      });
 
-  const mqttOk = await safeSendBayCommand(bayId, "WAITING");
+      const mqttOk = await safeSendBayCommand(bayId, "WAITING");
 
-  safeLog(`🟢 PREPARE OK: bayId=${bayId}, mqttOk=${mqttOk}`);
+      safeLog(`🟢 PREPARE OK: bayId=${bayId}, mqttOk=${mqttOk}`);
 
-  return res.status(200).json({
-    success: true,
-    mqttOk,
-    message: mqttOk
-      ? "Peron seçim ekranına alındı."
-      : "Peron waiting yapıldı ama MQTT komutu gönderilemedi.",
-  });
-} catch (error) {
-  safeLog(`❌ Prepare Bay Hatası: ${error.message}`);
+      return res.status(200).json({
+        success: true,
+        mqttOk,
+        message: mqttOk
+          ? "Peron seçim ekranına alındı."
+          : "Peron waiting yapıldı ama MQTT komutu gönderilemedi.",
+      });
+    } catch (error) {
+      safeLog(`❌ Prepare Bay Hatası: ${error.message}`);
 
-  return res.status(500).json({
-    error: "Peron hazırlanırken sunucu hatası oluştu.",
-  });
-}
+      return res.status(500).json({
+        error: "Peron hazırlanırken sunucu hatası oluştu.",
+      });
+    }
   },
 );
 
@@ -3126,7 +3127,7 @@ const acquireCronLock = async () => {
       return;
     }
 
-return {
+    return {
       owner,
       lockedAt: now,
       lockedUntil: now + 55 * 1000, // 55 saniye (Cron her 1 dakikada bir rahatça çalışsın)
@@ -3340,23 +3341,23 @@ if (ENABLE_CRON) {
             continue;
           }
 
-          if (isBackOnline) {
-            safeLog(
-              `✅ [CRON] İNTERNET GELDİ: ${bayId} otomatik olarak açılıyor...`,
-            );
+          // if (isBackOnline) {
+          //   safeLog(
+          //     `✅ [CRON] İNTERNET GELDİ: ${bayId} otomatik olarak açılıyor...`,
+          //   );
 
-            await clearBaySessionFields(bayId, {
-              status: "available",
-            });
+          //   await clearBaySessionFields(bayId, {
+          //     status: "available",
+          //   });
 
-            await setBayPresence(bayId, {
-              isActive: true,
-              autoOffline: null,
-            });
+          //   await setBayPresence(bayId, {
+          //     isActive: true,
+          //     autoOffline: null,
+          //   });
 
-            await safeSendBayCommand(bayId, "AVAILABLE");
-            await sendAdminAlert(bayId, "up");
-          }
+          //   await safeSendBayCommand(bayId, "AVAILABLE");
+          //   await sendAdminAlert(bayId, "up");
+          // }
         }
       }
     } catch (error) {
