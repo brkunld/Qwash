@@ -25,6 +25,11 @@ if (!APP_BASE_URL) {
   );
 }
 
+
+if (!process.env.IYZICO_API_KEY || !process.env.IYZICO_SECRET_KEY) {
+  throw new Error("❌ IYZICO_API_KEY veya IYZICO_SECRET_KEY env eksik. Lütfen .env dosyanızı kontrol edin.");
+}
+
 // =========================================================
 // IYZICO SANDBOX YAPILANDIRMASI
 // =========================================================
@@ -211,20 +216,22 @@ const waitForMqttConnected = async (timeoutMs = 3000) => {
 
 const mqttPublish = async (topic, payload, options = {}) => {
   return withTimeout(
-    new Promise(async (resolve, reject) => {
+    (async () => {
       const connected = await waitForMqttConnected(3000);
 
       if (!connected) {
-        return reject(new Error("MQTT broker bağlı değil."));
+        throw new Error("MQTT broker bağlı değil.");
       }
 
-      mqttClient.publish(topic, String(payload), options, (error) => {
-        if (error) return reject(error);
-        return resolve();
+      return new Promise((resolve, reject) => {
+        mqttClient.publish(topic, String(payload), options, (error) => {
+          if (error) return reject(error);
+          return resolve();
+        });
       });
-    }),
+    })(),
     MQTT_PUBLISH_TIMEOUT_MS,
-    "MQTT publish",
+    "MQTT publish"
   );
 };
 
@@ -3202,6 +3209,9 @@ process.on("unhandledRejection", (reason) => {
 
 process.on("uncaughtException", (error) => {
   safeLog(`🚨 UNCAUGHT EXCEPTION: ${error.stack || error.message}`);
+  // İç durum bozulmuş olabileceği için süreci zorla sonlandır. 
+  // Sunucu yöneticisi (Render/PM2) otomatik yeniden başlatacaktır.
+  process.exit(1); 
 });
 
 const waitForCronToFinish = async (timeoutMs = 10000) => {

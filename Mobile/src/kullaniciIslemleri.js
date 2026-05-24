@@ -53,6 +53,10 @@ export function useKullaniciIslemleri() {
 
   const kasitliCikisRef = useRef({}); // Kullanıcı kendi çıkarsa uyarı vermemek için
   const islenenPendingSelectionRef = useRef({});
+  const islemdekiBaylarRef = useRef({}); // <--- YENİ EKLENDİ
+  useEffect(() => {
+    islemdekiBaylarRef.current = islemdekiBaylar;
+  }, [islemdekiBaylar]);
 
   const adetNum = useMemo(() => {
     const n = parseInt(String(jetonAdet || "0"), 10);
@@ -121,7 +125,7 @@ export function useKullaniciIslemleri() {
     return () => unsub();
   }, []);
 
-  // ESP32 ekranından gelen paket seçimini mobil token ile başlatma
+// ESP32 ekranından gelen paket seçimini mobil token ile başlatma
   useEffect(() => {
     Object.entries(baylarData).forEach(([bayId, data]) => {
       const pendingPackage = data?.pendingPackage;
@@ -133,7 +137,9 @@ export function useKullaniciIslemleri() {
       if (data?.lastUserId !== uid) return;
       if (data?.status !== "waiting") return;
       if (data?.currentSessionId) return;
-      if (islemdekiBaylar[bayId]) return;
+      
+      // State yerine Ref üzerinden anlık durumu okuyoruz (Re-render loop engellendi)
+      if (islemdekiBaylarRef.current[bayId]) return;
 
       if (islenenPendingSelectionRef.current[bayId] === pendingSelectionId) {
         return;
@@ -143,7 +149,7 @@ export function useKullaniciIslemleri() {
 
       sessionBaslat(bayId, pendingPackage);
     });
-  }, [baylarData, uid, islemdekiBaylar]);
+  }, [baylarData, uid]); // <--- islemdekiBaylar buradan çıkarıldı!
 
   useEffect(() => {
     if (!uid) return;
