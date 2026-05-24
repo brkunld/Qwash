@@ -12,8 +12,7 @@ import {
   setDoc,
 } from "firebase/firestore";
 
-import { onValue, ref } from "firebase/database";
-
+import { onValue, ref, query, orderByChild, equalTo } from "firebase/database";
 import { auth, db, rtdb } from "../firebase";
 import { getApiUrl } from "./config/api";
 
@@ -93,6 +92,51 @@ export function useKullaniciIslemleri() {
     return () => unsub();
   }, [router]);
 
+  // ========================================================
+  // OTOMATİK OTURUM KURTARMA (Uygulama kapanıp açıldığında)
+  // ========================================================
+  useEffect(() => {
+    if (!uid) return;
+
+    // Sadece bu kullanıcıya ait peronları getir
+    const q = query(
+      ref(rtdb, "bays"),
+      orderByChild("lastUserId"),
+      equalTo(uid)
+    );
+
+    const unsub = onValue(q, (snapshot) => {
+      if (snapshot.exists()) {
+        const userBays = snapshot.val();
+        const kurtarilacakBaylar = [];
+
+        Object.entries(userBays).forEach(([bayId, data]) => {
+          // Beklemede olan (waiting) veya çalışan (busy) peronları bul
+          if (data.status === "waiting" || data.status === "starting" || data.status === "busy") {
+            kurtarilacakBaylar.push(bayId);
+          }
+        });
+
+        // Bulunan peronları aktif listeye ekleyip dinlemeye başla
+        if (kurtarilacakBaylar.length > 0) {
+          setAktifBayIdListesi((prev) => {
+            const yeniListe = [...prev];
+            let eklendi = false;
+            kurtarilacakBaylar.forEach((id) => {
+              if (!yeniListe.includes(id)) {
+                yeniListe.push(id);
+                eklendi = true;
+              }
+            });
+            return eklendi ? yeniListe : prev;
+          });
+        }
+      }
+    });
+
+    return () => unsub();
+  }, [uid]);
+
   useEffect(() => {
     const fiyatRef = doc(db, "packages", "jeton");
     setFiyatYukleniyor(true);
@@ -125,7 +169,7 @@ export function useKullaniciIslemleri() {
     return () => unsub();
   }, []);
 
-// ESP32 ekranından gelen paket seçimini mobil token ile başlatma
+  // ESP32 ekranından gelen paket seçimini mobil token ile başlatma
   useEffect(() => {
     Object.entries(baylarData).forEach(([bayId, data]) => {
       const pendingPackage = data?.pendingPackage;
@@ -137,7 +181,7 @@ export function useKullaniciIslemleri() {
       if (data?.lastUserId !== uid) return;
       if (data?.status !== "waiting") return;
       if (data?.currentSessionId) return;
-      
+
       // State yerine Ref üzerinden anlık durumu okuyoruz (Re-render loop engellendi)
       if (islemdekiBaylarRef.current[bayId]) return;
 
@@ -493,9 +537,6 @@ export function useKullaniciIslemleri() {
 
     setYuklemeIslemde(true);
 
-    const amountTRY =
-      typeof amountTRYParam === "number" ? amountTRYParam : tokens * jetonFiyat;
-
     try {
       const token = await auth.currentUser?.getIdToken();
 
@@ -514,8 +555,7 @@ export function useKullaniciIslemleri() {
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          tokens,
-          amountTRY,
+          tokens, // Sadece tokens göndermek yeterlidir
         }),
       });
 

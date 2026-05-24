@@ -1598,6 +1598,14 @@ app.post(
       }
 
       if (bay.currentSessionId) {
+        // YENİ EK: Kullanıcı kendi aktif oturumuna QR okutursa hata verme, sadece içeri al.
+        if (bay.lastUserId === uid) {
+          return res.status(200).json({
+            success: true,
+            mqttOk: true,
+            message: "Kendi aktif oturumunuza yeniden bağlandınız.",
+          });
+        }
         return res.status(409).json({
           error: "Peron şu anda aktif bir yıkama oturumunda.",
         });
@@ -1609,6 +1617,18 @@ app.post(
         });
       }
 
+      // YENİ EK: Kullanıcı zaten beklemedeyse, ESP'den gelen verileri SİLMEMEK İÇİN
+      // null atamalarından (sıfırlamadan) kaçınıyoruz.
+      if (status === "waiting" && bay.lastUserId === uid) {
+        await bayRef.update({ updatedAt: Date.now() });
+        const mqttOk = await safeSendBayCommand(bayId, "WAITING");
+        return res.status(200).json({
+          success: true,
+          mqttOk,
+          message: "Peron zaten sizin için beklemede.",
+        });
+      }
+
       if (!["available", "baslangic", "waiting"].includes(status)) {
         return res.status(409).json({
           error:
@@ -1616,6 +1636,7 @@ app.post(
         });
       }
 
+      // Sadece "available" veya ilk kez "waiting" olacak olanlar için sıfırlama yap
       await bayRef.update({
         status: "waiting",
         lastUserId: uid,
