@@ -1413,11 +1413,23 @@ mqttClient.on("message", async (topic, messageBuffer) => {
         return;
       }
 
-      await setBayPresence(bayId, {
-        lastSeen: admin.database.ServerValue.TIMESTAMP,
-        isActive: true,
-        autoOffline: null,
-      });
+const presenceRef = rtdb.ref(`bayPresence/${bayId}`);
+const presenceSnap = await presenceRef.once("value");
+const oldPresence = presenceSnap.val() || {};
+const wasAutoOffline = oldPresence.autoOffline === true;
+
+await setBayPresence(bayId, {
+  lastSeen: admin.database.ServerValue.TIMESTAMP,
+  isActive: true,
+  autoOffline: null,
+});
+
+if (wasAutoOffline) {
+  safeLog(`✅ HEARTBEAT GERİ GELDİ: ${bayId} yeniden çevrimiçi.`);
+  await sendAdminAlert(bayId, "up");
+}
+
+// Legacy uyumluluk:
 
       // Legacy uyumluluk:
       // prepare-bay halen bays/{bayId}.isActive alanına bakıyor.
