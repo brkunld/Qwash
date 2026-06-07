@@ -1,8 +1,8 @@
-/* eslint-disable react-hooks/exhaustive-deps */
+
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, InteractionManager } from "react-native";
-import * as WebBrowser from "expo-web-browser"; // <-- EN ÜSTE İMPORT EDİN
+import * as WebBrowser from "expo-web-browser"; 
 
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import {
@@ -24,7 +24,7 @@ export function useKullaniciIslemleri() {
   const [authYukleniyor, setAuthYukleniyor] = useState(true);
   const uid = currentUser?.uid ?? null;
 
-  // --- ÇOKLU PERON DESTEĞİ İÇİN STATELER ---
+  
   const [aktifBayIdListesi, setAktifBayIdListesi] = useState([]);
   const [baylarData, setBaylarData] = useState({});
   const [sessionsData, setSessionsData] = useState({});
@@ -50,9 +50,9 @@ export function useKullaniciIslemleri() {
   const [sonKullanma, setSonKullanma] = useState("");
   const [cvv, setCvv] = useState("");
 
-  const kasitliCikisRef = useRef({}); // Kullanıcı kendi çıkarsa uyarı vermemek için
+  const kasitliCikisRef = useRef({}); 
   const islenenPendingSelectionRef = useRef({});
-  const islemdekiBaylarRef = useRef({}); // <--- YENİ EKLENDİ
+  const islemdekiBaylarRef = useRef({}); 
   useEffect(() => {
     islemdekiBaylarRef.current = islemdekiBaylar;
   }, [islemdekiBaylar]);
@@ -92,13 +92,13 @@ export function useKullaniciIslemleri() {
     return () => unsub();
   }, [router]);
 
-  // ========================================================
-  // OTOMATİK OTURUM KURTARMA (Uygulama kapanıp açıldığında)
-  // ========================================================
+  
+  
+  
   useEffect(() => {
     if (!uid) return;
 
-    // Sadece bu kullanıcıya ait peronları getir
+    
     const q = query(
       ref(rtdb, "bays"),
       orderByChild("lastUserId"),
@@ -111,13 +111,13 @@ export function useKullaniciIslemleri() {
         const kurtarilacakBaylar = [];
 
         Object.entries(userBays).forEach(([bayId, data]) => {
-          // Beklemede olan (waiting) veya çalışan (busy) peronları bul
+          
           if (data.status === "waiting" || data.status === "starting" || data.status === "busy") {
             kurtarilacakBaylar.push(bayId);
           }
         });
 
-        // Bulunan peronları aktif listeye ekleyip dinlemeye başla
+        
         if (kurtarilacakBaylar.length > 0) {
           setAktifBayIdListesi((prev) => {
             const yeniListe = [...prev];
@@ -169,7 +169,7 @@ export function useKullaniciIslemleri() {
     return () => unsub();
   }, []);
 
-  // ESP32 ekranından gelen paket seçimini mobil token ile başlatma
+  
   useEffect(() => {
     Object.entries(baylarData).forEach(([bayId, data]) => {
       const pendingPackage = data?.pendingPackage;
@@ -182,7 +182,7 @@ export function useKullaniciIslemleri() {
       if (data?.status !== "waiting") return;
       if (data?.currentSessionId) return;
 
-      // State yerine Ref üzerinden anlık durumu okuyoruz (Re-render loop engellendi)
+      
       if (islemdekiBaylarRef.current[bayId]) return;
 
       if (islenenPendingSelectionRef.current[bayId] === pendingSelectionId) {
@@ -193,7 +193,7 @@ export function useKullaniciIslemleri() {
 
       sessionBaslat(bayId, pendingPackage);
     });
-  }, [baylarData, uid]); // <--- islemdekiBaylar buradan çıkarıldı!
+  }, [baylarData, uid]); 
 
   useEffect(() => {
     if (!uid) return;
@@ -237,9 +237,9 @@ export function useKullaniciIslemleri() {
     return () => unsub();
   }, [uid]);
 
-  // BAY (PERON) DİNLEME VE OTOMATİK KOPARMA MANTIĞI
-  // BAY (PERON) DİNLEME VE OTOMATİK KOPARMA MANTIĞI
-  // ========================================================
+  
+  
+  
   useEffect(() => {
     const unsubs = aktifBayIdListesi.map((bayId) => {
       const bayRef = ref(rtdb, `bays/${bayId}`);
@@ -249,16 +249,16 @@ export function useKullaniciIslemleri() {
           const bayData = snapshot.val();
           setBaylarData((prev) => ({ ...prev, [bayId]: bayData }));
 
-          // Peronun kopmasını gerektiren durumları kontrol ediyoruz
+          
           const kopmaGerekliMi =
             bayData.status === "available" ||
             bayData.status === "maintenance" ||
             bayData.status === "offline" ||
             bayData.isActive === false;
 
-          // Otomatik Bağlantı Kesme Uyarısı
+          
           if (kopmaGerekliMi) {
-            // 1. Önce sadece kendi listemizden (State) peronu siliyoruz
+            
             setAktifBayIdListesi((prev) => {
               if (prev.includes(bayId)) {
                 return prev.filter((id) => id !== bayId);
@@ -266,7 +266,7 @@ export function useKullaniciIslemleri() {
               return prev;
             });
 
-            // 2. Uyarıyı state updater'ın DIŞINDA veriyoruz
+            
             if (!kasitliCikisRef.current[bayId]) {
               let baslik = "Bağlantı Kesildi";
               let mesaj = `${bayId} peronunda süreniz doldu veya işlem yapmadığınız için bağlantınız kesildi.`;
@@ -279,7 +279,7 @@ export function useKullaniciIslemleri() {
               ) {
                 mesaj = `${bayId} peronu sistem tarafından kapatıldığı için bağlantınız kesildi.`;
               } else if (bayData.status === "available") {
-                // ESP veya ekran iptali sonrası available geldiyse gereksiz korkutucu uyarı verme.
+                
                 baslik = "İşlem İptal Edildi";
                 mesaj = "İşlem iptal edildi veya peron boşa çıkarıldı.";
               }
@@ -289,7 +289,7 @@ export function useKullaniciIslemleri() {
 
             delete kasitliCikisRef.current[bayId];
 
-            // 3. Alert ve state güncellemeleri bittikten sonra Router parametresini temizliyoruz.
+            
             InteractionManager.runAfterInteractions(() => {
               router.setParams({ bayId: "" });
             });
@@ -307,7 +307,7 @@ export function useKullaniciIslemleri() {
     return () => unsubs.forEach((u) => u());
   }, [aktifBayIdListesi]);
 
-  // ÇOKLU SESSION DİNLEME VE ZOMBİ TEMİZLİĞİ MANTIĞI
+  
   useEffect(() => {
     const unsubs = [];
     Object.entries(baylarData).forEach(([bayId, data]) => {
@@ -345,9 +345,9 @@ export function useKullaniciIslemleri() {
     return () => unsubs.forEach((u) => u());
   }, [baylarData]);
 
-  // =========================================================
-  // FIREBASE CONFIG KONTROLÜ
-  // Renderer'a sadece gerekli config verilir.
+  
+  
+  
 
   const sessionBaslat = async (islemBayId, packageId) => {
     if (!uid) return router.replace("/login");
@@ -555,7 +555,7 @@ export function useKullaniciIslemleri() {
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          tokens, // Sadece tokens göndermek yeterlidir
+          tokens, 
         }),
       });
 

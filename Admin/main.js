@@ -3,19 +3,11 @@ require("dotenv").config();
 const { app, BrowserWindow, ipcMain } = require("electron");
 const path = require("path");
 
-// =========================================================
-// 1. SQUIRREL KURULUM KİLİDİ
-// Windows'ta kurulum (.exe) sırasında arka planda uygulamanın
-// defalarca açılmasını engeller.
-// =========================================================
 if (require("electron-squirrel-startup")) {
   app.quit();
   return;
 }
 
-// =========================================================
-// 2. TEKİL ÇALIŞMA KİLİDİ
-// =========================================================
 const gotTheLock = app.requestSingleInstanceLock();
 
 let mainWindow = null;
@@ -33,11 +25,11 @@ if (!gotTheLock) {
     mainWindow.focus();
   });
 
-  // =========================================================
-  // FIREBASE CONFIG KONTROLÜ
-  // Renderer'a sadece public Firebase client config verilir.
-  // Admin SDK, private key, service account ASLA burada dönülmez.
-  // =========================================================
+  
+  
+  
+  
+  
   function getFirebaseConfig() {
     const firebaseConfig = {
       apiKey: process.env.FIREBASE_API_KEY,
@@ -62,11 +54,11 @@ if (!gotTheLock) {
     return firebaseConfig;
   }
 
-  // =========================================================
-  // API BASE URL KONTROLÜ
-  // Renderer'a sadece public backend base URL verilir.
-  // Örn: https://qwash-.onrender.com
-  // =========================================================
+  
+  
+  
+  
+  
   function getApiBaseUrl() {
     const apiBaseUrl = process.env.API_BASE_URL;
 
@@ -77,10 +69,10 @@ if (!gotTheLock) {
     return apiBaseUrl.replace(/\/$/, "");
   }
 
-  // =========================================================
-  // IPC KANALLARI
-  // Sadece whitelist edilmiş işlemler tanımlanır.
-  // =========================================================
+  
+  
+  
+  
   ipcMain.handle("firebase:get-config", () => {
     return getFirebaseConfig();
   });
@@ -94,9 +86,9 @@ if (!gotTheLock) {
     return true;
   });
 
-  // =========================================================
-  // UYGULAMA PENCERESİ
-  // =========================================================
+  
+  
+  
   function createWindow() {
     mainWindow = new BrowserWindow({
       title: "QWASH Admin",
@@ -122,10 +114,10 @@ if (!gotTheLock) {
       mainWindow = null;
     });
 
-    // Production'da DevTools kapalı kalsın
-    //if (!app.isPackaged) {
-    //  mainWindow.webContents.openDevTools();
-    //}
+    
+    
+    
+    
   }
 
   app.whenReady().then(() => {

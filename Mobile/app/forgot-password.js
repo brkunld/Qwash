@@ -64,13 +64,13 @@ export default function ForgotPassword() {
         showsVerticalScrollIndicator={false}
         bounces={false}
       >
-        {/* Tepe Dekorasyonu */}
+        {}
         <View style={styles.topDecor}>
           <View style={styles.decorCircleLarge} />
           <View style={styles.decorCircleSmall} />
         </View>
 
-        {/* Başlık Alanı (Dikey olarak ortalandı) */}
+        {}
         <View style={styles.brandArea}>
           <Text style={styles.brandTitle}>Şifremi Unuttum</Text>
           <Text style={styles.brandSubtitle}>
@@ -78,7 +78,7 @@ export default function ForgotPassword() {
           </Text>
         </View>
 
-        {/* Form Kartı */}
+        {}
         <View style={styles.formCard}>
           <View style={styles.fieldGroup}>
             <Text style={styles.fieldLabel}>E-posta</Text>
@@ -116,7 +116,7 @@ export default function ForgotPassword() {
           </Pressable>
         </View>
 
-        {/* Daha modern "Giriş Ekranına Dön" Butonu */}
+        {}
         <Pressable
           onPress={() => router.replace("/login")}
           disabled={yukleniyor}
@@ -139,8 +139,8 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     backgroundColor: "#f8f9fb",
     paddingHorizontal: 24,
-    justifyContent: "center", // 🔥 Tüm içeriği dikeyde mükemmel ortalar
-    paddingBottom: 20, // Aşağıdan biraz nefes payı
+    justifyContent: "center", 
+    paddingBottom: 20, 
   },
   topDecor: {
     position: "absolute",
@@ -172,7 +172,7 @@ const styles = StyleSheet.create({
   },
   brandArea: {
     alignItems: "center",
-    marginBottom: 32, // PaddingTop silindi, margin eklendi
+    marginBottom: 32, 
     gap: 8,
   },
   brandTitle: {
@@ -245,7 +245,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     letterSpacing: 0.2,
   },
-  /* 🔥 Yeni Modern Geri Dönüş Butonu Stilleri 🔥 */
+  
   backBtn: {
     flexDirection: "row",
     alignItems: "center",
@@ -254,8 +254,8 @@ const styles = StyleSheet.create({
     marginTop: 24,
     paddingVertical: 12,
     paddingHorizontal: 20,
-    backgroundColor: "#e5e7eb", // Açık gri arka plan
-    borderRadius: 100, // Tam oval görünüm
+    backgroundColor: "#e5e7eb", 
+    borderRadius: 100, 
     gap: 6,
   },
   backBtnIcon: {

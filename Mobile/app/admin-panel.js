@@ -17,7 +17,6 @@ import { ref, onValue } from 'firebase/database';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 
-// Dinamik API adresini getiren fonksiyonumuzu import ediyoruz
 import { getApiUrl } from '../src/config/api';
 
 const THEME = {
@@ -50,7 +49,7 @@ export default function AdminPanel() {
   const [bays, setBays] = useState([]);
   const [logs, setLogs] = useState([]);
   
-  // Arama / Kullanıcı State
+  
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const [userResult, setUserResult] = useState(null);
@@ -58,7 +57,7 @@ export default function AdminPanel() {
   const [isActionLoading, setIsActionLoading] = useState(false);
 
   useEffect(() => {
-    // Admin yetkisi kontrolü eklenebilir
+    
     if (!auth.currentUser) {
       Alert.alert("Hata", "Oturum bulunamadı. Lütfen giriş yapın.");
       router.replace('/login');
@@ -92,7 +91,7 @@ export default function AdminPanel() {
       throw new Error("Oturum bulunamadı. Lütfen tekrar giriş yapın.");
     }
 
-    // URL'yi doğrudan ortam değişkenlerimizden (env) güvenli şekilde alıyoruz
+    
     const url = getApiUrl(`/api/admin${endpoint}`);
 
     const res = await fetch(url, {
@@ -129,7 +128,7 @@ export default function AdminPanel() {
     return data;
   };
 
-  // --- KULLANICI İŞLEMLERİ ---
+  
   const handleSearch = async () => {
     if (!searchQuery.trim()) return;
     setIsSearching(true);
@@ -207,7 +206,7 @@ export default function AdminPanel() {
     ]);
   };
 
-  // --- PERON İŞLEMLERİ ---
+  
   const handleBayStatusChange = (bay) => {
     const isActive = bay.isActive ?? true;
     if (!isActive) return;
@@ -293,7 +292,7 @@ export default function AdminPanel() {
     });
   };
 
-  // --- İSTATİSTİKLER ---
+  
   const activeCount = bays.filter(b => b.isActive !== false).length;
   const availableCount = bays.filter(b => (b.status === 'available' || !b.status) && b.isActive !== false).length;
   const busyCount = bays.filter(b => b.status === 'busy' && b.isActive !== false).length;
@@ -302,7 +301,7 @@ export default function AdminPanel() {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* HEADER */}
+      {}
       <View style={styles.header}>
         <View style={styles.headerTitleRow}>
           <Ionicons name="shield-checkmark" size={24} color={THEME.accentYellow} />
@@ -313,7 +312,7 @@ export default function AdminPanel() {
         </TouchableOpacity>
       </View>
 
-      {/* TABS */}
+      {}
       <View style={styles.tabContainer}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabScroll}>
           {[
@@ -334,10 +333,10 @@ export default function AdminPanel() {
         </ScrollView>
       </View>
 
-      {/* CONTENT */}
+      {}
       <View style={styles.content}>
         
-        {/* MONITOR TAB */}
+        {}
         {activeTab === 'monitor' && (
           <View style={styles.tabSection}>
             <Text style={styles.sectionTitle}>Sistem Günlükleri (Son Olaylar)</Text>
@@ -357,7 +356,7 @@ export default function AdminPanel() {
           </View>
         )}
 
-        {/* STATS TAB */}
+        {}
         {activeTab === 'stats' && (
           <ScrollView style={styles.tabSection}>
             <Text style={styles.sectionTitle}>Anlık Durum</Text>
@@ -372,7 +371,7 @@ export default function AdminPanel() {
           </ScrollView>
         )}
 
-        {/* USERS TAB */}
+        {}
         {activeTab === 'users' && (
           <ScrollView style={styles.tabSection} keyboardShouldPersistTaps="handled">
             <Text style={styles.sectionTitle}>Kullanıcı Yönetimi</Text>
@@ -435,7 +434,7 @@ export default function AdminPanel() {
           </ScrollView>
         )}
 
-        {/* BAYS TAB */}
+        {}
         {activeTab === 'bays' && (
           <View style={styles.tabSection}>
             <View style={styles.bulkRow}>

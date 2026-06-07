@@ -25,7 +25,7 @@ export default function Register() {
   const [sifre2, setSifre2] = useState("");
   const [yukleniyor, setYukleniyor] = useState(false);
   
-  // Şifre göster/gizle state'leri
+  
   const [sifreGoster, setSifreGoster] = useState(false);
   const [sifre2Goster, setSifre2Goster] = useState(false);
 
@@ -62,7 +62,7 @@ export default function Register() {
 
       const userCred = await createUserWithEmailAndPassword(auth, e, sifre);
 
-      // Doğrulama maili gönder
+      
       await sendEmailVerification(userCred.user);
 
       Alert.alert(
@@ -85,7 +85,7 @@ export default function Register() {
   return (
     <KeyboardAvoidingView
       style={{ flex: 1, backgroundColor: "#f8f9fb" }}
-      behavior={Platform.OS === "ios" ? "padding" : "height"} // Android için "height" eklendi
+      behavior={Platform.OS === "ios" ? "padding" : "height"} 
     >
       <ScrollView
         contentContainerStyle={styles.container}
@@ -93,13 +93,13 @@ export default function Register() {
         showsVerticalScrollIndicator={false}
         bounces={false}
       >
-        {/* Tepe Dekorasyonu */}
+        {}
         <View style={styles.topDecor}>
           <View style={styles.decorCircleLarge} />
           <View style={styles.decorCircleSmall} />
         </View>
 
-        {/* Logo ve Başlık Alanı */}
+        {}
         <View style={styles.brandArea}>
           <View style={styles.logoBox}>
             <Image
@@ -112,10 +112,10 @@ export default function Register() {
           <Text style={styles.brandSubtitle}>Yeni bir hesap oluşturun</Text>
         </View>
 
-        {/* Kayıt Formu Kartı */}
+        {}
         <View style={styles.formCard}>
           
-          {/* E-posta Alanı */}
+          {}
           <View style={styles.fieldGroup}>
             <Text style={styles.fieldLabel}>E-posta</Text>
             <View style={styles.inputWrapper}>
@@ -134,7 +134,7 @@ export default function Register() {
             </View>
           </View>
 
-          {/* Şifre Alanı */}
+          {}
           <View style={styles.fieldGroup}>
             <Text style={styles.fieldLabel}>Şifre</Text>
             <View style={styles.inputWrapper}>
@@ -158,7 +158,7 @@ export default function Register() {
             </View>
           </View>
 
-          {/* Şifre Tekrar Alanı */}
+          {}
           <View style={styles.fieldGroup}>
             <Text style={styles.fieldLabel}>Şifre Tekrar</Text>
             <View style={styles.inputWrapper}>
@@ -183,7 +183,7 @@ export default function Register() {
             </View>
           </View>
 
-          {/* Kayıt Ol Butonu */}
+          {}
           <Pressable
             onPress={kayitOl}
             disabled={yukleniyor}
@@ -201,7 +201,7 @@ export default function Register() {
           </Pressable>
         </View>
 
-        {/* Alt Yönlendirme Alanı */}
+        {}
         <View style={styles.bottomRow}>
           <Text style={styles.bottomHint}>Zaten hesabın var mı?</Text>
           <Pressable
@@ -261,7 +261,7 @@ const styles = StyleSheet.create({
     backgroundColor: "transparent",
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 20, // Login ekranındaki boşluk ayarı login ile uyumlu tutuldu
+    marginBottom: 20, 
     marginTop: 20,
     elevation: 8,
   },
@@ -284,7 +284,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
     borderRadius: 20,
     padding: 20,
-    gap: 16, // Inputlar arası boşluk
+    gap: 16, 
     borderWidth: 1,
     borderColor: "#e5e7eb",
     shadowColor: "#000",

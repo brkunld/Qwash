@@ -8,7 +8,6 @@ import {
 import { getDatabase } from "firebase/database";
 import { getFirestore } from "firebase/firestore";
 
-// ================= ENV KONTROL =================
 const requiredFirebaseEnv = {
   EXPO_PUBLIC_FIREBASE_API_KEY: process.env.EXPO_PUBLIC_FIREBASE_API_KEY,
   EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN: process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN,
@@ -39,7 +38,6 @@ if (missingFirebaseEnv.length > 0) {
   }
 }
 
-// ================= FIREBASE CONFIG =================
 const firebaseConfig = {
   apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY,
   authDomain: process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN,
@@ -50,11 +48,8 @@ const firebaseConfig = {
   databaseURL: process.env.EXPO_PUBLIC_FIREBASE_DATABASE_URL,
 };
 
-// Firebase app'i tek sefer başlat
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 
-// Auth'u React Native persistence ile başlat.
-// Hot reload / tekrar import durumunda initializeAuth hata verirse mevcut auth alınır.
 let authInstance;
 
 try {
@@ -67,5 +62,5 @@ try {
 
 export const auth = authInstance;
 export const db = getFirestore(app);
-// firebase.js
+
 export const rtdb = getDatabase(app, process.env.EXPO_PUBLIC_FIREBASE_DATABASE_URL);

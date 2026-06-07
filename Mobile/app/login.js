@@ -44,7 +44,7 @@ export default function Login() {
     setYukleniyor(true);
 
     try {
-      // 1. Firebase Auth Girişi
+      
       const userCredential = await signInWithEmailAndPassword(
         auth,
         email.trim(),
@@ -52,7 +52,7 @@ export default function Login() {
       );
       const user = userCredential.user;
 
-      // 2. Email Doğrulama Kontrolü
+      
       if (!user.emailVerified) {
         await user.reload();
         if (!user.emailVerified) {
@@ -63,20 +63,20 @@ export default function Login() {
         }
       }
 
-      // 3. Admin (Özel Yetki - Custom Claims) Kontrolü
-      // Veritabanına sormadan doğrudan kullanıcının şifreli jetonunu çözüyoruz
+      
+      
       const idTokenResult = await user.getIdTokenResult(true);
       const isAdmin =
         idTokenResult.claims.admin === true ||
         idTokenResult.claims.role === "admin";
 
       if (isAdmin) {
-        // Kullanıcı admin ise profil kontrolüne takılmadan direkt admin paneline gönder
+        
         router.replace("/admin-panel");
         return;
       }
 
-      // 4. Profil Kontrolü (Sadece normal kullanıcılar için çalışır)
+      
       const userSnap = await getDoc(doc(db, "users", user.uid));
 
       if (userSnap.exists()) {

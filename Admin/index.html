@@ -9,7 +9,7 @@
     />
     <style>
       :root {
-        /* Mobil Uygulama Renk Paleti */
+        
         --bg-main: #f8f9fb;
         --bg-card: #ffffff;
         --sidebar-bg: #1a1a2e;
@@ -57,7 +57,7 @@
         overflow: hidden;
       }
 
-      /* ── SIDEBAR ── */
+      
       #sidebar {
         width: 260px;
         flex-shrink: 0;
@@ -235,7 +235,7 @@
         color: #fca5a5;
       }
 
-      /* ── MAIN ── */
+      
       #main {
         flex: 1;
         display: flex;
@@ -243,7 +243,7 @@
         overflow: hidden;
       }
 
-      /* ── TOPBAR ── */
+      
       .topbar {
         height: 64px;
         flex-shrink: 0;
@@ -330,7 +330,7 @@
         background: var(--bg-card);
       }
 
-      /* ── CONTENT ── */
+      
       #content {
         flex: 1;
         overflow-y: auto;
@@ -399,7 +399,7 @@
         color: var(--text-muted);
       }
 
-      /* ── CARDS (Genel) ── */
+      
       .card-base {
         background: var(--bg-card);
         border: 1px solid var(--border);
@@ -408,7 +408,7 @@
         overflow: hidden;
       }
 
-      /* ── LOG BOX ── */
+      
       .log-box {
         background: var(--bg-card);
         border: 1px solid var(--border);
@@ -479,7 +479,7 @@
         color: var(--text-main);
       }
 
-      /* ── SEARCH ── */
+      
       .search-wrap {
         background: var(--bg-card);
         border: 1px solid var(--border);
@@ -496,7 +496,7 @@
         gap: 12px;
       }
 
-      /* Inputs & Buttons styled like mobile app */
+      
       .inp {
         flex: 1;
         padding: 14px 16px;
@@ -557,7 +557,7 @@
         color: var(--success);
       }
 
-      /* ── USER CARD ── */
+      
       .user-card {
         background: var(--bg-card);
         border: 1px solid var(--border);
@@ -650,7 +650,7 @@
         vertical-align: middle;
       }
 
-      /* ── BULK BAY ACTIONS ── */
+      
       .bulk-actions {
         background: var(--bg-card);
         border: 1px solid var(--border);
@@ -700,7 +700,7 @@
         color: var(--danger);
       }
 
-      /* ── STATS ── */
+      
       .stats-grid {
         display: grid;
         grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
@@ -789,7 +789,7 @@
         background: var(--danger);
       }
 
-      /* ── BAY GRID ── */
+      
       .bay-grid {
         display: grid;
         grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
@@ -914,7 +914,7 @@
         cursor: not-allowed;
       }
 
-      /* ── SCROLLBAR ── */
+      
       ::-webkit-scrollbar {
         width: 6px;
       }
@@ -929,7 +929,7 @@
         background: var(--text-muted);
       }
 
-      /* ── LOGIN (Tamamen login.js uyumlu) ── */
+      
       #login-screen {
         position: fixed;
         inset: 0;
@@ -1087,7 +1087,7 @@
         display: none;
         text-align: center;
       }
-      /* --- CUSTOM CONFIRM MODAL --- */
+      
       #custom-confirm-overlay {
         position: fixed;
         inset: 0;
@@ -1144,7 +1144,7 @@
         background: #e5e7eb;
       }
       .btn-confirm {
-        background: #ef4444; /* Kırmızı uyarı rengi */
+        background: #ef4444; 
         color: white;
       }
       .btn-confirm:hover {
@@ -1165,14 +1165,14 @@
         }
       }
 
-      /* --- GLOBAL YÜKLEME (LOADER) EKRANI --- */
+      
       #global-loader {
         position: fixed;
         inset: 0;
         background: rgba(17, 24, 39, 0.8);
         backdrop-filter: blur(5px);
-        z-index: 99999; /* En üstte durması için */
-        display: none; /* Başlangıçta gizli */
+        z-index: 99999; 
+        display: none; 
         flex-direction: column;
         align-items: center;
         justify-content: center;
@@ -1183,7 +1183,7 @@
         width: 48px;
         height: 48px;
         border: 4px solid rgba(255, 255, 255, 0.2);
-        border-top-color: var(--accent-yellow); /* Sarı renkli dönen kısım */
+        border-top-color: var(--accent-yellow); 
         border-radius: 50%;
         animation: spin 1s linear infinite;
         margin-bottom: 16px;
@@ -1215,7 +1215,7 @@
         color: #ef4444;
         box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
         transition: all 0.2s ease;
-        z-index: 101; /* Dekorların ve arkaplanın üstünde kalması için */
+        z-index: 101; 
       }
 
       .login-close-btn:hover {
@@ -1806,7 +1806,7 @@
         return await fetch(`${API_BASE}${path}`, { ...options, headers });
       }
 
-      // --- ÖZEL BİLDİRİM (TOAST) SİSTEMİ ---
+      
       window.showToast = function (mesaj, tip = "error") {
         let container = document.getElementById("toast-container");
         if (!container) {
@@ -1833,7 +1833,7 @@
         toast.textContent = mesaj;
         container.appendChild(toast);
 
-        // Animasyonla ekrana giriş yap
+        
         requestAnimationFrame(() => {
           setTimeout(() => {
             toast.style.opacity = "1";
@@ -1841,7 +1841,7 @@
           }, 10);
         });
 
-        // 3 saniye sonra ekrandan çık
+        
         setTimeout(() => {
           toast.style.opacity = "0";
           toast.style.transform = "translateX(100%)";
@@ -1849,7 +1849,7 @@
         }, 3000);
       };
 
-      // --- ÖZEL ONAY (CONFIRM) SİSTEMİ ---
+      
       window.showConfirm = function (mesaj) {
         return new Promise((resolve) => {
           const overlay = document.getElementById("custom-confirm-overlay");
@@ -1860,20 +1860,20 @@
           msgEl.textContent = mesaj;
           overlay.style.display = "flex";
 
-          // Temizleme ve kapatma işlemi
+          
           const cleanup = () => {
             overlay.style.display = "none";
             btnYes.onclick = null;
             btnNo.onclick = null;
           };
 
-          // "Evet"e basılırsa true döndür
+          
           btnYes.onclick = () => {
             cleanup();
             resolve(true);
           };
 
-          // "Hayır"a basılırsa false döndür
+          
           btnNo.onclick = () => {
             cleanup();
             resolve(false);
@@ -1987,7 +1987,7 @@
         });
       });
 
-      // --- YÜKLEME (LOADER) GÖSTER/GİZLE YARDIMCILARI ---
+      
       window.showLoader = function (mesaj = "Lütfen bekleyin...") {
         document.getElementById("loader-text").textContent = mesaj;
         document.getElementById("global-loader").style.display = "flex";
@@ -1997,9 +1997,9 @@
         document.getElementById("global-loader").style.display = "none";
       };
 
-      // --- ÇIKIŞ YAPMA İŞLEMİ (GÜNCELLENDİ) ---
+      
       window.doLogout = async function () {
-        // Çıkış yaparken dönen halkayı göster
+        
         window.showLoader("Güvenli çıkış yapılıyor...");
 
         try {
@@ -2007,25 +2007,25 @@
         } catch (e) {
           console.error("Çıkış hatası:", e);
         } finally {
-          // Kısa bir bekleme (animasyonun görünmesi için) sonrası giriş ekranına at
+          
           setTimeout(() => {
             window.hideLoader();
             document.getElementById("login-screen").style.display = "flex";
             document.getElementById("email").value = "";
             document.getElementById("password").value = "";
             document.getElementById("error-msg").style.display = "none";
-          }, 800); // 800 milisaniye (0.8 saniye) gösterip kapatır
+          }, 800); 
         }
       };
 
-      // --- UYGULAMAYI KAPATMA İŞLEMİ (GÜNCELLENDİ) ---
+      
       window.quitApplication = async function () {
         const onaylandi = await showConfirm(
           "Uygulamayı kapatmak istediğinize emin misiniz?",
         );
 
         if (onaylandi) {
-          // Uygulama kapanırken de halkayı göster
+          
           window.showLoader("Oturum kapatılıyor, uygulama sonlandırılıyor...");
 
           try {
@@ -2034,7 +2034,7 @@
             console.error("Kapanış çıkış hatası:", e);
           }
 
-          // Kapanma emrini gönder
+          
           setTimeout(() => {
             if (window.electronAPI && window.electronAPI.closeApp) {
               window.electronAPI.closeApp();
@@ -2045,7 +2045,7 @@
                 "warning",
               );
             }
-          }, 1000); // 1 saniye loading animasyonu gösterip sonra uygulamayı komple kapatır
+          }, 1000); 
         }
       };
 
@@ -2181,7 +2181,7 @@
 
           const btn = document.getElementById("add-token-btn");
 
-          // İşlem süresince butonu ve input'u geçici olarak kilitle
+          
           btn.disabled = true;
           inputEl.disabled = true;
 
@@ -2200,23 +2200,23 @@
             const el = document.getElementById("res-tokens");
             el.textContent = parseInt(el.textContent || "0", 10) + amount;
 
-            // İşlem başarılı oldu. UI kilitlerini kaldırıp kutuyu temizle
+            
             inputEl.value = "";
             btn.disabled = false;
             inputEl.disabled = false;
 
-            // --- SAĞ ÜSTTE ÇIKAN BİLDİRİM (FİYAT EKLENDİ) ---
+            
             showToast(
               `${data.tokensAdded} jeton (${data.amountTRY} ₺) başarıyla eklendi.`,
               "success",
             );
 
-            // Küçük bir gecikmeyle input'a tekrar odaklan
+            
             setTimeout(() => {
               inputEl.focus();
             }, 50);
 
-            // Sol taraftaki sistem loglarına da yazdır
+            
             appendLocalLog(
               `Kullanıcıya (${selectedUserId}) ${data.tokensAdded} jeton (${data.amountTRY} ₺ karşılığında) yüklendi.`,
               "success",
@@ -2224,7 +2224,7 @@
           } catch (e) {
             showToast("Sunucuya ulaşılamadı!", "error");
           } finally {
-            // Hata olsa bile mutlaka kilitleri kaldır
+            
             btn.disabled = false;
             inputEl.disabled = false;
           }
@@ -2370,7 +2370,7 @@
         });
       };
 
-      // === GÜNCELLENMİŞ PERON İŞLEMLERİ (ONAY SİSTEMLİ) ===
+      
 
       window.changeBayStatus = async function (bayId, currentStatus, isActive) {
         if (!isActive) return;
@@ -2378,14 +2378,14 @@
         const next =
           STATUS_CYCLE[idx === -1 ? 0 : (idx + 1) % STATUS_CYCLE.length];
 
-        // Artık "available" durumuna geçerken de içeride müşteri varsa onay isteyecek
+        
         if (previousBaysState && previousBaysState[bayId]) {
           const bay = previousBaysState[bayId];
           if (bay.status === "busy" || bay.currentSessionId) {
             const isConfirmed = await showConfirm(
               `DİKKAT: ${bayId} peronunda şu anda aktif bir araç yıkama işlemi var!\n\nYine de durumunu "${STATUS_LABELS[next].text}" olarak değiştirmek istiyor musunuz? (İşlem yarıda kesilebilir)`,
             );
-            if (!isConfirmed) return; // Yönetici iptal etti
+            if (!isConfirmed) return; 
           }
         }
 
@@ -2396,7 +2396,7 @@
       };
 
       window.toggleBayActive = async function (bayId, isCurrentlyActive) {
-        // Eğer peron KAPATILIYORSA (offline) ve içeride müşteri varsa onay iste
+        
         if (
           isCurrentlyActive &&
           previousBaysState &&
@@ -2407,7 +2407,7 @@
             const isConfirmed = await showConfirm(
               `DİKKAT: ${bayId} peronunda şu anda aktif bir araç yıkama işlemi var!\n\nYine de peronu tamamen KAPATMAK istiyor musunuz?`,
             );
-            if (!isConfirmed) return; // Yönetici iptal etti
+            if (!isConfirmed) return; 
           }
         }
 
@@ -2428,7 +2428,7 @@
             const data = snap.val();
             if (!data) return;
 
-            // Artık targetStatus === "available" olsa BİLE içeride araç varsa kontrol edecek
+            
             const busyBays = Object.values(data).filter(
               (bay) => bay.status === "busy" || bay.currentSessionId,
             );
@@ -2442,7 +2442,7 @@
               const isConfirmed = await showConfirm(
                 `DİKKAT: Şu anda ${busyBays.length} peronda aktif yıkama işlemi devam ediyor!\n\nYine de TÜM peronları toplu olarak "${durumMetni}" istiyor musunuz?`,
               );
-              if (!isConfirmed) return; // Yönetici iptal etti
+              if (!isConfirmed) return; 
             }
 
             Object.keys(data).forEach((bayId) =>
@@ -2467,7 +2467,7 @@
             const data = snap.val();
             if (!data) return;
 
-            // Toplu kapatma öncesi meşgul peronları bul
+            
             const busyBays = Object.values(data).filter(
               (bay) => bay.status === "busy" || bay.currentSessionId,
             );
@@ -2475,7 +2475,7 @@
               const isConfirmed = await showConfirm(
                 `DİKKAT: Şu anda ${busyBays.length} peronda aktif yıkama işlemi devam ediyor!\n\nYine de TÜM peronları toplu olarak KAPATMAK istiyor musunuz?`,
               );
-              if (!isConfirmed) return; // Yönetici iptal etti
+              if (!isConfirmed) return; 
             }
 
             Object.keys(data).forEach((bayId) =>
@@ -2500,7 +2500,7 @@
             const data = snap.val();
             if (!data) return;
 
-            // "Tümünü Aktif Et" (Available) butonuna da onay mekanizması eklendi
+            
             const busyBays = Object.values(data).filter(
               (bay) => bay.status === "busy" || bay.currentSessionId,
             );
@@ -2508,7 +2508,7 @@
               const isConfirmed = await showConfirm(
                 `DİKKAT: Şu anda ${busyBays.length} peronda aktif yıkama işlemi devam ediyor!\n\nYine de TÜM peronları toplu olarak AKTİF VE BOŞ hale getirmek istiyor musunuz?`,
               );
-              if (!isConfirmed) return; // Yönetici iptal etti
+              if (!isConfirmed) return; 
             }
 
             Object.keys(data).forEach((bayId) =>

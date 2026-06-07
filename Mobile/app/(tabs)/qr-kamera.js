@@ -11,8 +11,6 @@ import {
   View,
 } from "react-native";
 
-// Firebase auth export adın farklıysa burayı kendi firebase dosyana göre değiştir.
-// Örn: firebase.js içinde export const auth = getAuth(app); olmalı.
 import { auth } from "../../firebase";
 
 const API_TIMEOUT_MS = 10000;
@@ -85,7 +83,7 @@ export default function QrKamera() {
         if (obj?.id) bayId = String(obj.id).trim();
         if (obj?.bayId) bayId = String(obj.bayId).trim();
       } catch {
-        // JSON değilse raw değer kullanılmaya devam eder.
+        
       }
     }
 

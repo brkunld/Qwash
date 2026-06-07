@@ -32,8 +32,8 @@
       "firebase-config.js",
       "firebase-config-browser.js",
       "secrets.js",
-      "images/**/*",
-      "build/**/*"
+      "images*",
+      "build*"
     ],
     "win": {
       "target": "nsis",

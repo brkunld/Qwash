@@ -1,4 +1,4 @@
-/* eslint-disable react-hooks/exhaustive-deps */
+
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "expo-router";
 import Svg, { Path, Circle } from "react-native-svg";
@@ -357,7 +357,7 @@ export default function KullaniciEkrani() {
   const [stoppingEffects, setStoppingEffects] = useState({});
   const [lastEffectTypeByBay, setLastEffectTypeByBay] = useState({});
   const effectTimersRef = useRef({});
-  // ----------------------------------------
+  
 
   const {
     authYukleniyor,
@@ -487,7 +487,7 @@ export default function KullaniciEkrani() {
 
   return (
     <View style={styles.container}>
-      {/* Header */}
+      {}
       <View style={styles.header}>
         <View style={styles.headerBadge}>
           <Text style={styles.headerBadgeText}> Ana Sayfa </Text>
@@ -512,7 +512,7 @@ export default function KullaniciEkrani() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: 24 }}
       >
-        {/* Bakiye Kartı */}
+        {}
         <View style={styles.card}>
           <Text style={styles.cardLabel}>🪙 Jeton Bakiyesi</Text>
 
@@ -532,7 +532,7 @@ export default function KullaniciEkrani() {
           </Pressable>
         </View>
 
-        {/* Bay Listesi */}
+        {}
         {aktifBayIdListesi.length === 0 ? (
           <Text
             style={{ textAlign: "center", color: GRAY_TEXT, marginTop: 20 }}
@@ -578,7 +578,7 @@ export default function KullaniciEkrani() {
                         </Text>
                       </View>
 
-                      {/* Aktif modun ikonu */}
+                      {}
                       {sessionVarMi && session?.type === "wash" && (
                         <Ionicons
                           name="water-outline"
@@ -597,7 +597,7 @@ export default function KullaniciEkrani() {
                       )}
                     </View>
 
-                    {/* Ayrıl */}
+                    {}
                     <Pressable
                       onPress={() => perondanCik(bayId)}
                       disabled={sessionVarMi}
@@ -649,7 +649,7 @@ export default function KullaniciEkrani() {
                   ) : (
                     <View style={styles.startSection}>
                       <View style={styles.row}>
-                        {/* Su */}
+                        {}
                         <Pressable
                           onPress={() => handleStartSession(bayId, "wash")}
                           disabled={islemde || bakiyeYukleniyor}
@@ -666,7 +666,7 @@ export default function KullaniciEkrani() {
                           <Text style={styles.startBtnText}>Su</Text>
                         </Pressable>
 
-                        {/* Köpük */}
+                        {}
                         <Pressable
                           onPress={() => handleStartSession(bayId, "foam")}
                           disabled={islemde || bakiyeYukleniyor}
@@ -688,18 +688,18 @@ export default function KullaniciEkrani() {
         )}
       </ScrollView>
 
-{/* Bakiye Yükle Modal */}
+{}
       <Modal visible={yuklemeAcik} transparent animationType="slide">
         <KeyboardAvoidingView
           style={styles.modalOverlay}
           behavior={Platform.OS === "ios" ? "padding" : "height"}
         >
-          {/* DIŞARIYA TIKLANDIĞINDA MODALI KAPATAN ANA PRESSABLE */}
+          {}
           <Pressable
             style={{ flex: 1, justifyContent: "flex-end" }}
             onPress={() => setYuklemeAcik(false)}
           >
-            {/* MODAL İÇİNE TIKLANDIĞINDA KAPANMAYI ENGELLEYEN İÇ PRESSABLE */}
+            {}
             <Pressable
               style={[styles.modalBox, { maxHeight: "60%" }]}
               onPress={(e) => e.stopPropagation()}
@@ -729,7 +729,7 @@ export default function KullaniciEkrani() {
                     value={jetonAdet}
                     onChangeText={(t) => {
                       let val = t.replace(/[^0-9]/g, "");
-                      if (parseInt(val) > 100) val = "100"; // Maksimum 100 sınırı
+                      if (parseInt(val) > 100) val = "100"; 
                       setJetonAdet(val);
                     }}
                     keyboardType="number-pad"
@@ -799,7 +799,7 @@ export default function KullaniciEkrani() {
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* Profil Modal */}
+      {}
       <Modal visible={profilAcik} transparent animationType="slide">
         <KeyboardAvoidingView
           style={styles.modalOverlay}
@@ -922,7 +922,7 @@ function ProgressBar({ session }) {
 
 const styles = StyleSheet.create({
 
-  // Modaldaki Yeni Stepper (Arttır/Azalt) Stilleri
+  
   stepperContainer: {
     flexDirection: "row",
     alignItems: "center",
@@ -953,9 +953,9 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
 
-  // Modaldaki Yeni Fiyat Fişi (Receipt) Stilleri
+  
   fiyatBox: {
-    backgroundColor: "#fefbed", // Hafif sarımtırak arka plan
+    backgroundColor: "#fefbed", 
     borderWidth: 1.5,
     borderColor: "#fde68a",
     borderRadius: 16,
@@ -994,7 +994,7 @@ const styles = StyleSheet.create({
   fiyatTotal: {
     fontSize: 22,
     fontWeight: "900",
-    color: "#d97706", // Daha vurgulu bir sarı/turuncu
+    color: "#d97706", 
   },
   container: { flex: 1, backgroundColor: GRAY_BG },
   centered: {

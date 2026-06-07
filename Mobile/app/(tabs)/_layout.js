@@ -1,16 +1,16 @@
-import { Ionicons } from "@expo/vector-icons"; // İkon kullanmak isterseniz
+import { Ionicons } from "@expo/vector-icons"; 
 import { Tabs } from "expo-router";
 
 export default function TabLayout() {
   return (
     <Tabs
       screenOptions={{
-        headerShown: false, // Üst başlığı gizler
-        tabBarShowLabel: false, // ALTAKİ YAZILARI KALDIRAN SATIR
+        headerShown: false, 
+        tabBarShowLabel: false, 
         tabBarStyle: {
           backgroundColor: "#ffffff",
           borderTopWidth: 0,
-          elevation: 5, // Android gölge
+          elevation: 5, 
           height: 60,
         },
       }}

@@ -1,14 +1,4 @@
-// =============================================================
-// QWash Bay Controller – ESP32 Firmware  v4
-// • strEqI() tek yerde → normalizePackage + isCancelValue lambda tekrarı yok
-// • strtrim() geri eklendi → mqttCallback temizlendi
-// • initiateCancelFlow() → sendCancelRequest + cancelPaymentWait tekrarı yok
-// • resetForBackendCommand() kaldırıldı, resetUiFlow() yeterli
-// • isCancelValue: 8x if → array + döngü
-// • drawStatusScreenIfNeeded: char* param → static yerel değişken
-// • setCurrentStatus zaten stateChanged=true yapıyor, gereksiz tekrarlar silindi
-// NOT: SU/KOPUK dokunmatik mapping mevcut davranışla aynı bırakıldı.
-// =============================================================
+
 
 #include <WiFi.h>
 #include <FS.h>
@@ -28,7 +18,6 @@
 #include "qrcode.h"
 #include "secrets.h"
 
-// ================= DEBUG =================
 #define DEBUG_LOG 1
 
 #if DEBUG_LOG
@@ -39,8 +28,6 @@
   #define LOG_PRINTLN(x)
 #endif
 
-// ================= UI / DOKUNMATIK =================
-// Arduino .ino otomatik prototype sorunlarını önlemek için enum/struct en üstte.
 enum UiMode {
   UI_NORMAL,
   UI_ERROR,
@@ -59,11 +46,8 @@ const TouchButton BTN_SU    = { 20,  80,  150, 170 };
 const TouchButton BTN_KOPUK = { 170, 80,  300, 170 };
 const TouchButton BTN_IPTAL = { 100, 200, 220, 235 };
 
-// ================= SABITLER =================
-// Watchdog
 const int WDT_TIMEOUT_SEC = 15;
 
-// Zamanlama (ms)
 const unsigned long WIFI_TIMEOUT_MS            = 10000;
 const unsigned long WIFI_RETRY_INTERVAL_MS     = 10000;
 const unsigned long WIFI_RECONNECT_TIMEOUT_MS  = 10000;
@@ -80,41 +64,33 @@ const unsigned long CANCEL_SCREEN_MS           = 300;
 const unsigned long FORWARDING_SCREEN_MS       = 500;
 const unsigned long BUTTON_DEBOUNCE_MS         = 200;
 
-// WiFi reset butonu
 const unsigned long WIFI_RESET_HOLD_START_MS   = 2000;
 const unsigned long WIFI_RESET_HOLD_TOTAL_MS   = 10000;
 
-// Süre sınırları
 const int MIN_DURATION_SEC = 10;
 const int MAX_DURATION_SEC = 3600;
 
-// Buzzer frekansları
 const int BUZZ_TICK_HZ       = 2000;
 const int BUZZ_URGENT_HZ     = 2500;
 const int BUZZ_DONE_HZ       = 1000;
 const int BUZZ_RESET_HZ      = 2000;
 const int BUZZ_RESET_LONG_HZ = 1000;
 
-// Pinler
 const int PIN_BUZZER   = 25;
 const int PIN_BTN_FOAM = 32;
 
-// ================= GLOBAL NESNELER =================
 TFT_eSPI tft = TFT_eSPI();
 
 WiFiClientSecure mqttSecureClient;
 PubSubClient mqttClient(mqttSecureClient);
 
-// ================= WATCHDOG =================
 bool wdtStarted = false;
 bool loopTaskRegistered = false;
 
-// ================= NTP / SAAT =================
 bool clockValid = false;
 bool offlineDueToClockError = false;
 unsigned long lastNtpAttemptMs = 0;
 
-// ================= MQTT =================
 char mqttClientId[64]        = {0};
 char mqttTopicCommands[128]  = {0};
 char mqttTopicStatus[128]    = {0};
@@ -140,7 +116,6 @@ char lastPublishedStatus[32] = {0};
 unsigned long lastStatusPublishMs = 0;
 uint32_t mqttEventCounter = 0;
 
-// ================= ISLEM / BAY DURUMU =================
 unsigned long processStartMs = 0;
 unsigned long processDurationMs = 0;
 
@@ -152,16 +127,13 @@ char requestedPackage[64] = {0};
 int durationSec = 60;
 bool newBusyCommandArrived = false;
 
-// ================= WIFI =================
 unsigned long lastWifiAttemptMs = 0;
 bool wifiReconnectInProgress = false;
 bool wifiWasConnected = false;
 unsigned long wifiReconnectStartMs = 0;
 
-// ================= HEARTBEAT =================
 unsigned long lastHeartbeatMs = 0;
 
-// ================= WAITING / SAYAC =================
 unsigned long waitingStartMs = 0;
 int lastBarWidth = -1;
 
@@ -169,22 +141,16 @@ int counterLastSec = -1;
 unsigned long counterLastHalfSecMs = 0;
 bool counterDoneBeepPlayed = false;
 
-// ================= UI STATE =================
 UiMode uiMode = UI_NORMAL;
 unsigned long uiModeStartMs = 0;
 char pendingPackage[64] = {0};
 
-// ================= GENEL BAYRAKLAR =================
 bool stateChanged = true;
 unsigned long lastCancelEventMs = 0;
 
-// ================= BUTON DEBOUNCE =================
 unsigned long lastFoamButtonMs = 0;
 bool prevFoamButtonState = HIGH;
 
-// ============================================================
-// Forward declarations
-// ============================================================
 void goAvailable(const char* reason, bool sendCancel);
 void initiateCancelFlow(const char* reason);
 void sendCancelEvent();
@@ -207,9 +173,6 @@ bool mqttPublishSelection(const char* selectedPackage);
 bool mqttPublishEvent(const char* eventMessage);
 bool mqttPublishStatusForce();
 
-// ================= STRING YARDIMCILARI =================
-
-/* strEqI – büyük/küçük harf duyarsız karşılaştırma; tek tanım, her yerde kullanılır */
 static inline bool strEqI(const char* a, const char* b) {
   for (; *a && *b; ++a, ++b) {
     char ca = *a; if (ca >= 'A' && ca <= 'Z') ca += 'a' - 'A';
@@ -219,7 +182,6 @@ static inline bool strEqI(const char* a, const char* b) {
   return *a == '\0' && *b == '\0';
 }
 
-/* strtrim – baş ve sondaki whitespace'i yerinde siler */
 static void strtrim(char* s) {
   if (!s) return;
   char* start = s;
@@ -230,7 +192,6 @@ static void strtrim(char* s) {
   *end = '\0';
 }
 
-/* normalizePackage – paket adını standart forma çevirir */
 const char* normalizePackage(const char* package) {
   if (!package) return "";
   if (strEqI(package,"foam")||strEqI(package,"kopuk")||strEqI(package,"köpük")||strEqI(package,"kopup"))
@@ -240,7 +201,6 @@ const char* normalizePackage(const char* package) {
   return "";
 }
 
-/* isCancelValue – iptal türü değerleri tanır; array + döngü ile tek nokta */
 bool isCancelValue(const char* value) {
   if (!value) return false;
   static const char* const CANCEL_TOKENS[] = {
@@ -252,7 +212,6 @@ bool isCancelValue(const char* value) {
   return false;
 }
 
-// ================= UI HELPERS =================
 void setUiMode(UiMode mode) {
   uiMode = mode;
   uiModeStartMs = millis();
@@ -266,7 +225,6 @@ bool uiModeIs(UiMode mode) {
   return uiMode == mode;
 }
 
-/* inputAllowed – kullanıcı girişine izin verilen durumu tek yerde tanımlar */
 bool inputAllowed() {
   return currentStatusIs("waiting") && uiModeIs(UI_NORMAL);
 }
@@ -275,13 +233,11 @@ bool isTouched(uint16_t x, uint16_t y, const TouchButton& btn) {
   return x >= btn.x1 && x <= btn.x2 && y >= btn.y1 && y <= btn.y2;
 }
 
-/* resetUiFlow – UI akışını temizler */
 void resetUiFlow() {
   setUiMode(UI_NORMAL);
   pendingPackage[0] = '\0';
 }
 
-// ================= WATCHDOG =================
 void watchdogFeed() {
   if (wdtStarted) esp_task_wdt_reset();
 }
@@ -335,11 +291,10 @@ void watchdogRegisterTask(const char* taskName) {
   }
 }
 
-// ================= YARDIMCI =================
 bool isClockValid() {
   time_t now;
   time(&now);
-  return now > 1672531200; // 2023-01-01 sonrası yeterli kabul edilir.
+  return now > 1672531200; 
 }
 
 void resetCounterState() {
@@ -373,7 +328,6 @@ void logHeap(const char* stage) {
   LOG_PRINTLN(ESP.getMinFreeHeap());
 }
 
-// ================= EKRANLAR =================
 void drawClosed() {
   tft.fillScreen(TFT_BLACK);
   tft.setTextColor(TFT_RED);
@@ -458,11 +412,10 @@ void startTempScreen(UiMode mode, const char* package = "") {
   else if (mode == UI_TEMP_FORWARDING) drawMessage("Istek iletiliyor...", TFT_YELLOW);
 }
 
-/* checkUiMode – tüm UI mod timeout'larını tek yerden yönetir */
 void checkUiMode() {
   if (uiModeIs(UI_NORMAL) || uiModeIs(UI_WIFI_RESET)) return;
 
-  // Durum dışarıdan değiştiyse geçici UI'ı temizle
+  
   if ((uiModeIs(UI_TEMP_CANCEL) || uiModeIs(UI_TEMP_FORWARDING)) && !currentStatusIs("waiting")) {
     setUiMode(UI_NORMAL);
     return;
@@ -471,7 +424,7 @@ void checkUiMode() {
   unsigned long elapsed = millis() - uiModeStartMs;
 
   if (uiModeIs(UI_TEMP_CANCEL) && elapsed >= CANCEL_SCREEN_MS) {
-    // initiateCancelFlow çağrısı yerine doğrudan: bu mod geçiş zincirinin başlangıcı
+    
     initiateCancelFlow("user_tap");
     return;
   }
@@ -490,7 +443,7 @@ void checkUiMode() {
     setCurrentStatus("available");
     isBayActive = true;
     clearProcessState();
-    // stateChanged zaten setCurrentStatus içinde true yapılır
+    
     mqttPublishStatus();
     return;
   }
@@ -507,7 +460,6 @@ void checkUiMode() {
   }
 }
 
-// ================= QR =================
 static void qrDrawCallback(esp_qrcode_handle_t qrcode) {
   int qrSize   = esp_qrcode_get_size(qrcode);
   int maxQrPx  = min(tft.width(), tft.height()) - 20;
@@ -535,7 +487,6 @@ void drawQR(const char* text) {
   esp_qrcode_generate(&cfg, text);
 }
 
-// ================= WIFI =================
 bool connectWifi(unsigned long timeoutMs) {
   if (WiFi.status() == WL_CONNECTED) return true;
 
@@ -634,7 +585,6 @@ void checkWifiReconnect() {
   }
 }
 
-// ================= NTP =================
 bool attemptNtp(unsigned long timeoutMs, bool showOnScreen) {
   configTime(3 * 3600, 0, "pool.ntp.org", "time.nist.gov");
 
@@ -669,7 +619,6 @@ bool attemptNtp(unsigned long timeoutMs, bool showOnScreen) {
 bool ntpWait(unsigned long timeoutMs = 20000)  { return attemptNtp(timeoutMs, true);  }
 bool ntpSilent(unsigned long timeoutMs = 10000){ return attemptNtp(timeoutMs, false); }
 
-// ================= MQTT HELPERS =================
 void mqttPrepareTopics() {
   snprintf(mqttClientId,       sizeof(mqttClientId),       "qwash_esp32_%s", macAddress);
   snprintf(mqttTopicCommands,  sizeof(mqttTopicCommands),  "qwash/bays/%s/commands",  bayId);
@@ -831,9 +780,6 @@ bool mqttPublishEvent(const char* eventMessage) {
   return mqttEnqueue(mqttTopicEvent, payload, false);
 }
 
-// ================= CANCEL / DURUM GEÇİŞLERİ =================
-
-/* sendCancelEvent – CANCEL mesajını gönderir, debounce korumalı */
 void sendCancelEvent() {
   unsigned long now = millis();
   if (now - lastCancelEventMs < CANCEL_EVENT_DEBOUNCE_MS) {
@@ -867,7 +813,6 @@ void initiateCancelFlow(const char* reason) {
   drawMessage("Iptal ediliyor...", TFT_RED);
 }
 
-/* goAvailable – cihazı available moduna döndürür */
 void goAvailable(const char* reason, bool sendCancel) {
   LOG_PRINT(F("AVAILABLE moduna donuluyor. Sebep: "));
   LOG_PRINTLN(reason);
@@ -880,14 +825,13 @@ void goAvailable(const char* reason, bool sendCancel) {
 
   setCurrentStatus("available");
   isBayActive = true;
-  // stateChanged zaten setCurrentStatus içinde true yapılır
+  
 
   if (sendCancel) sendCancelEvent();
 
   mqttPublishStatus();
 }
 
-// ================= MQTT KOMUT =================
 void applyMqttCommand(const char* command) {
   LOG_PRINT(F("MQTT Komut: "));
   LOG_PRINTLN(command);
@@ -973,14 +917,13 @@ void applyMqttCommand(const char* command) {
       newBusyCommandArrived = true;
       isBayActive           = true;
       setCurrentStatus("busy");
-      // setCurrentStatus stateChanged=true ve setUiMode çağrısına gerek yok
+      
     }
   }
 
   mqttPublishStatusForce();
 }
 
-/* mqttCallback – PubSubClient callback; strtrim ile whitespace temizlenir */
 void mqttCallback(char* topic, byte* payload, unsigned int length) {
   if (length == 0 || length > 120) return;
 
@@ -988,7 +931,7 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
   memcpy(message, payload, length);
   message[length] = '\0';
 
-  strtrim(message); // baş/son whitespace tek satırda temizlendi
+  strtrim(message); 
 
   if (message[0] == '\0') return;
 
@@ -1021,7 +964,7 @@ bool mqttConnect() {
     if (currentStatusIs("offline")) {
       setCurrentStatus("baslangic");
       isBayActive = true;
-      // stateChanged setCurrentStatus içinde true yapılır
+      
     }
   }
 
@@ -1117,8 +1060,6 @@ void mqttTask(void* parameter) {
   }
 }
 
-// ================= LOOP ALT FONKSIYONLARI =================
-
 void handleWifiResetButton() {
   static unsigned long holdStartMs   = 0;
   static bool          holdActive    = false;
@@ -1210,7 +1151,7 @@ void handleWaitingInput() {
     uint16_t x, y;
     if (tft.getTouch(&x, &y)) {
       if      (isTouched(x, y, BTN_IPTAL)) strncpy(selectedPackage, "cancel", sizeof(selectedPackage) - 1);
-      // NOT: Kullanıcının isteğiyle mevcut mapping korunmuştur.
+      
       else if (isTouched(x, y, BTN_KOPUK)) strncpy(selectedPackage, "wash",   sizeof(selectedPackage) - 1);
       else if (isTouched(x, y, BTN_SU))    strncpy(selectedPackage, "foam",   sizeof(selectedPackage) - 1);
     }
@@ -1277,7 +1218,7 @@ void updateCountdown() {
 
     setCurrentStatus("waiting");
     setUiMode(UI_NORMAL);
-    // stateChanged setCurrentStatus içinde true yapılır
+    
     mqttPublishStatus();
   }
 }
@@ -1350,7 +1291,6 @@ void drawStatusScreenIfNeeded() {
   previousStatus[sizeof(previousStatus) - 1] = '\0';
 }
 
-// ================= SETUP =================
 void setup() {
   Serial.begin(115200);
   delay(500);
@@ -1432,7 +1372,6 @@ void setup() {
   watchdogRegisterLoop();
 }
 
-// ================= LOOP =================
 void loop() {
   watchdogFeed();
 
@@ -1474,7 +1413,6 @@ void loop() {
   }
 }
 
-// ================= STATUS HELPERS =================
 void setCurrentStatus(const char* status) {
   if (!status) status = "";
   strncpy(currentStatus, status, sizeof(currentStatus) - 1);

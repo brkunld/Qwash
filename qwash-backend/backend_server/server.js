@@ -12,8 +12,8 @@ const { z } = require("zod");
 const rateLimit = require("express-rate-limit");
 
 const apiLimiter = rateLimit({
-  windowMs: 1 * 60 * 1000, // 1 dakika
-  max: 30, // IP başına 1 dakikada max 30 istek
+  windowMs: 1 * 60 * 1000, 
+  max: 30, 
   message: { error: "Çok fazla istek attınız, lütfen biraz bekleyin." },
 });
 
@@ -25,23 +25,16 @@ if (!APP_BASE_URL) {
   );
 }
 
-
 if (!process.env.IYZICO_API_KEY || !process.env.IYZICO_SECRET_KEY) {
   throw new Error("❌ IYZICO_API_KEY veya IYZICO_SECRET_KEY env eksik. Lütfen .env dosyanızı kontrol edin.");
 }
 
-// =========================================================
-// IYZICO SANDBOX YAPILANDIRMASI
-// =========================================================
 const iyzipay = new Iyzipay({
   apiKey: process.env.IYZICO_API_KEY,
   secretKey: process.env.IYZICO_SECRET_KEY,
   uri: process.env.IYZICO_URI || "https://sandbox-api.iyzipay.com",
 });
 
-// =========================================================
-// FIREBASE SERVICE ACCOUNT
-// =========================================================
 const renderSecretPath = "/etc/secrets/serviceAccountKey.json";
 const localSecretPath = path.join(__dirname, "serviceAccountKey.json");
 
@@ -81,7 +74,7 @@ app.set("trust proxy", 1);
 
 app.use(cors());
 app.use("/api/", (req, res, next) => {
-  // İyzico webhook'unu rate limit engeline takılmaması için muaf tutuyoruz
+  
   if (req.path === "/topup-callback") {
     return next();
   }
@@ -101,9 +94,6 @@ app.use((req, res, next) => {
   return next();
 });
 
-// =========================================================
-// LOG
-// =========================================================
 const safeLog = (message) => {
   const saat = new Date().toLocaleTimeString("tr-TR");
   console.log(`[${saat}] ${message}`);
@@ -160,9 +150,6 @@ const retrieveIyzicoCheckoutForm = (request) => {
   );
 };
 
-// =========================================================
-// MQTT
-// =========================================================
 const MQTT_HOST = process.env.MQTT_HOST;
 const MQTT_PORT = Number(process.env.MQTT_PORT || 8883);
 const MQTT_USER = process.env.MQTT_USER;
@@ -273,10 +260,6 @@ const getClientIp = (req) => {
     req.ip || req.socket?.remoteAddress || req.connection?.remoteAddress || ""
   );
 };
-
-// =========================================================
-// HELPERS
-// =========================================================
 
 const isInvalidBayId = (bayId) => {
   if (!bayId || typeof bayId !== "string") return true;
@@ -562,9 +545,6 @@ const markMqttEventProcessed = async (bayId, eventId, patch = {}) => {
   });
 };
 
-// =========================================================
-// REFUND
-// =========================================================
 const refundSessionIfNeeded = async (sessionId, reason = "bay_power_loss") => {
   if (!sessionId) {
     return {
@@ -756,7 +736,7 @@ const reserveBayForSession = async (bayId, uid) => {
     }
 
     const status = bay.status || "available";
-    const nowMs = Date.now(); // <-- YENİ EKLENDİ
+    const nowMs = Date.now(); 
 
     const canReserveFromAvailable =
       ["available", "baslangic"].includes(status) &&
@@ -777,8 +757,8 @@ const reserveBayForSession = async (bayId, uid) => {
       ...bay,
       status: "starting",
       lastUserId: uid,
-      startingAt: nowMs, // <-- DEĞİŞTİRİLDİ
-      updatedAt: nowMs, // <-- DEĞİŞTİRİLDİ
+      startingAt: nowMs, 
+      updatedAt: nowMs, 
     };
   });
 
@@ -816,9 +796,6 @@ const reserveBayForSession = async (bayId, uid) => {
   };
 };
 
-// =========================================================
-// RTDB BAY TEMIZLIK
-// =========================================================
 const setBayPresence = async (bayId, patch = {}) => {
   if (isInvalidBayId(bayId)) {
     safeLog(`🚨 bayPresence yazımı engellendi, geçersiz bayId: ${bayId}`);
@@ -832,8 +809,8 @@ const setBayPresence = async (bayId, patch = {}) => {
 };
 
 const clearBaySessionFields = async (bayId, extraPatch = {}) => {
-  // Heartbeat / connection fields are intentionally kept outside bays/{bayId}.
-  // This prevents RTDB transaction maxretry errors while users prepare/start sessions.
+  
+  
   const { isActive, autoOffline, lastSeen, ...bayPatch } = extraPatch || {};
 
   await rtdb.ref(`bays/${bayId}`).update({
@@ -942,7 +919,7 @@ const resumeOrClearSessionAfterBoot = async (bayId, bayData = {}) => {
       isActive: true,
       autoOffline: null,
       lastSeen: admin.database.ServerValue.TIMESTAMP,
-      lastUserId: session.userId || bayData.lastUserId || null, // <-- KULLANICIYI TUTUYORUZ
+      lastUserId: session.userId || bayData.lastUserId || null, 
     });
 
     await safeSendBayCommand(bayId, "WAITING");
@@ -1082,9 +1059,6 @@ const clearWaitingBayAfterCancel = async (bayId, uid = null) => {
   };
 };
 
-// =========================================================
-// MQTT EVENTS
-// =========================================================
 mqttClient.on("connect", () => {
   safeLog(`✅ MQTT Broker bağlantısı başarılı. clientId=${MQTT_CLIENT_ID}`);
 
@@ -1286,9 +1260,9 @@ mqttClient.on("message", async (topic, messageBuffer, packet) => {
         autoOffline: null,
       });
 
-      // Legacy uyumluluk:
-      // prepare-bay halen bays/{bayId}.isActive alanına bakıyor.
-      // Eski kayıtta isActive=false kaldıysa heartbeat gelince düzelt.
+      
+      
+      
       const bayDataForActiveFix = snap.val() || {};
 
       if (
@@ -1441,9 +1415,6 @@ mqttClient.on("message", async (topic, messageBuffer, packet) => {
   }
 });
 
-// =========================================================
-// AUTH MIDDLEWARE
-// =========================================================
 const verifyUser = async (req, res, next) => {
   const authHeader = req.headers.authorization || "";
 
@@ -1552,9 +1523,6 @@ const verifyAdmin = async (req, res, next) => {
   }
 };
 
-// =========================================================
-// HEALTH CHECK
-// =========================================================
 app.get("/", (req, res) => {
   return res.status(200).send("QWash API Sapasağlam Ayakta! 🚀");
 });
@@ -1598,7 +1566,7 @@ app.post(
       }
 
       if (bay.currentSessionId) {
-        // YENİ EK: Kullanıcı kendi aktif oturumuna QR okutursa hata verme, sadece içeri al.
+        
         if (bay.lastUserId === uid) {
           return res.status(200).json({
             success: true,
@@ -1617,8 +1585,8 @@ app.post(
         });
       }
 
-      // YENİ EK: Kullanıcı zaten beklemedeyse, ESP'den gelen verileri SİLMEMEK İÇİN
-      // null atamalarından (sıfırlamadan) kaçınıyoruz.
+      
+      
       if (status === "waiting" && bay.lastUserId === uid) {
         await bayRef.update({ updatedAt: Date.now() });
         const mqttOk = await safeSendBayCommand(bayId, "WAITING");
@@ -1636,7 +1604,7 @@ app.post(
         });
       }
 
-      // Sadece "available" veya ilk kez "waiting" olacak olanlar için sıfırlama yap
+      
       await bayRef.update({
         status: "waiting",
         lastUserId: uid,
@@ -1673,9 +1641,6 @@ app.post(
   },
 );
 
-// ---------------------------------------------------------
-// OTURUM BAŞLATMA
-// ---------------------------------------------------------
 app.post(
   "/api/start-session",
   verifyUser,
@@ -1830,7 +1795,7 @@ app.post(
 
         await clearBaySessionFields(bayId, {
           status: "waiting",
-          lastUserId: uid, // <-- KULLANICIYI TUTUYORUZ
+          lastUserId: uid, 
         });
 
         safeLog(
@@ -1956,9 +1921,6 @@ app.post(
   },
 );
 
-// ---------------------------------------------------------
-// PERONDAN MANUEL ÇIKIŞ
-// ---------------------------------------------------------
 app.post(
   "/api/cancel-waiting",
   verifyUser,
@@ -2043,9 +2005,6 @@ app.post(
   },
 );
 
-// ---------------------------------------------------------
-// OTURUMU MANUEL DURDURMA
-// ---------------------------------------------------------
 app.post(
   "/api/stop-session",
   verifyUser,
@@ -2128,7 +2087,7 @@ app.post(
 
       await clearBaySessionFields(bayId, {
         status: "waiting",
-        lastUserId: uid, // <-- KULLANICIYI TUTUYORUZ
+        lastUserId: uid, 
       });
 
       const mqttOk = await safeSendBayCommand(bayId, "WAITING");
@@ -2149,9 +2108,6 @@ app.post(
   },
 );
 
-// ---------------------------------------------------------
-// IYZICO CHECKOUT FORM BAŞLATMA
-// ---------------------------------------------------------
 app.post(
   "/api/topup",
   verifyUser,
@@ -2310,9 +2266,6 @@ app.post(
   },
 );
 
-// ---------------------------------------------------------
-// IYZICO CALLBACK
-// ---------------------------------------------------------
 app.post(
   "/api/topup-callback",
   validateRequestBody(topupCallbackBodySchema),
@@ -2543,9 +2496,6 @@ app.post(
   },
 );
 
-// ---------------------------------------------------------
-// ADMIN BAY LISTESI
-// ---------------------------------------------------------
 app.get("/api/admin/bays", verifyAdmin, async (req, res) => {
   try {
     const snapshot = await rtdb.ref("bays").once("value");
@@ -2568,9 +2518,6 @@ app.get("/api/admin/bays", verifyAdmin, async (req, res) => {
   }
 });
 
-// ---------------------------------------------------------
-// ADMIN BAY UPDATE
-// ---------------------------------------------------------
 app.post(
   "/api/admin/update-bay",
   verifyAdmin,
@@ -2707,9 +2654,6 @@ app.post(
   },
 );
 
-// ---------------------------------------------------------
-// ADMIN USER SEARCH
-// ---------------------------------------------------------
 app.post(
   "/api/admin/search-user",
   verifyAdmin,
@@ -2786,9 +2730,6 @@ app.post(
   },
 );
 
-// ---------------------------------------------------------
-// ADMIN USER UPDATE
-// ---------------------------------------------------------
 app.post(
   "/api/admin/update-user",
   verifyAdmin,
@@ -2820,9 +2761,6 @@ app.post(
   },
 );
 
-// ---------------------------------------------------------
-// ADMIN TOPUP
-// ---------------------------------------------------------
 app.post(
   "/api/admin/topup",
   verifyAdmin,
@@ -2904,16 +2842,6 @@ app.post(
   },
 );
 
-// =========================================================
-// STARTUP CLEAN
-// =========================================================
-// NOT:
-// Eski startup clean üretimde tehlikeliydi.
-// Render deploy/restart sırasında aktif yıkama devam ederken:
-// - running session refund ediliyordu
-// - tüm peronlar available yapılıyordu
-// Bu yüzden şimdilik non-destructive hale getirildi.
-// Geri almak gerekirse aşağıdaki eski kod kontrollü şekilde açılabilir.
 const systemStartupClean = async () => {
   safeLog(
     "ℹ️ Startup clean devre dışı: restart sırasında aktif session/peron state'i bozulmayacak.",
@@ -2976,9 +2904,6 @@ const systemStartupClean = async () => {
   */
 };
 
-// =========================================================
-// CRON
-// =========================================================
 let isHeartbeatCronRunning = false;
 
 const ENABLE_CRON = process.env.ENABLE_CRON !== "false";
@@ -3001,7 +2926,7 @@ const acquireCronLock = async () => {
     return {
       owner,
       lockedAt: now,
-      lockedUntil: now + 55 * 1000, // 55 saniye (Cron her 1 dakikada bir rahatça çalışsın)
+      lockedUntil: now + 55 * 1000, 
     };
   });
 
@@ -3230,8 +3155,8 @@ process.on("unhandledRejection", (reason) => {
 
 process.on("uncaughtException", (error) => {
   safeLog(`🚨 UNCAUGHT EXCEPTION: ${error.stack || error.message}`);
-  // İç durum bozulmuş olabileceği için süreci zorla sonlandır. 
-  // Sunucu yöneticisi (Render/PM2) otomatik yeniden başlatacaktır.
+  
+  
   process.exit(1); 
 });
 
@@ -3307,11 +3232,6 @@ const gracefulShutdown = async (signal) => {
 process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
 process.on("SIGINT", () => gracefulShutdown("SIGINT"));
 
-// =========================================================
-// Global Express Error Middleware
-// Catches synchronous errors in middleware/routers and ensures a JSON response
-// so clients don't hang waiting for a response.
-// =========================================================
 app.use((err, req, res, next) => {
   const message = err instanceof Error ? err.stack || err.message : String(err);
   safeLog(`🚨 EXPRESS ERROR MIDDLEWARE: ${message}`);
@@ -3327,9 +3247,6 @@ app.use((err, req, res, next) => {
   });
 });
 
-// =========================================================
-// START
-// =========================================================
 const PORT = process.env.PORT || 3000;
 const HOST = "0.0.0.0";
 const RUN_STARTUP_CLEAN = process.env.RUN_STARTUP_CLEAN === "true";

@@ -79,13 +79,13 @@ export default function ProfilTamamla() {
         showsVerticalScrollIndicator={false}
         bounces={false}
       >
-        {/* Tepe Dekorasyonu */}
+        {}
         <View style={styles.topDecor}>
           <View style={styles.decorCircleLarge} />
           <View style={styles.decorCircleSmall} />
         </View>
 
-        {/* Başlık Alanı (Dikeyde Ortalandı) */}
+        {}
         <View style={styles.brandArea}>
           <Text style={styles.brandTitle}>Profili Tamamla</Text>
           <Text style={styles.brandSubtitle}>
@@ -93,7 +93,7 @@ export default function ProfilTamamla() {
           </Text>
         </View>
 
-        {/* Form Kartı */}
+        {}
         <View style={styles.formCard}>
           <View style={styles.fieldGroup}>
             <Text style={styles.fieldLabel}>Ad</Text>
@@ -163,7 +163,7 @@ export default function ProfilTamamla() {
           </Pressable>
         </View>
 
-        {/* Geri Dön Butonu */}
+        {}
         <Pressable
           onPress={() => router.replace("/login")}
           disabled={yukleniyor}
@@ -185,7 +185,7 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     backgroundColor: "#f8f9fb",
     paddingHorizontal: 24,
-    justifyContent: "center", // Dikeyde mükemmel ortalama
+    justifyContent: "center", 
     paddingBottom: 20,
   },
   topDecor: {

@@ -4,7 +4,7 @@ export default function RootLayout() {
   return (
     <Stack
       screenOptions={{
-        headerShown: false, // Tüm sayfalarda varsayılan olarak header'ı gizler
+        headerShown: false, 
       }}
     >
       {/* Expo Router dosyaları otomatik algılar. 
