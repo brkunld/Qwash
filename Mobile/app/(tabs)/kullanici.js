@@ -400,11 +400,13 @@ export default function KullaniciEkrani() {
     if (!authYukleniyor && !uid) {
       router.replace("/login");
     }
-  }, [authYukleniyor, uid]);
+  }, [authYukleniyor, uid, router]);
 
-  useEffect(() => {
+useEffect(() => {
+    const timers = effectTimersRef.current;
+
     return () => {
-      Object.values(effectTimersRef.current).forEach(clearTimeout);
+      Object.values(timers).forEach(clearTimeout);
     };
   }, []);
 
