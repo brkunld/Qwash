@@ -42,11 +42,13 @@
 
         --font-sans: "Inter", sans-serif;
       }
+
       * {
         box-sizing: border-box;
         margin: 0;
         padding: 0;
       }
+
       body {
         background: var(--bg-main);
         color: var(--text-main);
@@ -70,11 +72,13 @@
         padding: 28px 24px 24px;
         border-bottom: 1px solid rgba(255, 255, 255, 0.05);
       }
+
       .brand-mark {
         display: flex;
         align-items: center;
         gap: 12px;
       }
+
       .brand-icon {
         width: 40px;
         height: 40px;
@@ -84,20 +88,24 @@
         align-items: center;
         justify-content: center;
       }
+
       .brand-icon svg {
         width: 22px;
         height: 22px;
         stroke: var(--sidebar-bg);
       }
+
       .brand-wordmark {
         line-height: 1.2;
       }
+
       .brand-name {
         font-size: 20px;
         font-weight: 900;
         letter-spacing: 0.5px;
         color: var(--text-sidebar);
       }
+
       .brand-sub {
         font-size: 11px;
         color: var(--text-sidebar-muted);
@@ -110,6 +118,7 @@
         padding: 20px 16px;
         flex: 1;
       }
+
       .nav-section-label {
         font-size: 11px;
         font-weight: 700;
@@ -120,6 +129,7 @@
         margin-top: 8px;
         text-transform: uppercase;
       }
+
       .nav-item {
         display: flex;
         align-items: center;
@@ -133,23 +143,28 @@
         margin-bottom: 4px;
         transition: all 0.2s;
       }
+
       .nav-item:hover {
         background: rgba(255, 255, 255, 0.05);
         color: var(--text-sidebar);
       }
+
       .nav-item.active {
         background: var(--accent-yellow);
         color: var(--sidebar-bg);
       }
+
       .nav-ico {
         width: 18px;
         height: 18px;
         flex-shrink: 0;
         opacity: 0.8;
       }
+
       .nav-item.active .nav-ico {
         opacity: 1;
       }
+
       .nav-badge {
         margin-left: auto;
         background: var(--sidebar-bg);
@@ -159,6 +174,7 @@
         padding: 2px 8px;
         border-radius: 99px;
       }
+
       .nav-item.active .nav-badge {
         background: rgba(0, 0, 0, 0.15);
         color: var(--sidebar-bg);
@@ -171,6 +187,7 @@
         flex-direction: column;
         gap: 12px;
       }
+
       .user-row {
         display: flex;
         align-items: center;
@@ -179,6 +196,7 @@
         border-radius: 10px;
         background: rgba(255, 255, 255, 0.05);
       }
+
       .user-ava {
         width: 36px;
         height: 36px;
@@ -192,10 +210,12 @@
         color: var(--sidebar-bg);
         flex-shrink: 0;
       }
+
       .user-info {
         flex: 1;
         overflow: hidden;
       }
+
       .user-info .u-name {
         font-size: 14px;
         font-weight: 700;
@@ -204,6 +224,7 @@
         overflow: hidden;
         text-overflow: ellipsis;
       }
+
       .user-info .u-role {
         font-size: 11px;
         color: var(--text-sidebar-muted);
@@ -228,6 +249,7 @@
         cursor: pointer;
         transition: all 0.2s;
       }
+
       .logout-btn-full:hover {
         background: rgba(239, 68, 68, 0.2);
         color: #fca5a5;
@@ -252,27 +274,32 @@
         box-shadow: var(--shadow-sm);
         z-index: 10;
       }
+
       .topbar-title {
         font-size: 18px;
         font-weight: 800;
         color: var(--text-main);
       }
+
       .topbar-sep {
         width: 1px;
         height: 24px;
         background: var(--border);
       }
+
       .topbar-crumb {
         font-size: 13px;
         color: var(--text-muted);
         font-weight: 500;
       }
+
       .topbar-right {
         margin-left: auto;
         display: flex;
         align-items: center;
         gap: 16px;
       }
+
       .live-pill {
         display: flex;
         align-items: center;
@@ -284,6 +311,7 @@
         font-weight: 700;
         color: var(--success);
       }
+
       .live-dot {
         width: 8px;
         height: 8px;
@@ -291,22 +319,26 @@
         background: var(--success);
         animation: livepulse 2s ease-in-out infinite;
       }
+
       @keyframes livepulse {
         0%,
         100% {
           opacity: 1;
           transform: scale(1);
         }
+
         50% {
           opacity: 0.4;
           transform: scale(0.8);
         }
       }
+
       .topbar-time {
         font-size: 14px;
         font-weight: 600;
         color: var(--text-muted);
       }
+
       .topbar-btn {
         background: var(--bg-main);
         border: 1px solid var(--border);
@@ -320,6 +352,7 @@
         cursor: pointer;
         transition: all 0.2s;
       }
+
       .topbar-btn:hover {
         border-color: var(--border-hover);
         color: var(--text-main);
@@ -362,18 +395,22 @@
         background: #fff;
         display: block;
       }
+
       .tab {
         display: none;
       }
+
       .tab.active {
         display: block;
         animation: fadein 0.3s ease;
       }
+
       @keyframes fadein {
         from {
           opacity: 0;
           transform: translateY(10px);
         }
+
         to {
           opacity: 1;
           transform: translateY(0);
@@ -386,6 +423,7 @@
         justify-content: space-between;
         margin-bottom: 20px;
       }
+
       .sec-title {
         font-size: 14px;
         font-weight: 800;
@@ -412,6 +450,7 @@
         flex-direction: column;
         overflow: hidden;
       }
+
       .log-header {
         padding: 16px 20px;
         background: var(--bg-main);
@@ -420,16 +459,19 @@
         align-items: center;
         gap: 10px;
       }
+
       .log-header-text {
         font-size: 13px;
         font-weight: 600;
         color: var(--text-muted);
       }
+
       .log-entries {
         overflow-y: auto;
         flex: 1;
         padding: 8px 0;
       }
+
       .log-row {
         display: flex;
         align-items: flex-start;
@@ -439,35 +481,43 @@
         font-size: 13px;
         font-weight: 500;
       }
+
       .log-row:hover {
         background: var(--bg-main);
       }
+
       .log-ts {
         color: var(--text-muted);
         min-width: 70px;
       }
+
       .log-tag {
         padding: 2px 8px;
         border-radius: 6px;
         font-size: 11px;
         font-weight: 800;
       }
+
       .lt-ok {
         background: var(--success-dim);
         color: var(--success);
       }
+
       .lt-info {
         background: var(--info-dim);
         color: var(--info);
       }
+
       .lt-warn {
         background: var(--warning-dim);
         color: var(--warning);
       }
+
       .lt-err {
         background: var(--danger-dim);
         color: var(--danger);
       }
+
       .log-msg {
         color: var(--text-main);
       }
@@ -480,9 +530,11 @@
         box-shadow: var(--shadow-md);
         margin-bottom: 24px;
       }
+
       .search-wrap .sec-title {
         margin-bottom: 16px;
       }
+
       .search-row {
         display: flex;
         gap: 12px;
@@ -500,9 +552,11 @@
         font-family: var(--font-sans);
         transition: border-color 0.2s;
       }
+
       .inp::placeholder {
         color: #9ca3af;
       }
+
       .inp:focus {
         outline: none;
         border-color: var(--accent-yellow);
@@ -519,11 +573,13 @@
         cursor: pointer;
         transition: all 0.2s;
       }
+
       .btn-accent {
         background: var(--accent-dark);
         color: #fff;
         box-shadow: 0 4px 10px rgba(17, 24, 39, 0.2);
       }
+
       .btn-accent:hover {
         transform: translateY(-2px);
         box-shadow: 0 6px 14px rgba(17, 24, 39, 0.3);
@@ -539,10 +595,12 @@
         font-weight: 800;
         cursor: pointer;
       }
+
       .btn-danger {
         background: var(--danger-dim);
         color: var(--danger);
       }
+
       .btn-success {
         background: var(--success-dim);
         color: var(--success);
@@ -555,6 +613,7 @@
         overflow: hidden;
         box-shadow: var(--shadow-md);
       }
+
       .uc-banner {
         padding: 24px;
         background: var(--bg-main);
@@ -563,6 +622,7 @@
         align-items: center;
         gap: 16px;
       }
+
       .uc-ava {
         width: 56px;
         height: 56px;
@@ -575,41 +635,49 @@
         font-size: 20px;
         color: var(--sidebar-bg);
       }
+
       .uc-name {
         font-size: 18px;
         font-weight: 800;
         color: var(--text-main);
       }
+
       .uc-email {
         font-size: 14px;
         color: var(--text-muted);
         font-weight: 500;
         margin-top: 2px;
       }
+
       .uc-tokens {
         margin-left: auto;
         text-align: right;
       }
+
       .uc-tok-num {
         font-size: 32px;
         font-weight: 900;
         color: var(--text-main);
         line-height: 1;
       }
+
       .uc-tok-label {
         font-size: 12px;
         font-weight: 700;
         color: var(--text-muted);
         margin-top: 4px;
       }
+
       .uc-body {
         padding: 24px;
       }
+
       .uc-fields {
         display: flex;
         gap: 48px;
         margin-bottom: 24px;
       }
+
       .uc-field .uf-label {
         font-size: 11px;
         font-weight: 700;
@@ -617,11 +685,13 @@
         text-transform: uppercase;
         margin-bottom: 6px;
       }
+
       .uc-field .uf-val {
         font-size: 15px;
         font-weight: 600;
         color: var(--text-main);
       }
+
       .topup-row {
         display: flex;
         align-items: center;
@@ -629,6 +699,7 @@
         padding-top: 20px;
         border-top: 1px solid var(--border);
       }
+
       .badge-blocked {
         background: var(--danger);
         color: #fff;
@@ -652,6 +723,7 @@
         flex-wrap: wrap;
         box-shadow: var(--shadow-sm);
       }
+
       .bulk-actions-title {
         font-size: 12px;
         font-weight: 800;
@@ -659,6 +731,7 @@
         text-transform: uppercase;
         margin-right: 8px;
       }
+
       .bulk-btn {
         padding: 10px 16px;
         border: none;
@@ -669,21 +742,26 @@
         cursor: pointer;
         transition: all 0.2s;
       }
+
       .bulk-btn:hover {
         transform: translateY(-1px);
       }
+
       .bulk-btn.green {
         background: var(--success-dim);
         color: var(--success);
       }
+
       .bulk-btn.amber {
         background: var(--warning-dim);
         color: var(--warning);
       }
+
       .bulk-btn.blue {
         background: var(--info-dim);
         color: var(--info);
       }
+
       .bulk-btn.red {
         background: var(--danger-dim);
         color: var(--danger);
@@ -695,6 +773,7 @@
         gap: 20px;
         margin-bottom: 24px;
       }
+
       .stat-card {
         background: var(--bg-card);
         border: 1px solid var(--border);
@@ -702,6 +781,7 @@
         padding: 24px;
         box-shadow: var(--shadow-md);
       }
+
       .stat-label {
         font-size: 12px;
         font-weight: 700;
@@ -709,27 +789,33 @@
         text-transform: uppercase;
         margin-bottom: 12px;
       }
+
       .stat-value {
         font-size: 36px;
         font-weight: 900;
         line-height: 1;
         color: var(--text-main);
       }
+
       .stat-sub {
         margin-top: 10px;
         font-size: 13px;
         font-weight: 500;
         color: var(--text-muted);
       }
+
       .stat-value.green {
         color: var(--success);
       }
+
       .stat-value.amber {
         color: var(--warning);
       }
+
       .stat-value.red {
         color: var(--danger);
       }
+
       .stat-value.blue {
         color: var(--info);
       }
@@ -741,12 +827,15 @@
         padding: 24px;
         box-shadow: var(--shadow-md);
       }
+
       .stat-bar-row {
         margin-bottom: 16px;
       }
+
       .stat-bar-row:last-child {
         margin-bottom: 0;
       }
+
       .stat-bar-head {
         display: flex;
         justify-content: space-between;
@@ -755,24 +844,29 @@
         color: var(--text-main);
         margin-bottom: 8px;
       }
+
       .stat-bar {
         height: 8px;
         background: var(--bg-main);
         border-radius: 99px;
         overflow: hidden;
       }
+
       .stat-bar-fill {
         height: 100%;
         border-radius: 99px;
         background: var(--accent-dark);
         transition: width 0.4s ease;
       }
+
       .stat-bar-fill.green {
         background: var(--success);
       }
+
       .stat-bar-fill.amber {
         background: var(--warning);
       }
+
       .stat-bar-fill.red {
         background: var(--danger);
       }
@@ -782,6 +876,7 @@
         grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
         gap: 16px;
       }
+
       .bay-card {
         background: var(--bg-card);
         border: 1px solid var(--border);
@@ -793,25 +888,30 @@
           box-shadow 0.2s;
         position: relative;
       }
+
       .bay-card:hover {
         transform: translateY(-2px);
         box-shadow: var(--shadow-lg);
       }
+
       .bay-card.passive {
         opacity: 0.6;
         background: var(--bg-main);
       }
+
       .bay-head {
         display: flex;
         align-items: center;
         justify-content: space-between;
         margin-bottom: 12px;
       }
+
       .bay-name {
         font-size: 18px;
         font-weight: 800;
         color: var(--text-main);
       }
+
       .bay-badge {
         padding: 4px 12px;
         border-radius: 8px;
@@ -819,32 +919,39 @@
         font-weight: 800;
         text-transform: uppercase;
       }
+
       .bb-avail {
         background: var(--success-dim);
         color: var(--success);
       }
+
       .bb-busy {
         background: var(--warning-dim);
         color: var(--warning);
       }
+
       .bb-maint {
         background: var(--info-dim);
         color: var(--info);
       }
+
       .bb-off {
         background: #e5e7eb;
         color: var(--text-muted);
       }
+
       .bay-meta {
         font-size: 13px;
         font-weight: 500;
         color: var(--text-muted);
         margin-bottom: 16px;
       }
+
       .bay-meta span {
         color: var(--text-main);
         font-weight: 700;
       }
+
       .bay-progress {
         height: 6px;
         background: var(--bg-main);
@@ -852,27 +959,34 @@
         margin-bottom: 16px;
         overflow: hidden;
       }
+
       .bay-progress-bar {
         height: 100%;
         border-radius: 99px;
         transition: width 0.5s ease;
       }
+
       .bp-green {
         background: var(--success);
       }
+
       .bp-amber {
         background: var(--warning);
       }
+
       .bp-blue {
         background: var(--info);
       }
+
       .bp-none {
         width: 0;
       }
+
       .bay-btns {
         display: flex;
         gap: 10px;
       }
+
       .bay-btn {
         flex: 1;
         padding: 10px 0;
@@ -885,17 +999,21 @@
         cursor: pointer;
         transition: all 0.2s;
       }
+
       .bay-btn:hover {
         background: var(--border);
       }
+
       .bay-btn.red {
         background: var(--danger-dim);
         color: var(--danger);
       }
+
       .bay-btn.green {
         background: var(--success-dim);
         color: var(--success);
       }
+
       .bay-btn:disabled {
         opacity: 0.4;
         cursor: not-allowed;
@@ -904,13 +1022,16 @@
       ::-webkit-scrollbar {
         width: 6px;
       }
+
       ::-webkit-scrollbar-track {
         background: transparent;
       }
+
       ::-webkit-scrollbar-thumb {
         background: var(--border-hover);
         border-radius: 99px;
       }
+
       ::-webkit-scrollbar-thumb:hover {
         background: var(--text-muted);
       }
@@ -934,6 +1055,7 @@
         overflow: hidden;
         pointer-events: none;
       }
+
       .decor-circle-large {
         position: absolute;
         top: -60px;
@@ -944,6 +1066,7 @@
         background: #111827;
         opacity: 0.06;
       }
+
       .decor-circle-small {
         position: absolute;
         top: -20px;
@@ -963,10 +1086,12 @@
         flex-direction: column;
         align-items: center;
       }
+
       .login-brand {
         text-align: center;
         margin-bottom: 32px;
       }
+
       .login-brand .brand-icon-big {
         width: 200px;
         height: 70px;
@@ -978,18 +1103,21 @@
         margin: 0 auto 16px;
         box-shadow: var(--shadow-md);
       }
+
       .login-brand .brand-icon-big svg {
         width: 32px;
         height: 32px;
         stroke: #111827;
         stroke-width: 2.5;
       }
+
       .login-brand h2 {
         font-size: 26px;
         font-weight: 900;
         color: #111827;
         letter-spacing: -0.5px;
       }
+
       .login-brand p {
         font-size: 14px;
         color: #9ca3af;
@@ -1005,9 +1133,11 @@
         border: 1px solid #e5e7eb;
         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
       }
+
       .field-group {
         margin-bottom: 16px;
       }
+
       .field-group label {
         display: block;
         font-size: 13px;
@@ -1016,6 +1146,7 @@
         margin-bottom: 8px;
         margin-left: 2px;
       }
+
       .input-wrapper {
         display: flex;
         align-items: center;
@@ -1025,14 +1156,17 @@
         padding: 0 12px;
         transition: border-color 0.2s;
       }
+
       .input-wrapper:focus-within {
         border-color: var(--accent-dark);
         background: #fff;
       }
+
       .input-icon {
         font-size: 16px;
         margin-right: 8px;
       }
+
       .login-inp {
         flex: 1;
         padding: 14px 0;
@@ -1060,10 +1194,12 @@
         transition: all 0.2s;
         box-shadow: 0 4px 10px rgba(17, 24, 39, 0.3);
       }
+
       .login-btn:hover {
         transform: translateY(-2px);
         box-shadow: 0 6px 14px rgba(17, 24, 39, 0.4);
       }
+
       .error-msg {
         color: #ef4444;
         font-size: 13px;
@@ -1084,6 +1220,7 @@
         justify-content: center;
         animation: fadeIn 0.2s ease;
       }
+
       .confirm-box {
         background: #fff;
         width: 100%;
@@ -1094,12 +1231,14 @@
         transform: scale(0.95);
         animation: popUp 0.2s ease forwards;
       }
+
       .confirm-title {
         font-size: 18px;
         font-weight: 800;
         color: #111827;
         margin-bottom: 8px;
       }
+
       .confirm-msg {
         font-size: 14px;
         color: #4b5563;
@@ -1107,11 +1246,13 @@
         margin-bottom: 24px;
         white-space: pre-wrap;
       }
+
       .confirm-actions {
         display: flex;
         gap: 12px;
         justify-content: flex-end;
       }
+
       .confirm-btn {
         padding: 10px 16px;
         border-radius: 10px;
@@ -1121,17 +1262,21 @@
         border: none;
         transition: all 0.2s;
       }
+
       .btn-cancel {
         background: #f3f4f6;
         color: #4b5563;
       }
+
       .btn-cancel:hover {
         background: #e5e7eb;
       }
+
       .btn-confirm {
         background: #ef4444;
         color: white;
       }
+
       .btn-confirm:hover {
         background: #dc2626;
       }
@@ -1141,10 +1286,12 @@
           transform: scale(1);
         }
       }
+
       @keyframes fadeIn {
         from {
           opacity: 0;
         }
+
         to {
           opacity: 1;
         }
@@ -1163,6 +1310,7 @@
         color: white;
         animation: fadeIn 0.2s ease;
       }
+
       .spinner {
         width: 48px;
         height: 48px;
@@ -1172,11 +1320,13 @@
         animation: spin 1s linear infinite;
         margin-bottom: 16px;
       }
+
       .loader-text {
         font-size: 15px;
         font-weight: 600;
         letter-spacing: 0.5px;
       }
+
       @keyframes spin {
         to {
           transform: rotate(360deg);
@@ -1210,11 +1360,13 @@
       }
     </style>
   </head>
+
   <body>
     <div id="global-loader">
       <div class="spinner"></div>
       <div class="loader-text" id="loader-text">Lütfen bekleyin...</div>
     </div>
+
     <div id="custom-confirm-overlay">
       <div class="confirm-box">
         <div class="confirm-title">Onay Bekleniyor</div>
@@ -1297,6 +1449,7 @@
               />
             </div>
           </div>
+
           <div class="field-group">
             <label>Şifre</label>
             <div class="input-wrapper">
@@ -1309,9 +1462,11 @@
               />
             </div>
           </div>
+
           <button class="login-btn" id="login-btn" onclick="doLogin()">
             Giriş Yap →
           </button>
+
           <div class="error-msg" id="error-msg"></div>
         </div>
       </div>
@@ -1341,6 +1496,7 @@
 
       <div class="nav">
         <div class="nav-section-label">Sistem</div>
+
         <div class="nav-item active" onclick="switchTab('monitor', this)">
           <svg class="nav-ico" viewBox="0 0 16 16" fill="none">
             <rect
@@ -1362,6 +1518,7 @@
           Sistem Monitörü
           <span class="nav-badge">CANLI</span>
         </div>
+
         <div class="nav-item" onclick="switchTab('stats', this)">
           <svg class="nav-ico" viewBox="0 0 16 16" fill="none">
             <path
@@ -1373,6 +1530,7 @@
           </svg>
           İstatistikler
         </div>
+
         <div class="nav-item" onclick="switchTab('users', this)">
           <svg class="nav-ico" viewBox="0 0 16 16" fill="none">
             <circle
@@ -1391,6 +1549,7 @@
           </svg>
           Kullanıcı İşlemleri
         </div>
+
         <div class="nav-item" onclick="switchTab('bays', this)">
           <svg class="nav-ico" viewBox="0 0 16 16" fill="none">
             <rect
@@ -1411,6 +1570,7 @@
           </svg>
           Peron Yönetimi
         </div>
+
         <div class="nav-item" onclick="switchTab('simulator', this)">
           <svg class="nav-ico" viewBox="0 0 16 16" fill="none">
             <rect
@@ -1448,7 +1608,9 @@
             <div class="u-role">Admin Yetkilisi</div>
           </div>
         </div>
+
         <button class="logout-btn-full" onclick="doLogout()">Çıkış Yap</button>
+
         <button
           class="logout-btn-full"
           style="
@@ -1469,12 +1631,15 @@
         <div class="topbar-title" id="topbar-title">Sistem Monitörü</div>
         <div class="topbar-sep"></div>
         <div class="topbar-crumb" id="topbar-crumb">qwash / monitor</div>
+
         <div class="topbar-right">
           <div class="live-pill">
             <div class="live-dot"></div>
-            <span id="live-status-text">Bağlanıyor...</span>
+            <span id="live-status-text"></span>
           </div>
+
           <div class="topbar-time" id="clock">--:--:--</div>
+
           <div class="topbar-btn" title="Yenile" onclick="reloadCurrent()">
             <svg
               width="16"
@@ -1498,6 +1663,7 @@
           <div class="sec-header">
             <div class="sec-title">Gerçek Zamanlı Etkinlik Akışı</div>
           </div>
+
           <div class="log-box">
             <div class="log-header">
               <span class="log-header-text">Son olaylar izleniyor...</span>
@@ -1510,32 +1676,38 @@
           <div class="sec-header">
             <div class="sec-title">Genel İstatistikler</div>
           </div>
+
           <div class="stats-grid">
             <div class="stat-card">
               <div class="stat-label">Toplam Peron</div>
               <div class="stat-value blue" id="stat-total-bays">0</div>
               <div class="stat-sub">Sisteme kayıtlı donanım</div>
             </div>
+
             <div class="stat-card">
               <div class="stat-label">Aktif Peron</div>
               <div class="stat-value green" id="stat-active-bays">0</div>
               <div class="stat-sub">Müşteri kullanımına açık</div>
             </div>
+
             <div class="stat-card">
               <div class="stat-label">Boş Peron</div>
               <div class="stat-value green" id="stat-available-bays">0</div>
               <div class="stat-sub">Şu anda uygun</div>
             </div>
+
             <div class="stat-card">
               <div class="stat-label">Çalışan Peron</div>
               <div class="stat-value amber" id="stat-busy-bays">0</div>
               <div class="stat-sub">Anlık yıkanan araç</div>
             </div>
+
             <div class="stat-card">
               <div class="stat-label">Bakımda</div>
               <div class="stat-value blue" id="stat-maint-bays">0</div>
               <div class="stat-sub">Manuel bakım modunda</div>
             </div>
+
             <div class="stat-card">
               <div class="stat-label">Kapalı</div>
               <div class="stat-value red" id="stat-offline-bays">0</div>
@@ -1547,9 +1719,11 @@
             <div class="sec-title" style="margin-bottom: 20px">
               Peron Durum Dağılımı
             </div>
+
             <div class="stat-bar-row">
               <div class="stat-bar-head">
-                <span>Boş</span><span id="stat-bar-available-label">0%</span>
+                <span>Boş</span>
+                <span id="stat-bar-available-label">0%</span>
               </div>
               <div class="stat-bar">
                 <div
@@ -1559,9 +1733,11 @@
                 ></div>
               </div>
             </div>
+
             <div class="stat-bar-row">
               <div class="stat-bar-head">
-                <span>Dolu</span><span id="stat-bar-busy-label">0%</span>
+                <span>Dolu</span>
+                <span id="stat-bar-busy-label">0%</span>
               </div>
               <div class="stat-bar">
                 <div
@@ -1571,10 +1747,11 @@
                 ></div>
               </div>
             </div>
+
             <div class="stat-bar-row">
               <div class="stat-bar-head">
-                <span>Bakım / Kapalı</span
-                ><span id="stat-bar-offline-label">0%</span>
+                <span>Bakım / Kapalı</span>
+                <span id="stat-bar-offline-label">0%</span>
               </div>
               <div class="stat-bar">
                 <div
@@ -1585,37 +1762,41 @@
               </div>
             </div>
           </div>
-        </div>
 
-        <div class="stats-panel" style="margin-top: 24px">
-          <div class="sec-title" style="margin-bottom: 20px">
-            Sistem Ayarları
-          </div>
-          <div class="topup-row" style="border-top: none; padding-top: 0">
-            <span style="font-size: 14px; font-weight: 600"
-              >Jeton Fiyatı (₺):</span
-            >
-            <input
-              class="inp"
-              type="number"
-              step="0.1"
-              id="current-token-price"
-              placeholder="Yükleniyor..."
-              style="width: 140px; flex: none"
-            />
-            <button
-              class="btn-sm-accent"
-              id="update-token-price-btn"
-              onclick="updateTokenPrice()"
-            >
-              Fiyatı Güncelle
-            </button>
+          <div class="stats-panel" style="margin-top: 24px">
+            <div class="sec-title" style="margin-bottom: 20px">
+              Sistem Ayarları
+            </div>
+
+            <div class="topup-row" style="border-top: none; padding-top: 0">
+              <span style="font-size: 14px; font-weight: 600">
+                Jeton Fiyatı (₺):
+              </span>
+
+              <input
+                class="inp"
+                type="number"
+                step="0.1"
+                id="current-token-price"
+                placeholder="Yükleniyor..."
+                style="width: 140px; flex: none"
+              />
+
+              <button
+                class="btn-sm-accent"
+                id="update-token-price-btn"
+                onclick="updateTokenPrice()"
+              >
+                Fiyatı Güncelle
+              </button>
+            </div>
           </div>
         </div>
 
         <div id="tab-users" class="tab">
           <div class="search-wrap">
             <div class="sec-title">Kullanıcı Ara ve Yönet</div>
+
             <div class="search-row">
               <input
                 class="inp"
@@ -1623,6 +1804,7 @@
                 id="searchInput"
                 placeholder="E-Posta, telefon veya UID..."
               />
+
               <button
                 class="btn btn-accent"
                 onclick="doSearch()"
@@ -1632,10 +1814,12 @@
               </button>
             </div>
           </div>
+
           <div id="userCard" style="display: none">
             <div class="user-card">
               <div class="uc-banner">
                 <div class="uc-ava" id="uc-ava-icon">?</div>
+
                 <div>
                   <div class="uc-name">
                     <span id="res-name">-</span>
@@ -1643,22 +1827,26 @@
                       id="res-blocked-badge"
                       class="badge-blocked"
                       style="display: none"
-                      >ENGELLİ</span
                     >
+                      ENGELLİ
+                    </span>
                   </div>
                   <div class="uc-email" id="res-email">-</div>
                 </div>
+
                 <div class="uc-tokens">
                   <div class="uc-tok-num" id="res-tokens">0</div>
                   <div class="uc-tok-label">MEVCUT JETON</div>
                 </div>
               </div>
+
               <div class="uc-body">
                 <div class="uc-fields">
                   <div class="uc-field">
                     <div class="uf-label">Telefon Numarası</div>
                     <div class="uf-val" id="res-phone">-</div>
                   </div>
+
                   <div class="uc-field">
                     <div class="uf-label">Sistem ID</div>
                     <div
@@ -1670,10 +1858,12 @@
                     </div>
                   </div>
                 </div>
+
                 <div class="topup-row">
-                  <span style="font-size: 14px; font-weight: 600"
-                    >Manuel Jeton Yükle:</span
-                  >
+                  <span style="font-size: 14px; font-weight: 600">
+                    Manuel Jeton Yükle:
+                  </span>
+
                   <input
                     class="inp"
                     type="number"
@@ -1681,10 +1871,12 @@
                     placeholder="Miktar (Örn: 5)"
                     style="width: 140px; flex: none"
                   />
+
                   <button class="btn-sm-accent" id="add-token-btn">
                     Jeton Ekle
                   </button>
                 </div>
+
                 <div class="topup-row" style="margin-top: 16px">
                   <button
                     class="btn-sm-accent btn-danger"
@@ -1705,27 +1897,33 @@
               Peronlar Yükleniyor...
             </div>
           </div>
+
           <div class="bulk-actions">
             <span class="bulk-actions-title">Hızlı Toplu İşlem:</span>
+
             <button
               class="bulk-btn green"
               onclick="bulkUpdateBays('available')"
             >
               Tümünü Boş Yap
             </button>
+
             <button
               class="bulk-btn amber"
               onclick="bulkUpdateBays('maintenance')"
             >
               Tümünü Bakıma Al
             </button>
+
             <button class="bulk-btn blue" onclick="bulkEnableBays()">
               Tümünü Aktif Et
             </button>
+
             <button class="bulk-btn red" onclick="bulkDisableBays()">
               Tümünü Kapat
             </button>
           </div>
+
           <div id="bay-list" class="bay-grid">
             <p
               style="
@@ -1743,6 +1941,7 @@
           <div class="sec-header">
             <div class="sec-title">Donanım Simülasyonu</div>
           </div>
+
           <div class="simulator-frame-wrap">
             <iframe
               src="test.html"
@@ -1753,15 +1952,18 @@
         </div>
       </div>
     </div>
+
     <script src="./firebase-config-browser.js"></script>
 
     <script type="module">
       import { initializeApp } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-app.js";
+
       import {
         getAuth,
         signInWithEmailAndPassword,
         signOut,
       } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-auth.js";
+
       import {
         getDatabase,
         ref,
@@ -1785,6 +1987,7 @@
       const app = initializeApp(firebaseConfig);
       const auth = getAuth(app);
       const database = getDatabase(app);
+
       const rawApiBaseUrl = window.electronAPI?.getApiBaseUrl
         ? await window.electronAPI.getApiBaseUrl()
         : window.APP_CONFIG?.API_BASE_URL;
@@ -1799,25 +2002,34 @@
 
       async function getAdminToken() {
         const user = auth.currentUser;
-        if (!user)
+
+        if (!user) {
           throw new Error(
             "Admin oturumu bulunamadı. Lütfen tekrar giriş yapın.",
           );
+        }
+
         return await user.getIdToken(true);
       }
 
       async function adminFetch(path, options = {}) {
         const token = await getAdminToken();
+
         const headers = {
           "Content-Type": "application/json",
           ...(options.headers || {}),
           Authorization: `Bearer ${token}`,
         };
-        return await fetch(`${API_BASE}${path}`, { ...options, headers });
+
+        return await fetch(`${API_BASE}${path}`, {
+          ...options,
+          headers,
+        });
       }
 
       window.showToast = function (mesaj, tip = "error") {
         let container = document.getElementById("toast-container");
+
         if (!container) {
           container = document.createElement("div");
           container.id = "toast-container";
@@ -1827,18 +2039,28 @@
         }
 
         const toast = document.createElement("div");
+
         const bgRenk =
           tip === "success"
             ? "#10b981"
             : tip === "warning"
               ? "#f5a623"
               : "#ef4444";
+
         toast.style.cssText = `
-          background: ${bgRenk}; color: white; padding: 16px 24px; border-radius: 12px;
-          font-family: 'Inter', sans-serif; font-size: 14px; font-weight: 600;
-          box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); opacity: 0; transform: translateX(100%);
+          background: ${bgRenk};
+          color: white;
+          padding: 16px 24px;
+          border-radius: 12px;
+          font-family: 'Inter', sans-serif;
+          font-size: 14px;
+          font-weight: 600;
+          box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1);
+          opacity: 0;
+          transform: translateX(100%);
           transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         `;
+
         toast.textContent = mesaj;
         container.appendChild(toast);
 
@@ -1886,48 +2108,83 @@
 
       window.appendLocalLog = function (mesaj, type = "info") {
         const entries = document.getElementById("log-entries");
+
         const div = document.createElement("div");
         div.className = "log-row";
+
         const now = new Date();
-        const ts = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}:${String(now.getSeconds()).padStart(2, "0")}`;
+
+        const ts = `${String(now.getHours()).padStart(2, "0")}:${String(
+          now.getMinutes(),
+        ).padStart(2, "0")}:${String(now.getSeconds()).padStart(2, "0")}`;
+
         let tagHtml = '<span class="log-tag lt-info">SİSTEM</span>';
-        if (type === "error")
+
+        if (type === "error") {
           tagHtml = '<span class="log-tag lt-err">HATA</span>';
-        if (type === "success")
+        }
+
+        if (type === "success") {
           tagHtml = '<span class="log-tag lt-ok">BİLGİ</span>';
-        if (type === "warning")
+        }
+
+        if (type === "warning") {
           tagHtml = '<span class="log-tag lt-warn">UYARI</span>';
+        }
+
         div.innerHTML = `<span class="log-ts">${ts}</span>${tagHtml}<span class="log-msg">${mesaj}</span>`;
+
         entries.appendChild(div);
         entries.scrollTop = entries.scrollHeight;
       };
 
       const tabMeta = {
-        monitor: { title: "Sistem Monitörü", crumb: "qwash / monitor" },
-        stats: { title: "İstatistikler", crumb: "qwash / stats" },
-        users: { title: "Kullanıcı İşlemleri", crumb: "qwash / users" },
-        bays: { title: "Peron Yönetimi", crumb: "qwash / bays" },
-        simulator: { title: "Cihaz Simülatörü", crumb: "qwash / simulator" },
+        monitor: {
+          title: "Sistem Monitörü",
+          crumb: "qwash / monitor",
+        },
+        stats: {
+          title: "İstatistikler",
+          crumb: "qwash / stats",
+        },
+        users: {
+          title: "Kullanıcı İşlemleri",
+          crumb: "qwash / users",
+        },
+        bays: {
+          title: "Peron Yönetimi",
+          crumb: "qwash / bays",
+        },
+        simulator: {
+          title: "Cihaz Simülatörü",
+          crumb: "qwash / simulator",
+        },
       };
 
       window.switchTab = function (name, el) {
         document
           .querySelectorAll(".tab")
           .forEach((t) => t.classList.remove("active"));
+
         document
           .querySelectorAll(".nav-item")
           .forEach((n) => n.classList.remove("active"));
+
         document.getElementById("tab-" + name).classList.add("active");
         el.classList.add("active");
+
         document.getElementById("topbar-title").textContent =
           tabMeta[name].title;
+
         document.getElementById("topbar-crumb").textContent =
           tabMeta[name].crumb;
       };
 
       window.reloadCurrent = function () {
         const active = document.querySelector(".tab.active");
+
         active.style.opacity = "0.5";
+
         setTimeout(() => {
           active.style.opacity = "1";
         }, 300);
@@ -1938,37 +2195,47 @@
         const pass = document.getElementById("password").value.trim();
         const err = document.getElementById("error-msg");
         const btn = document.getElementById("login-btn");
+
         if (!email || !pass) {
           err.textContent = "E-posta ve şifre zorunludur.";
           err.style.display = "block";
           return;
         }
+
         err.style.display = "none";
         btn.textContent = "Kontrol ediliyor...";
         btn.disabled = true;
+
         try {
           const credential = await signInWithEmailAndPassword(
             auth,
             email,
             pass,
           );
+
           const tokenResult = await credential.user.getIdTokenResult();
+
           if (
             tokenResult.claims.admin === true ||
             tokenResult.claims.role === "admin"
           ) {
             document.getElementById("login-screen").style.display = "none";
+
             const displayName =
               credential.user.displayName || credential.user.email;
+
             const initials = displayName
               .split(" ")
               .map((w) => w[0])
               .join("")
               .toUpperCase()
               .slice(0, 2);
+
             document.getElementById("sidebar-ava").textContent = initials;
             document.getElementById("sidebar-name").textContent = displayName;
+
             appendLocalLog(`Admin girişi yapıldı: ${displayName}`, "info");
+
             window.initBaysListener();
             window.fetchTokenPrice();
           } else {
@@ -1987,7 +2254,9 @@
 
       ["email", "password"].forEach((id) => {
         document.getElementById(id).addEventListener("keydown", (e) => {
-          if (e.key === "Enter") window.doLogin();
+          if (e.key === "Enter") {
+            window.doLogin();
+          }
         });
       });
 
@@ -2048,36 +2317,50 @@
 
       let selectedUserId = null;
       let isUserBlocked = false;
+
       window.doSearch = async function () {
         const term = document.getElementById("searchInput").value.trim();
+
         if (!term) return;
+
         const btn = document.getElementById("search-btn");
         const card = document.getElementById("userCard");
+
         btn.textContent = "Aranıyor...";
         btn.disabled = true;
+
         try {
           const res = await adminFetch("/search-user", {
             method: "POST",
-            body: JSON.stringify({ arama: term }),
+            body: JSON.stringify({
+              arama: term,
+            }),
           });
+
           const data = await res.json();
+
           if (!res.ok) {
             showToast(data.error || "Kullanıcı bulunamadı!", "error");
             card.style.display = "none";
             selectedUserId = null;
             return;
           }
+
           const u = data.user;
+
           selectedUserId = u.id;
           isUserBlocked = !!u.isBlocked;
+
           const fullName =
             ((u.ad || "") + " " + (u.soyad || "")).trim() || u.email;
+
           const initials = fullName
             .split(" ")
             .map((w) => w[0])
             .join("")
             .toUpperCase()
             .slice(0, 2);
+
           document.getElementById("uc-ava-icon").textContent = initials;
           document.getElementById("res-name").textContent = fullName;
           document.getElementById("res-email").textContent = u.email || "-";
@@ -2086,8 +2369,10 @@
           document.getElementById("res-phone").textContent =
             u.telefon || "Belirtilmemiş";
           document.getElementById("res-uid").textContent = u.id || "-";
+
           const badge = document.getElementById("res-blocked-badge");
           const blockBtn = document.getElementById("block-user-btn");
+
           if (isUserBlocked) {
             badge.style.display = "inline-block";
             blockBtn.textContent = "Engeli Kaldır";
@@ -2097,6 +2382,7 @@
             blockBtn.textContent = "Kullanıcıyı Sistemden Engelle";
             blockBtn.className = "btn-sm-accent btn-danger";
           }
+
           card.style.display = "block";
         } catch (e) {
           showToast("Sunucuya ulaşılamadı!", "error");
@@ -2109,22 +2395,27 @@
       document
         .getElementById("searchInput")
         .addEventListener("keydown", (e) => {
-          if (e.key === "Enter") window.doSearch();
+          if (e.key === "Enter") {
+            window.doSearch();
+          }
         });
-      // Jeton fiyatını sunucudan çekme
+
       window.fetchTokenPrice = async function () {
         try {
-          const res = await adminFetch("/token-price", { method: "GET" });
+          const res = await adminFetch("/token-price", {
+            method: "GET",
+          });
+
           if (res.ok) {
             const data = await res.json();
-            document.getElementById("current-token-price").value = data.jetonFiyat;
+            document.getElementById("current-token-price").value =
+              data.jetonFiyat;
           }
         } catch (e) {
           console.error("Jeton fiyatı çekilemedi:", e);
         }
       };
 
-      // Jeton fiyatını sunucuda güncelleme
       window.updateTokenPrice = async function () {
         const inputEl = document.getElementById("current-token-price");
         const yeniFiyat = parseFloat(inputEl.value);
@@ -2135,24 +2426,35 @@
         }
 
         const isConfirmed = await showConfirm(
-          `Jeton fiyatını ${yeniFiyat} ₺ olarak güncellemek istediğinize emin misiniz?`
+          `Jeton fiyatını ${yeniFiyat} ₺ olarak güncellemek istediğinize emin misiniz?`,
         );
+
         if (!isConfirmed) return;
 
         const btn = document.getElementById("update-token-price-btn");
+
         btn.disabled = true;
         btn.textContent = "Güncelleniyor...";
 
         try {
           const res = await adminFetch("/update-token-price", {
             method: "POST",
-            body: JSON.stringify({ jetonFiyat: yeniFiyat }),
+            body: JSON.stringify({
+              jetonFiyat: yeniFiyat,
+            }),
           });
+
           const data = await res.json();
 
           if (res.ok) {
-            showToast(`Jeton fiyatı başarıyla ${yeniFiyat} ₺ yapıldı.`, "success");
-            appendLocalLog(`Jeton fiyatı ${yeniFiyat} ₺ olarak güncellendi.`, "success");
+            showToast(
+              `Jeton fiyatı başarıyla ${yeniFiyat} ₺ yapıldı.`,
+              "success",
+            );
+            appendLocalLog(
+              `Jeton fiyatı ${yeniFiyat} ₺ olarak güncellendi.`,
+              "success",
+            );
           } else {
             showToast("Hata: " + data.error, "error");
           }
@@ -2164,10 +2466,11 @@
         }
       };
 
-
       window.toggleUserBlock = async function () {
         if (!selectedUserId) return;
+
         const newState = !isUserBlocked;
+
         const isConfirmed = await showConfirm(
           newState
             ? "Kullanıcıyı engellemek istediğinize emin misiniz?"
@@ -2178,20 +2481,27 @@
 
         const btn = document.getElementById("block-user-btn");
         btn.disabled = true;
+
         try {
           const res = await adminFetch("/update-user", {
             method: "POST",
             body: JSON.stringify({
               userId: selectedUserId,
-              patch: { isBlocked: newState },
+              patch: {
+                isBlocked: newState,
+              },
             }),
           });
+
           if (!res.ok) {
             showToast("İşlem başarısız.", "error");
             return;
           }
+
           isUserBlocked = newState;
+
           const badge = document.getElementById("res-blocked-badge");
+
           if (isUserBlocked) {
             badge.style.display = "inline-block";
             btn.textContent = "Engeli Kaldır";
@@ -2237,8 +2547,12 @@
           try {
             const res = await adminFetch("/topup", {
               method: "POST",
-              body: JSON.stringify({ userId: selectedUserId, tokens: amount }),
+              body: JSON.stringify({
+                userId: selectedUserId,
+                tokens: amount,
+              }),
             });
+
             const data = await res.json();
 
             if (!res.ok) {
@@ -2278,44 +2592,61 @@
         const el = document.getElementById(id);
         if (el) el.textContent = value;
       }
+
       function setBar(id, labelId, percent) {
         const safePercent = Math.max(0, Math.min(100, percent));
         const bar = document.getElementById(id);
         const label = document.getElementById(labelId);
-        if (bar) bar.style.width = `${safePercent}%`;
-        if (label) label.textContent = `${safePercent}%`;
+
+        if (bar) {
+          bar.style.width = `${safePercent}%`;
+        }
+
+        if (label) {
+          label.textContent = `${safePercent}%`;
+        }
       }
 
       function updateStats(baysArray) {
         const total = baysArray.length;
+
         const active = baysArray.filter((b) => b.isActive !== false).length;
+
         const available = baysArray.filter(
           (b) =>
             (b.status || "available") === "available" && b.isActive !== false,
         ).length;
+
         const busy = baysArray.filter(
           (b) => b.status === "busy" && b.isActive !== false,
         ).length;
+
         const maintenance = baysArray.filter(
           (b) => b.status === "maintenance",
         ).length;
+
         const offline = baysArray.filter(
           (b) => b.status === "offline" || b.isActive === false,
         ).length;
+
         const pct = (count) =>
           total > 0 ? Math.round((count / total) * 100) : 0;
+
         setText("stat-total-bays", total);
         setText("stat-active-bays", active);
         setText("stat-available-bays", available);
         setText("stat-busy-bays", busy);
         setText("stat-maint-bays", maintenance);
         setText("stat-offline-bays", offline);
+
         setBar(
           "stat-bar-available",
           "stat-bar-available-label",
           pct(available),
         );
+
         setBar("stat-bar-busy", "stat-bar-busy-label", pct(busy));
+
         setBar(
           "stat-bar-offline",
           "stat-bar-offline-label",
@@ -2330,7 +2661,12 @@
           barCls: "bp-none",
           barW: "0%",
         },
-        busy: { text: "DOLU", cls: "bb-busy", barCls: "bp-amber", barW: "65%" },
+        busy: {
+          text: "DOLU",
+          cls: "bb-busy",
+          barCls: "bp-amber",
+          barW: "65%",
+        },
         maintenance: {
           text: "BAKIM",
           cls: "bb-maint",
@@ -2350,6 +2686,7 @@
           barW: "20%",
         },
       };
+
       const STATUS_CYCLE = ["available", "maintenance", "offline"];
 
       let isBaysListening = false;
@@ -2357,58 +2694,97 @@
 
       window.initBaysListener = function () {
         if (isBaysListening) return;
+
         isBaysListening = true;
+
         const grid = document.getElementById("bay-list");
         const baysRef = ref(database, "bays");
+
         onValue(baysRef, (snapshot) => {
           const data = snapshot.val();
+
           if (!data) return;
+
           grid.innerHTML = "";
+
           const baysArray = Object.keys(data)
-            .map((key) => ({ id: key, ...data[key] }))
+            .map((key) => ({
+              id: key,
+              ...data[key],
+            }))
             .sort((a, b) => a.id.localeCompare(b.id));
+
           updateStats(baysArray);
-          let aktifSayi = 0,
-            mesgulSayi = 0;
+
+          let aktifSayi = 0;
+          let mesgulSayi = 0;
+
           baysArray.forEach((bay) => {
             if (bay.isActive !== false) aktifSayi++;
+
             if (bay.status === "busy") mesgulSayi++;
+
             if (previousBaysState && previousBaysState[bay.id]) {
               const oldStatus = previousBaysState[bay.id].status;
               const newStatus = bay.status || "available";
+
               if (oldStatus !== newStatus) {
-                if (newStatus === "busy")
+                if (newStatus === "busy") {
                   appendLocalLog(`${bay.id} çalışmaya başladı.`, "success");
-                else if (newStatus === "maintenance")
-                  appendLocalLog(`${bay.id} bakıma alındı.`, "warn");
+                } else if (newStatus === "maintenance") {
+                  appendLocalLog(`${bay.id} bakıma alındı.`, "warning");
+                }
               }
             }
           });
+
           previousBaysState = data;
+
           document.getElementById("bay-count-label").textContent =
             `${baysArray.length} Peron · ${aktifSayi} Aktif`;
-          document.getElementById("live-status-text").textContent =
-            mesgulSayi > 0
-              ? `${mesgulSayi} Peron Çalışıyor`
-              : "Tüm Peronlar Uygun";
 
           baysArray.forEach((bay) => {
             const status = bay.status || "available";
             const isActive = bay.isActive ?? true;
             const s = STATUS_LABELS[status] || STATUS_LABELS.offline;
+
             const card = document.createElement("div");
+
             card.className = `bay-card ${!isActive ? "passive" : ""}`;
+
             card.innerHTML = `
               <div class="bay-head">
                 <span class="bay-name">${bay.id}</span>
                 <span class="bay-badge ${s.cls}">${s.text}</span>
               </div>
-              <div class="bay-meta">Sistem: <span>${bay.currentSessionId ? "Aktif İşlem Var" : "Boşta"}</span></div>
-              <div class="bay-progress"><div class="bay-progress-bar ${s.barCls}" style="width:${s.barW}"></div></div>
+
+              <div class="bay-meta">
+                Sistem:
+                <span>${bay.currentSessionId ? "Aktif İşlem Var" : "Boşta"}</span>
+              </div>
+
+              <div class="bay-progress">
+                <div class="bay-progress-bar ${s.barCls}" style="width:${s.barW}"></div>
+              </div>
+
               <div class="bay-btns">
-                <button class="bay-btn" onclick="changeBayStatus('${bay.id}','${status}',${isActive})" ${!isActive ? "disabled" : ""}>Durum Değiştir</button>
-                <button class="bay-btn ${isActive ? "red" : "green"}" onclick="toggleBayActive('${bay.id}',${isActive})">${isActive ? "Kapat" : "Aç"}</button>
-              </div>`;
+                <button
+                  class="bay-btn"
+                  onclick="changeBayStatus('${bay.id}','${status}',${isActive})"
+                  ${!isActive ? "disabled" : ""}
+                >
+                  Durum Değiştir
+                </button>
+
+                <button
+                  class="bay-btn ${isActive ? "red" : "green"}"
+                  onclick="toggleBayActive('${bay.id}',${isActive})"
+                >
+                  ${isActive ? "Kapat" : "Aç"}
+                </button>
+              </div>
+            `;
+
             grid.appendChild(card);
           });
         });
@@ -2416,23 +2792,32 @@
 
       window.changeBayStatus = async function (bayId, currentStatus, isActive) {
         if (!isActive) return;
+
         const idx = STATUS_CYCLE.indexOf(currentStatus);
+
         const next =
           STATUS_CYCLE[idx === -1 ? 0 : (idx + 1) % STATUS_CYCLE.length];
 
         if (previousBaysState && previousBaysState[bayId]) {
           const bay = previousBaysState[bayId];
+
           if (bay.status === "busy" || bay.currentSessionId) {
             const isConfirmed = await showConfirm(
               `DİKKAT: ${bayId} peronunda şu anda aktif bir araç yıkama işlemi var!\n\nYine de durumunu "${STATUS_LABELS[next].text}" olarak değiştirmek istiyor musunuz? (İşlem yarıda kesilebilir)`,
             );
+
             if (!isConfirmed) return;
           }
         }
 
         adminFetch("/update-bay", {
           method: "POST",
-          body: JSON.stringify({ bayId, patch: { status: next } }),
+          body: JSON.stringify({
+            bayId,
+            patch: {
+              status: next,
+            },
+          }),
         });
       };
 
@@ -2443,34 +2828,49 @@
           previousBaysState[bayId]
         ) {
           const bay = previousBaysState[bayId];
+
           if (bay.status === "busy" || bay.currentSessionId) {
             const isConfirmed = await showConfirm(
               `DİKKAT: ${bayId} peronunda şu anda aktif bir araç yıkama işlemi var!\n\nYine de peronu tamamen KAPATMAK istiyor musunuz?`,
             );
+
             if (!isConfirmed) return;
           }
         }
 
         const patch = isCurrentlyActive
-          ? { isActive: false, status: "offline" }
-          : { isActive: true, status: "available" };
+          ? {
+              isActive: false,
+              status: "offline",
+            }
+          : {
+              isActive: true,
+              status: "available",
+            };
+
         adminFetch("/update-bay", {
           method: "POST",
-          body: JSON.stringify({ bayId, patch }),
+          body: JSON.stringify({
+            bayId,
+            patch,
+          }),
         });
       };
 
       window.bulkUpdateBays = async function (targetStatus) {
         const baysRef = ref(database, "bays");
+
         onValue(
           baysRef,
           async (snap) => {
             const data = snap.val();
+
             if (!data) return;
 
             const busyBays = Object.values(data).filter(
               (bay) => bay.status === "busy" || bay.currentSessionId,
             );
+
             if (busyBays.length > 0) {
               const durumMetni =
                 targetStatus === "maintenance"
@@ -2478,9 +2878,11 @@
                   : targetStatus === "available"
                     ? "BOŞ YAPMAK"
                     : targetStatus;
+
               const isConfirmed = await showConfirm(
                 `DİKKAT: Şu anda ${busyBays.length} peronda aktif yıkama işlemi devam ediyor!\n\nYine de TÜM peronları toplu olarak "${durumMetni}" istiyor musunuz?`,
               );
+
               if (!isConfirmed) return;
             }
 
@@ -2489,30 +2891,39 @@
                 method: "POST",
                 body: JSON.stringify({
                   bayId,
-                  patch: { isActive: true, status: targetStatus },
+                  patch: {
+                    isActive: true,
+                    status: targetStatus,
+                  },
                 }),
               }),
             );
           },
-          { onlyOnce: true },
+          {
+            onlyOnce: true,
+          },
         );
       };
 
       window.bulkDisableBays = async function () {
         const baysRef = ref(database, "bays");
+
         onValue(
           baysRef,
           async (snap) => {
             const data = snap.val();
+
             if (!data) return;
 
             const busyBays = Object.values(data).filter(
               (bay) => bay.status === "busy" || bay.currentSessionId,
             );
+
             if (busyBays.length > 0) {
               const isConfirmed = await showConfirm(
                 `DİKKAT: Şu anda ${busyBays.length} peronda aktif yıkama işlemi devam ediyor!\n\nYine de TÜM peronları toplu olarak KAPATMAK istiyor musunuz?`,
               );
+
               if (!isConfirmed) return;
             }
 
@@ -2521,30 +2932,39 @@
                 method: "POST",
                 body: JSON.stringify({
                   bayId,
-                  patch: { isActive: false, status: "offline" },
+                  patch: {
+                    isActive: false,
+                    status: "offline",
+                  },
                 }),
               }),
             );
           },
-          { onlyOnce: true },
+          {
+            onlyOnce: true,
+          },
         );
       };
 
       window.bulkEnableBays = async function () {
         const baysRef = ref(database, "bays");
+
         onValue(
           baysRef,
           async (snap) => {
             const data = snap.val();
+
             if (!data) return;
 
             const busyBays = Object.values(data).filter(
               (bay) => bay.status === "busy" || bay.currentSessionId,
             );
+
             if (busyBays.length > 0) {
               const isConfirmed = await showConfirm(
                 `DİKKAT: Şu anda ${busyBays.length} peronda aktif yıkama işlemi devam ediyor!\n\nYine de TÜM peronları toplu olarak AKTİF VE BOŞ hale getirmek istiyor musunuz?`,
               );
+
               if (!isConfirmed) return;
             }
 
@@ -2553,19 +2973,27 @@
                 method: "POST",
                 body: JSON.stringify({
                   bayId,
-                  patch: { isActive: true, status: "available" },
+                  patch: {
+                    isActive: true,
+                    status: "available",
+                  },
                 }),
               }),
             );
           },
-          { onlyOnce: true },
+          {
+            onlyOnce: true,
+          },
         );
       };
 
       setInterval(() => {
         const now = new Date();
+
         document.getElementById("clock").textContent =
-          `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+          `${String(now.getHours()).padStart(2, "0")}:${String(
+            now.getMinutes(),
+          ).padStart(2, "0")}`;
       }, 1000);
     </script>
   </body>
