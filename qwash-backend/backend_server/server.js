@@ -370,6 +370,14 @@ const adminUpdateUserSchema = z
   })
   .strict();
 
+  const adminUpdateTokenPriceSchema = z
+  .object({
+    jetonFiyat: z.coerce
+      .number()
+      .min(0.1, "Jeton fiyatı 0'dan büyük olmalıdır."),
+  })
+  .strict();
+
 const adminTopupSchema = z
   .object({
     userId: firebaseKeySchema,
@@ -2840,6 +2848,48 @@ app.post(
       return res.status(500).json({ error: "Bakiye yükleme başarısız oldu." });
     }
   },
+);
+
+// Mevcut jeton fiyatını getiren endpoint
+app.get("/api/admin/token-price", verifyAdmin, async (req, res) => {
+  try {
+    const snap = await db.collection("packages").doc("jeton").get();
+    if (!snap.exists) {
+      return res.status(200).json({ jetonFiyat: 0 }); 
+    }
+    return res.status(200).json({ jetonFiyat: snap.data().jetonFiyat || 0 });
+  } catch (error) {
+    safeLog(`❌ Jeton Fiyatı Getirme Hatası: ${error.message}`);
+    return res.status(500).json({ error: "Jeton fiyatı alınamadı." });
+  }
+});
+
+// Jeton fiyatını güncelleyen endpoint
+app.post(
+  "/api/admin/update-token-price",
+  verifyAdmin,
+  validateRequestBody(adminUpdateTokenPriceSchema),
+  async (req, res) => {
+    const { jetonFiyat } = req.validatedBody;
+
+    try {
+      await db.collection("packages").doc("jeton").set(
+        { jetonFiyat },
+        { merge: true }
+      );
+
+      safeLog(`💰 ADMİN JETON FİYATINI GÜNCELLEDİ: Yeni Fiyat = ${jetonFiyat} ₺`);
+
+      return res.status(200).json({
+        success: true,
+        message: "Jeton fiyatı başarıyla güncellendi.",
+        jetonFiyat
+      });
+    } catch (error) {
+      safeLog(`❌ Jeton Fiyatı Güncelleme Hatası: ${error.message}`);
+      return res.status(500).json({ error: "Jeton fiyatı güncellenemedi." });
+    }
+  }
 );
 
 const systemStartupClean = async () => {

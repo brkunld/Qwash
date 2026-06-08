@@ -9,7 +9,6 @@
     />
     <style>
       :root {
-        
         --bg-main: #f8f9fb;
         --bg-card: #ffffff;
         --sidebar-bg: #1a1a2e;
@@ -57,7 +56,6 @@
         overflow: hidden;
       }
 
-      
       #sidebar {
         width: 260px;
         flex-shrink: 0;
@@ -235,7 +233,6 @@
         color: #fca5a5;
       }
 
-      
       #main {
         flex: 1;
         display: flex;
@@ -243,7 +240,6 @@
         overflow: hidden;
       }
 
-      
       .topbar {
         height: 64px;
         flex-shrink: 0;
@@ -330,7 +326,6 @@
         background: var(--bg-card);
       }
 
-      
       #content {
         flex: 1;
         overflow-y: auto;
@@ -399,7 +394,6 @@
         color: var(--text-muted);
       }
 
-      
       .card-base {
         background: var(--bg-card);
         border: 1px solid var(--border);
@@ -408,7 +402,6 @@
         overflow: hidden;
       }
 
-      
       .log-box {
         background: var(--bg-card);
         border: 1px solid var(--border);
@@ -479,7 +472,6 @@
         color: var(--text-main);
       }
 
-      
       .search-wrap {
         background: var(--bg-card);
         border: 1px solid var(--border);
@@ -496,7 +488,6 @@
         gap: 12px;
       }
 
-      
       .inp {
         flex: 1;
         padding: 14px 16px;
@@ -557,7 +548,6 @@
         color: var(--success);
       }
 
-      
       .user-card {
         background: var(--bg-card);
         border: 1px solid var(--border);
@@ -650,7 +640,6 @@
         vertical-align: middle;
       }
 
-      
       .bulk-actions {
         background: var(--bg-card);
         border: 1px solid var(--border);
@@ -700,7 +689,6 @@
         color: var(--danger);
       }
 
-      
       .stats-grid {
         display: grid;
         grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
@@ -789,7 +777,6 @@
         background: var(--danger);
       }
 
-      
       .bay-grid {
         display: grid;
         grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
@@ -914,7 +901,6 @@
         cursor: not-allowed;
       }
 
-      
       ::-webkit-scrollbar {
         width: 6px;
       }
@@ -929,7 +915,6 @@
         background: var(--text-muted);
       }
 
-      
       #login-screen {
         position: fixed;
         inset: 0;
@@ -1087,7 +1072,7 @@
         display: none;
         text-align: center;
       }
-      
+
       #custom-confirm-overlay {
         position: fixed;
         inset: 0;
@@ -1144,7 +1129,7 @@
         background: #e5e7eb;
       }
       .btn-confirm {
-        background: #ef4444; 
+        background: #ef4444;
         color: white;
       }
       .btn-confirm:hover {
@@ -1165,14 +1150,13 @@
         }
       }
 
-      
       #global-loader {
         position: fixed;
         inset: 0;
         background: rgba(17, 24, 39, 0.8);
         backdrop-filter: blur(5px);
-        z-index: 99999; 
-        display: none; 
+        z-index: 99999;
+        display: none;
         flex-direction: column;
         align-items: center;
         justify-content: center;
@@ -1183,7 +1167,7 @@
         width: 48px;
         height: 48px;
         border: 4px solid rgba(255, 255, 255, 0.2);
-        border-top-color: var(--accent-yellow); 
+        border-top-color: var(--accent-yellow);
         border-radius: 50%;
         animation: spin 1s linear infinite;
         margin-bottom: 16px;
@@ -1215,7 +1199,7 @@
         color: #ef4444;
         box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
         transition: all 0.2s ease;
-        z-index: 101; 
+        z-index: 101;
       }
 
       .login-close-btn:hover {
@@ -1603,6 +1587,32 @@
           </div>
         </div>
 
+        <div class="stats-panel" style="margin-top: 24px">
+          <div class="sec-title" style="margin-bottom: 20px">
+            Sistem Ayarları
+          </div>
+          <div class="topup-row" style="border-top: none; padding-top: 0">
+            <span style="font-size: 14px; font-weight: 600"
+              >Jeton Fiyatı (₺):</span
+            >
+            <input
+              class="inp"
+              type="number"
+              step="0.1"
+              id="current-token-price"
+              placeholder="Yükleniyor..."
+              style="width: 140px; flex: none"
+            />
+            <button
+              class="btn-sm-accent"
+              id="update-token-price-btn"
+              onclick="updateTokenPrice()"
+            >
+              Fiyatı Güncelle
+            </button>
+          </div>
+        </div>
+
         <div id="tab-users" class="tab">
           <div class="search-wrap">
             <div class="sec-title">Kullanıcı Ara ve Yönet</div>
@@ -1806,7 +1816,6 @@
         return await fetch(`${API_BASE}${path}`, { ...options, headers });
       }
 
-      
       window.showToast = function (mesaj, tip = "error") {
         let container = document.getElementById("toast-container");
         if (!container) {
@@ -1833,7 +1842,6 @@
         toast.textContent = mesaj;
         container.appendChild(toast);
 
-        
         requestAnimationFrame(() => {
           setTimeout(() => {
             toast.style.opacity = "1";
@@ -1841,7 +1849,6 @@
           }, 10);
         });
 
-        
         setTimeout(() => {
           toast.style.opacity = "0";
           toast.style.transform = "translateX(100%)";
@@ -1849,7 +1856,6 @@
         }, 3000);
       };
 
-      
       window.showConfirm = function (mesaj) {
         return new Promise((resolve) => {
           const overlay = document.getElementById("custom-confirm-overlay");
@@ -1860,20 +1866,17 @@
           msgEl.textContent = mesaj;
           overlay.style.display = "flex";
 
-          
           const cleanup = () => {
             overlay.style.display = "none";
             btnYes.onclick = null;
             btnNo.onclick = null;
           };
 
-          
           btnYes.onclick = () => {
             cleanup();
             resolve(true);
           };
 
-          
           btnNo.onclick = () => {
             cleanup();
             resolve(false);
@@ -1967,6 +1970,7 @@
             document.getElementById("sidebar-name").textContent = displayName;
             appendLocalLog(`Admin girişi yapıldı: ${displayName}`, "info");
             window.initBaysListener();
+            window.fetchTokenPrice();
           } else {
             await signOut(auth);
             err.textContent = "Bu hesaba admin yetkisi tanımlanmamış!";
@@ -1987,7 +1991,6 @@
         });
       });
 
-      
       window.showLoader = function (mesaj = "Lütfen bekleyin...") {
         document.getElementById("loader-text").textContent = mesaj;
         document.getElementById("global-loader").style.display = "flex";
@@ -1997,9 +2000,7 @@
         document.getElementById("global-loader").style.display = "none";
       };
 
-      
       window.doLogout = async function () {
-        
         window.showLoader("Güvenli çıkış yapılıyor...");
 
         try {
@@ -2007,25 +2008,22 @@
         } catch (e) {
           console.error("Çıkış hatası:", e);
         } finally {
-          
           setTimeout(() => {
             window.hideLoader();
             document.getElementById("login-screen").style.display = "flex";
             document.getElementById("email").value = "";
             document.getElementById("password").value = "";
             document.getElementById("error-msg").style.display = "none";
-          }, 800); 
+          }, 800);
         }
       };
 
-      
       window.quitApplication = async function () {
         const onaylandi = await showConfirm(
           "Uygulamayı kapatmak istediğinize emin misiniz?",
         );
 
         if (onaylandi) {
-          
           window.showLoader("Oturum kapatılıyor, uygulama sonlandırılıyor...");
 
           try {
@@ -2034,7 +2032,6 @@
             console.error("Kapanış çıkış hatası:", e);
           }
 
-          
           setTimeout(() => {
             if (window.electronAPI && window.electronAPI.closeApp) {
               window.electronAPI.closeApp();
@@ -2045,7 +2042,7 @@
                 "warning",
               );
             }
-          }, 1000); 
+          }, 1000);
         }
       };
 
@@ -2114,6 +2111,59 @@
         .addEventListener("keydown", (e) => {
           if (e.key === "Enter") window.doSearch();
         });
+      // Jeton fiyatını sunucudan çekme
+      window.fetchTokenPrice = async function () {
+        try {
+          const res = await adminFetch("/token-price", { method: "GET" });
+          if (res.ok) {
+            const data = await res.json();
+            document.getElementById("current-token-price").value = data.jetonFiyat;
+          }
+        } catch (e) {
+          console.error("Jeton fiyatı çekilemedi:", e);
+        }
+      };
+
+      // Jeton fiyatını sunucuda güncelleme
+      window.updateTokenPrice = async function () {
+        const inputEl = document.getElementById("current-token-price");
+        const yeniFiyat = parseFloat(inputEl.value);
+
+        if (isNaN(yeniFiyat) || yeniFiyat <= 0) {
+          showToast("Lütfen 0'dan büyük geçerli bir fiyat girin.", "warning");
+          return;
+        }
+
+        const isConfirmed = await showConfirm(
+          `Jeton fiyatını ${yeniFiyat} ₺ olarak güncellemek istediğinize emin misiniz?`
+        );
+        if (!isConfirmed) return;
+
+        const btn = document.getElementById("update-token-price-btn");
+        btn.disabled = true;
+        btn.textContent = "Güncelleniyor...";
+
+        try {
+          const res = await adminFetch("/update-token-price", {
+            method: "POST",
+            body: JSON.stringify({ jetonFiyat: yeniFiyat }),
+          });
+          const data = await res.json();
+
+          if (res.ok) {
+            showToast(`Jeton fiyatı başarıyla ${yeniFiyat} ₺ yapıldı.`, "success");
+            appendLocalLog(`Jeton fiyatı ${yeniFiyat} ₺ olarak güncellendi.`, "success");
+          } else {
+            showToast("Hata: " + data.error, "error");
+          }
+        } catch (e) {
+          showToast("Sunucuya ulaşılamadı!", "error");
+        } finally {
+          btn.disabled = false;
+          btn.textContent = "Fiyatı Güncelle";
+        }
+      };
+
 
       window.toggleUserBlock = async function () {
         if (!selectedUserId) return;
@@ -2181,7 +2231,6 @@
 
           const btn = document.getElementById("add-token-btn");
 
-          
           btn.disabled = true;
           inputEl.disabled = true;
 
@@ -2200,23 +2249,19 @@
             const el = document.getElementById("res-tokens");
             el.textContent = parseInt(el.textContent || "0", 10) + amount;
 
-            
             inputEl.value = "";
             btn.disabled = false;
             inputEl.disabled = false;
 
-            
             showToast(
               `${data.tokensAdded} jeton (${data.amountTRY} ₺) başarıyla eklendi.`,
               "success",
             );
 
-            
             setTimeout(() => {
               inputEl.focus();
             }, 50);
 
-            
             appendLocalLog(
               `Kullanıcıya (${selectedUserId}) ${data.tokensAdded} jeton (${data.amountTRY} ₺ karşılığında) yüklendi.`,
               "success",
@@ -2224,7 +2269,6 @@
           } catch (e) {
             showToast("Sunucuya ulaşılamadı!", "error");
           } finally {
-            
             btn.disabled = false;
             inputEl.disabled = false;
           }
@@ -2370,22 +2414,19 @@
         });
       };
 
-      
-
       window.changeBayStatus = async function (bayId, currentStatus, isActive) {
         if (!isActive) return;
         const idx = STATUS_CYCLE.indexOf(currentStatus);
         const next =
           STATUS_CYCLE[idx === -1 ? 0 : (idx + 1) % STATUS_CYCLE.length];
 
-        
         if (previousBaysState && previousBaysState[bayId]) {
           const bay = previousBaysState[bayId];
           if (bay.status === "busy" || bay.currentSessionId) {
             const isConfirmed = await showConfirm(
               `DİKKAT: ${bayId} peronunda şu anda aktif bir araç yıkama işlemi var!\n\nYine de durumunu "${STATUS_LABELS[next].text}" olarak değiştirmek istiyor musunuz? (İşlem yarıda kesilebilir)`,
             );
-            if (!isConfirmed) return; 
+            if (!isConfirmed) return;
           }
         }
 
@@ -2396,7 +2437,6 @@
       };
 
       window.toggleBayActive = async function (bayId, isCurrentlyActive) {
-        
         if (
           isCurrentlyActive &&
           previousBaysState &&
@@ -2407,7 +2447,7 @@
             const isConfirmed = await showConfirm(
               `DİKKAT: ${bayId} peronunda şu anda aktif bir araç yıkama işlemi var!\n\nYine de peronu tamamen KAPATMAK istiyor musunuz?`,
             );
-            if (!isConfirmed) return; 
+            if (!isConfirmed) return;
           }
         }
 
@@ -2428,7 +2468,6 @@
             const data = snap.val();
             if (!data) return;
 
-            
             const busyBays = Object.values(data).filter(
               (bay) => bay.status === "busy" || bay.currentSessionId,
             );
@@ -2442,7 +2481,7 @@
               const isConfirmed = await showConfirm(
                 `DİKKAT: Şu anda ${busyBays.length} peronda aktif yıkama işlemi devam ediyor!\n\nYine de TÜM peronları toplu olarak "${durumMetni}" istiyor musunuz?`,
               );
-              if (!isConfirmed) return; 
+              if (!isConfirmed) return;
             }
 
             Object.keys(data).forEach((bayId) =>
@@ -2467,7 +2506,6 @@
             const data = snap.val();
             if (!data) return;
 
-            
             const busyBays = Object.values(data).filter(
               (bay) => bay.status === "busy" || bay.currentSessionId,
             );
@@ -2475,7 +2513,7 @@
               const isConfirmed = await showConfirm(
                 `DİKKAT: Şu anda ${busyBays.length} peronda aktif yıkama işlemi devam ediyor!\n\nYine de TÜM peronları toplu olarak KAPATMAK istiyor musunuz?`,
               );
-              if (!isConfirmed) return; 
+              if (!isConfirmed) return;
             }
 
             Object.keys(data).forEach((bayId) =>
@@ -2500,7 +2538,6 @@
             const data = snap.val();
             if (!data) return;
 
-            
             const busyBays = Object.values(data).filter(
               (bay) => bay.status === "busy" || bay.currentSessionId,
             );
@@ -2508,7 +2545,7 @@
               const isConfirmed = await showConfirm(
                 `DİKKAT: Şu anda ${busyBays.length} peronda aktif yıkama işlemi devam ediyor!\n\nYine de TÜM peronları toplu olarak AKTİF VE BOŞ hale getirmek istiyor musunuz?`,
               );
-              if (!isConfirmed) return; 
+              if (!isConfirmed) return;
             }
 
             Object.keys(data).forEach((bayId) =>
