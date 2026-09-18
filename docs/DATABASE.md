@@ -1,0 +1,266 @@
+# QWASH — Database Architecture & Data Dictionary
+
+Bu doküman, PostgreSQL veritabanı şemasını, tablo ilişkilerini, değişmez kuralları (invariants) ve indeksleme stratejisini açıklar.
+
+---
+
+## 1. Veritabanı Genel Bakış
+* **Motor:** PostgreSQL 16 (LTS)
+* **ORM:** Prisma ORM
+* **Para Temsili:** Tüm finansal değerler `BigInt` veya `Int` (Kuruş) olarak saklanır.
+* **Tarih Standartı:** Tüm zaman alanları `timestamptz` (UTC) tipindedir.
+
+---
+
+## 2. Varlık İlişki Diyagramı (ERD)
+
+```text
+┌──────────────┐         1:1         ┌──────────────┐         1:N         ┌──────────────┐
+│     User     ├─────────────────────┤    Wallet    ├─────────────────────┤ LedgerEntry  │
+│ (Kimlik/Rol) │                     │ (Kuruş Bazlı)│                     │ (Hareketler) │
+└──────┬───────┘                     └──────────────┘                     └──────────────┘
+       │
+       │ 1:N
+       ▼
+┌──────────────┐         N:1         ┌──────────────┐         N:1         ┌──────────────┐
+│ WashSession  ├─────────────────────┤     Bay      ├─────────────────────┤   Station    │
+│ (Yıkama Seansı)                    │ (Peron)      │                     │ (İstasyon)   │
+└──────┬───────┘                     └──────┬───────┘                     └──────────────┘
+       │                                    │ 1:1
+       │ 1:N                                ▼
+       ▼                             ┌──────────────┐                     ┌──────────────┐
+┌──────────────────────┐             │    Device    │                     │ InboxMessage │
+│  SessionTransition   │             │ OutboxEvent  │                     │ (Idempotency)│
+│ (State Machine Logu) │             │ (MQTT Kuyruk)│                     └──────────────┘
+└──────────────────────┘             └──────────────┘
+```
+
+---
+
+## 3. Tablo ve Model Tanımları
+
+### `User` & `Wallet`
+```prisma
+model User {
+  id           String       @id @default(uuid())
+  email        String       @unique
+  passwordHash String
+  phoneNumber  String?      @unique
+  role         UserRole     @default(USER) // USER, ADMIN, SUPER_ADMIN
+  status       UserStatus   @default(ACTIVE)
+  wallet       Wallet?
+  sessions     WashSession[]
+  createdAt    DateTime     @default(now())
+}
+
+model Wallet {
+  id           String        @id @default(uuid())
+  userId       String        @unique
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  balanceKurus BigInt        @default(0)
+  holdKurus    BigInt        @default(0)
+  currency     String        @default("TRY")
+  ledgerEntries LedgerEntry[]
+  updatedAt    DateTime      @updatedAt
+}
+```
+
+### `LedgerEntry` (Çift Girişli Muhasebe Kaydı)
+```prisma
+model LedgerEntry {
+  id             String         @id @default(uuid())
+  walletId       String
+  wallet         Wallet         @relation(fields: [walletId], references: [id])
+  amountKurus    BigInt
+  type           LedgerType     // CREDIT, DEBIT, HOLD, CAPTURE, RELEASE
+  balanceAfter   BigInt
+  referenceId    String?        // SessionId veya PaymentId
+  idempotencyKey String?        @unique
+  createdAt      DateTime       @default(now())
+}
+```
+
+### `Station` (İstasyon)
+```prisma
+model Station {
+  id        String      @id @default(uuid())
+  code      String      @unique // Örn: "STATION-01", "STATION-IST-03"
+  name      String      // Örn: "Kadıköy Merkez İstasyonu"
+  address   String?
+  cityCode  String?     // Örn: "34" (İstanbul)
+  status    StationStatus @default(ACTIVE) // ACTIVE, INACTIVE, MAINTENANCE
+  bays      Bay[]
+  createdAt DateTime    @default(now())
+  deletedAt DateTime?   // Soft-delete: NULL = aktif, dolu = silinmiş
+}
+```
+
+### `Bay` & `Device`
+```prisma
+model Bay {
+  id          String       @id @default(uuid())
+  bayCode     String       @unique // QR kodu (Örn: "BAY-001")
+  name        String
+  status      BayStatus    @default(IDLE) // IDLE, WAITING, RUNNING, OFFLINE, MAINTENANCE, ERROR
+  stationId   String
+  station     Station      @relation(fields: [stationId], references: [id])
+  device      Device?
+  sessions    WashSession[]
+  createdAt   DateTime     @default(now())
+}
+
+model Device {
+  id                     String       @id @default(uuid())
+  deviceId               String       @unique // Benzersiz donanım seri no / kimliği
+  bayId                  String       @unique
+  bay                    Bay          @relation(fields: [bayId], references: [id])
+  macAddress             String       @unique
+  firmwareVersion        String
+  status                 DeviceStatus @default(OFFLINE) // OFFLINE, ONLINE, BUSY, ERROR, MAINTENANCE
+  certificateFingerprint String?      // MQTTS TLS X.509 istemci sertifika parmak izi
+  desiredRelay           Boolean      @default(false)
+  reportedRelay          Boolean      @default(false)
+  lastSeenAt             DateTime?
+  ipAddress              String?
+}
+```
+
+### `WashSession` & `SessionTransition`
+```prisma
+model WashSession {
+  id          String         @id @default(uuid())
+  userId      String
+  user        User           @relation(fields: [userId], references: [id])
+  bayId       String
+  bay         Bay            @relation(fields: [bayId], references: [id])
+  durationSec Int            // Toplam seans suresi
+  costKurus   BigInt         // Toplam harcanan kurus tutari
+  status      SessionStatus  @default(CREATED)
+  startedAt   DateTime?
+  endedAt     DateTime?
+  programUsages SessionProgramUsage[]
+  transitions SessionTransition[]
+  createdAt   DateTime       @default(now())
+}
+
+model WashProgram {
+  id                  String                @id @default(uuid())
+  stationId           String?
+  station             Station?              @relation(fields: [stationId], references: [id])
+  code                String                // "WATER", "FOAM", "WAX", "AIR" veya dinamik program kodu
+  name                String                // "Basincli Su", "Aktif Kopuk", "Sicak Cila", "Hava", "Motor Yikama"
+  description         String?               // Opsiyonel program aciklamasi
+  icon                String?               // UI ikon referansi (orn: "water-drop", "sparkles")
+  pricePerSecondKurus Int                   // Orn: 50 (0.50 TL/sn), 100 (1.00 TL/sn), 150 (1.50 TL/sn)
+  relayIndex          Int                   // ESP32 roler kanali (1, 2, 3, 4...)
+  isActive            Boolean               @default(true)
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
+  deletedAt           DateTime?             // Soft-delete: Gecmis seans ve ledger kayitlarinin korunmasi icin
+  sessionUsages       SessionProgramUsage[]
+
+  @@unique([stationId, code])
+}
+
+model SessionProgramUsage {
+  id                 String       @id @default(uuid())
+  sessionId          String
+  session            WashSession  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  programId          String
+  program            WashProgram  @relation(fields: [programId], references: [id])
+  durationSeconds    Int          // Harcanan sure (sn)
+  ratePerSecondKurus Int          // O andaki saniyelik birim fiyat (snapshot)
+  costKurus          BigInt       // durationSeconds * ratePerSecondKurus
+  startedAt          DateTime     @default(now())
+  endedAt            DateTime?
+}
+
+model SessionTransition {
+  id            String       @id @default(uuid())
+  sessionId     String
+  session       WashSession  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  fromState     SessionStatus
+  toState       SessionStatus
+  reason        String?
+  correlationId String
+  createdAt     DateTime     @default(now())
+}
+```
+
+### `OutboxEvent` & `InboxMessage` (Reliability Models)
+```prisma
+model OutboxEvent {
+  id            String       @id @default(uuid())
+  aggregateType String       // "SESSION", "BAY", "WALLET"
+  aggregateId   String
+  eventType     String       // "START_WASH", "STOP_WASH"
+  payload       Json
+  status        OutboxStatus @default(PENDING) // PENDING, PUBLISHED, FAILED
+  retries       Int          @default(0)
+  createdAt     DateTime     @default(now())
+  processedAt   DateTime?
+
+  @@index([status, createdAt])
+}
+
+model InboxMessage {
+  id          String       @id @default(uuid())
+  messageId   String       @unique // Benzersiz MQTT Message / Event UUID (Deduplication anahtarı)
+  handler     String       // "MQTT_STARTED_ACK_HANDLER", "MQTT_TELEMETRY_HANDLER"
+  payload     Json
+  processedAt DateTime     @default(now())
+  createdAt   DateTime     @default(now())
+
+  @@index([messageId])
+}
+```
+
+---
+
+## 4. Veritabanı Kısıtlamaları (Constraints)
+
+Finansal tutarlılığı garanti altına almak için PostgreSQL seviyesinde eklenen kurallar:
+
+```sql
+-- 1. Bakiye asla sıfırın altına düşemez
+ALTER TABLE "Wallet" ADD CONSTRAINT wallet_positive_balance CHECK ("balanceKurus" >= 0);
+
+-- 2. Bloke tutarı negatif olamaz
+ALTER TABLE "Wallet" ADD CONSTRAINT wallet_positive_hold CHECK ("holdKurus" >= 0);
+
+-- 3. Bloke edilen para mevcut bakiyeden büyük olamaz
+ALTER TABLE "Wallet" ADD CONSTRAINT wallet_balance_gte_hold CHECK ("balanceKurus" >= "holdKurus");
+```
+
+---
+
+## 5. İndeksleme Stratejisi
+* `User(email)` ve `User(phoneNumber)`: Hızlı kullanıcı doğrulaması için B-Tree index.
+* `Bay(bayCode)`: QR tarandığında anlık peron tespiti için Unique B-Tree index.
+* `LedgerEntry(walletId, createdAt)`: Cüzdan ekstresi sorguları için composite index.
+* `OutboxEvent(status, createdAt)`: Outbox worker'ın okunmamış olayları milisaniyeler içinde çekmesi için partial index (`WHERE status = 'PENDING'`).
+* `Station(code)`: İstasyon kodu ile hızlı arama için Unique index.
+* `Bay(stationId)`: Bir istasyondaki tüm peronların sorgulanması için index.
+
+---
+
+## 6. Soft-Delete Politikası (KVKK / Veri Saklı Tutma)
+
+Proje, mevzuat gereklilikleri ve finansal denetim zorunlulukları nedeniyle farklı tablolarda farklı silme politikası uygular:
+
+| Tablo | Politika | Gerekçe |
+|---|---|---|
+| `User` | **Soft-Delete** (`deletedAt DateTime?`) | KVKK silme talebi. Hesap anonim hale getirilir, finansal kayıtlar korunur. |
+| `WashSession` | **Hard-Delete Yasak** | Finansal denetim (audit) zorunluluğu. Hiçbir seans kaydı asla silinemez. |
+| `LedgerEntry` | **Immutable / Değiştirilmez** | Muhasebe kaydı. `UPDATE` veya `DELETE` PostgreSQL Row Security ile engellenir. |
+| `Station` | **Soft-Delete** (`deletedAt DateTime?`) | Kapatılan istasyon geçmiş seans verilerinin referans bütünlüğünü korur. |
+| `Bay` | **Soft-Delete** (`deletedAt DateTime?`) | Kaldırılan peron tarihsel seans kayıtlarını geçersiz kılmamalıdır. |
+| `Device` | **Hard-Delete (izin verilir)** | Cihaz yeniden etiketleniyorsa eski kayıt silinebilir; `WashSession` ile doğrudan FK yoktur. |
+
+### KVKK Anonimleştirme Akışı
+Kullanıcı silme talebinde:
+1. `User.email` → `deleted_<uuid>@anon.qwash` yapılır.
+2. `User.phoneNumber` → `NULL` yapılır.
+3. `User.passwordHash` → rastgele hash ile üstlerine yazılır.
+4. `User.deletedAt` → mevcut zaman damgası yazılır.
+5. `WashSession` ve `LedgerEntry` kayıtları **anonim userId ile korunur** (finansal denetim için).

@@ -1,0 +1,11 @@
+# Dosya sonlarini LF (Unix) formatinda zorla sakla
+* text=lf
+
+# Markdown dosyalarinin da LF formatinda olmasini sagla
+*.md text=lf
+
+# Bash script'lerinin de LF formatinda olmasini sagla
+*.sh text=lf
+
+# Docker Compose dosyalarinin da LF formatinda olmasini sagla
+docker-compose.yml text=lf
