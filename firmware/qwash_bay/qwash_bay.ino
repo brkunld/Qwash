@@ -15,6 +15,9 @@
 #include <Preferences.h>
 #include <esp_task_wdt.h>
 #include <esp_system.h>
+#if __has_include(<esp_mac.h>)
+#include <esp_mac.h>  // Arduino-ESP32 3.x
+#endif
 #include <time.h>
 #include <functional>
 #include "config.h"
@@ -165,7 +168,7 @@ static void publishEvent(const char* topic, bool retain, std::function<void(Json
   doc["deviceId"] = deviceId;
   doc["stationId"] = stationId;
   doc["bayId"] = bayId;
-  doc["timestamp"] = ts;
+  if (timeSynced()) doc["timestamp"] = ts;  // Saat yoksa yanlis tarih yerine hic gonderme.
   JsonObject p = doc["payload"].to<JsonObject>();
   payloadFill(p);
   char buf[512];
@@ -432,8 +435,9 @@ void setup() {
   setenv("TZ", "UTC0", 1);
   tzset();
 
+  // WiFi.macAddress() Wi-Fi baslamadan 00:00:.. dondurur; eFuse'daki STA MAC'i dogrudan oku.
   uint8_t mac[6];
-  WiFi.macAddress(mac);
+  esp_read_mac(mac, ESP_MAC_WIFI_STA);
   snprintf(deviceId, sizeof(deviceId), "%02X%02X%02X%02X%02X%02X", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
   Serial.printf("\nQWASH bay %s fw %s reset=%d\n", deviceId, FW_VERSION, (int)esp_reset_reason());
 
@@ -497,6 +501,11 @@ void loop() {
   if (WiFi.isConnected() && !ntpStarted) {
     configTime(0, 0, "pool.ntp.org", "time.google.com");
     ntpStarted = true;
+  }
+  static bool ntpLogged = false;
+  if (!ntpLogged && timeSynced()) {
+    ntpLogged = true;
+    Serial.println("[ntp] saat senkronlandi");
   }
   if (paramsChanged) {
     paramsChanged = false;

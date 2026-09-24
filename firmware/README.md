@@ -32,9 +32,11 @@ Dev Mosquitto varsayilan olarak yalniz `127.0.0.1`'e bagli (anonim erisim acikti
 
 ## Elle test (broker'a komut gonderme)
 
-Docker'daki broker'a bilgisayardan (topic'te MAC degil, portalda girdigin istasyon/peron ID kullanilir):
+Docker'daki broker'a bilgisayardan (topic'te MAC degil, portalda girdigin istasyon/peron ID kullanilir).
 
-```powershell
+> **Git Bash kullan, Windows PowerShell 5.1 degil.** PowerShell `-m` ile gecilen JSON'daki tirnaklari siler, stdin'den pipe edilince de basina UTF-8 BOM ekler; iki durumda da cihaz mesaji gecersiz JSON diye reddeder (2026-09-25'te cihazda goruldu).
+
+```bash
 # START: 30 sn, role 1
 docker exec qwash-dev-mosquitto-1 mosquitto_pub -q 1 -t "qwash/station/STATION-01/bay/BAY-001/cmd" -m '{"commandId":"11111111-1111-4111-8111-111111111111","sessionId":"22222222-2222-4222-8222-222222222222","payload":{"type":"START","program":"WATER","relayIndex":1,"durationSec":30}}'
 
@@ -48,12 +50,14 @@ docker exec qwash-dev-mosquitto-1 mosquitto_pub -q 1 -t "qwash/station/STATION-0
 
 ## Faz 3 kabul kontrolu
 
-- [ ] START rolei ceker (veya kuru calismada log basar), sure dolunca kapatir.
+Ilk cihaz olcumu (2026-09-25, kuru calisma, ev Wi-Fi'i, RSSI -43): START→STARTED_ACK ~265 ms (`docker exec` acilisi dahil); ayni `commandId` tekrarinda sayac sifirlanmadi; 20 sn'lik seans 20 sn'de `SESSION_ENDED/COMPLETED` uretti.
+
+- [x] START rolei ceker (kuru calismada log basar), sure dolunca kapatir. _(kuru calismada dogrulandi; gercek role bekliyor)_
+- [x] Ayni `commandId` ikinci kez gelince role tekrar cekilmez.
+- [x] Komut-ACK gecikmesi olculur (~265 ms).
 - [ ] Sure ortasinda Wi-Fi/broker kesilse de sure dolunca role kapanir.
 - [ ] Sure ortasinda guc cekilip takilinca kalan sureyle devam eder, `SESSION_RECOVERED` olayi gelir.
-- [ ] Ayni `commandId` ikinci kez gelince role tekrar cekilmez.
 - [ ] `durationSec` > 3600 veya gecersiz `relayIndex` reddedilir.
-- [ ] Komut-ACK gecikmesi olculur (hedef < 5 sn, gercekte cok daha dusuk olmali).
 - [ ] Bosta ekranda QR + peron kodu, seansta kalan sure + `CALISIYOR`/`BITTI`.
 
 ## Bilinen sinirlar (spike)
