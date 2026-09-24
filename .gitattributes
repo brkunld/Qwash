@@ -1,11 +1,10 @@
-# Dosya sonlarini LF (Unix) formatinda zorla sakla
-* text=lf
+# Tum metin dosyalarini LF (Unix) satir sonuyla sakla ve checkout et.
+# core.autocrlf=true olan Windows makinelerde de LF kalir; Prettier LF bekler.
+# (Onceki "text=lf" gecerli bir git degeri degildi ve yok sayiliyordu.)
+* text=auto eol=lf
 
-# Markdown dosyalarinin da LF formatinda olmasini sagla
-*.md text=lf
-
-# Bash script'lerinin de LF formatinda olmasini sagla
-*.sh text=lf
-
-# Docker Compose dosyalarinin da LF formatinda olmasini sagla
-docker-compose.yml text=lf
+# Ikili dosyalar
+*.png binary
+*.jpg binary
+*.ico binary
+*.woff2 binary
