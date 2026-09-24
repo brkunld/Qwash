@@ -66,17 +66,18 @@ Faz 2 ve Faz 3 birbirinden bagimsizdir; iki kisi veya iki paralel calisma akisi 
 
 **Hedef:** Kurulabilen, kontrol edilebilen ve tutarli calistirilabilen gelistirme temeli.
 
-- [ ] Root `package.json`, `pnpm-workspace.yaml`, `turbo.json`.
-- [ ] `apps/backend`, `apps/web-customer`, `apps/web-admin`.
-- [ ] `packages/contracts`, `packages/tsconfig`, `packages/eslint-config`.
-- [ ] TypeScript strict, ortak lint ve formatlama.
-- [ ] PostgreSQL, Redis, Mosquitto icin Docker Compose.
-- [ ] Placeholder degerli `.env.example`, secret taramasi.
-- [ ] CI temeli: lint, typecheck, build.
+- [x] Root `package.json`, `pnpm-workspace.yaml`, `turbo.json`.
+- [x] `apps/backend` (NestJS 12, health + Swagger + Pino + env dogrulama), `apps/web-customer` (Next.js 16 PWA, port 3000), `apps/web-admin` (Next.js 16, port 3002).
+- [x] `packages/contracts` (kurus yardimcilari, durum enum'lari, health semasi), `packages/tsconfig`, `packages/eslint-config`.
+- [x] TypeScript strict (6.0; 7.0 lint/test araclari destekleyene kadar bekliyor), ortak lint (ESLint 9) ve Prettier.
+- [x] PostgreSQL, Redis, Mosquitto icin Docker Compose (`docker/docker-compose.dev.yml`, portlar yalniz 127.0.0.1).
+- [x] Placeholder degerli `.env.example`, CI'da gitleaks secret taramasi.
+- [x] CI temeli: format, lint, typecheck, test, build, compose dogrulama (`.github/workflows/ci.yml`).
 
 **Tamamlanma Kriterleri**
-- `pnpm install`, `pnpm typecheck`, `pnpm lint` repo kokunden basarili calisir.
-- Lokal altyapi Docker Compose ile ayaga kalkar.
+- [x] `pnpm install`, `pnpm build`, `pnpm typecheck`, `pnpm lint`, `pnpm test` repo kokunden basarili calisir (2026-09-25).
+- [ ] Lokal altyapi Docker Compose ile ayaga kalkar. (Compose dosyasi dogrulandi; Docker Desktop calisirken `pnpm infra:up` ile denenmeli.)
+- [ ] CI GitHub'da ilk kez yesil calisir (dal henuz itilmedi).
 
 ---
 

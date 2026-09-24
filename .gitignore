@@ -1,2 +1,31 @@
-# NOTES
+# Kisisel notlar
 NOTES
+
+# Bagimliliklar
+node_modules/
+
+# Derleme ciktilari
+dist/
+.next/
+out/
+*.tsbuildinfo
+next-env.d.ts
+
+# Arac onbellekleri
+.turbo/
+coverage/
+
+# Ortam degiskenleri (yalniz .env.example commit edilir)
+.env
+.env.*
+!.env.example
+
+# Isletim sistemi / editor
+.DS_Store
+Thumbs.db
+.vscode/*
+!.vscode/extensions.json
+.idea/
+
+# Loglar
+*.log

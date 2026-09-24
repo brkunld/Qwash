@@ -1,0 +1,9 @@
+{
+  "extends": "@qwash/tsconfig/node-library.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "types": ["node"],
+    "noEmit": true
+  },
+  "include": ["src"]
+}
