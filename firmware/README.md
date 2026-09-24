@@ -56,7 +56,7 @@ Ilk cihaz olcumu (2026-09-25, kuru calisma, ev Wi-Fi'i, RSSI -43): START→START
 - [x] Ayni `commandId` ikinci kez gelince role tekrar cekilmez.
 - [x] Komut-ACK gecikmesi olculur (~265 ms).
 - [x] Sure ortasinda Wi-Fi/broker kesilse de sure dolunca role kapanir. _(2026-09-25: 60 sn seansta erisim noktasi kapatildi; sayac durmadan bitti, `BITTI` goruldu, broker LWT ile `OFFLINE` yayinladi. Cevrimdisi biten seansin `SESSION_ENDED` olayi kaybolur; Faz 4 mutabakati kapatir.)_
-- [x] Sure ortasinda guc cekilip takilinca kalan sureyle devam eder, `SESSION_RECOVERED` olayi gelir. _(2026-09-25: gecti. Ancak 90 sn seans 3 yeniden baslama nedeniyle duvar saatiyle 129 sn surdu; ucuncu yeniden baslamanin sebebi bilinmiyor. NVS kayit araligi 10→3 sn yapildi, reset sebebi olaylara eklendi.)_
+- [x] Sure ortasinda guc cekilip takilinca kalan sureyle devam eder, `SESSION_RECOVERED` olayi gelir. _(2026-09-25: gecti. Burak fisi bilerek 3 kez cekti; 90 sn seans duvar saatiyle 129 sn surdu (her kesintide kapali kalinan sure + son NVS kaydindan bu yana gecen sure sayilmaz). NVS kayit araligi 10→3 sn yapildi, reset sebebi olaylara eklendi.)_
 - [ ] `durationSec` > 3600 veya gecersiz `relayIndex` reddedilir.
 - [ ] Bosta ekranda QR + peron kodu, seansta kalan sure + `CALISIYOR`/`BITTI`.
 
