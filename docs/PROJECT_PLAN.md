@@ -144,7 +144,7 @@ Repo dogrulamalari sunlari kapsamalidir:
 | Urun ve mimari dokumantasyonu | Devam ediyor (Faz 0) |
 | ADR'lar | 0001–0009 hazir |
 | Monorepo konfigürasyonu | Tamamlandi (Faz 1, `feat/faz-1-monorepo`; Docker ve CI ilk calistirma bekliyor) |
-| Cuzdan ve ledger | Baslamadi (Faz 2) |
+| Cuzdan ve ledger | Tamamlandi (Faz 2, `feat/faz-2-wallet-ledger`; admin tarife API Faz 6) |
 | ESP32 firmware / donanim spike | Baslamadi (Faz 3) |
 | Backend, seans ve IoT entegrasyonu | Baslamadi (Faz 4) |
 | Odeme ve musteri PWA | Baslamadi (Faz 5) |

@@ -6,3 +6,5 @@ coverage
 pnpm-lock.yaml
 docs
 *.md
+apps/backend/src/generated
+apps/backend/prisma/migrations

@@ -29,3 +29,6 @@ Thumbs.db
 
 # Loglar
 *.log
+
+# Prisma tarafindan uretilen istemci (prisma generate)
+apps/backend/src/generated/

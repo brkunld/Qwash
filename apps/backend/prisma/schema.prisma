@@ -1,0 +1,178 @@
+// QWASH veritabani semasi — Faz 2: kullanici, cuzdan, ledger, program/tarife.
+// Tasarim: docs/DATABASE.md, ADR-0004 (kurus + ledger).
+// Seans, cihaz ve kimlik yontemleri tablolari sonraki fazlarda eklenecek.
+
+generator client {
+  provider            = "prisma-client"
+  output              = "../src/generated/prisma"
+  moduleFormat        = "cjs"
+  importFileExtension = ""
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum UserRole {
+  USER
+  ADMIN
+  SUPER_ADMIN
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+  DELETED
+}
+
+enum LedgerType {
+  CREDIT // Bakiyeye para girisi
+  DEBIT // Bakiyeden dogrudan cikis (duzeltme/iade)
+  HOLD // Kullanilabilir bakiyenin bloke edilmesi
+  CAPTURE // Bloke edilen tutarin kalici tahsili
+  RELEASE // Bloke edilen tutarin serbest birakilmasi
+}
+
+enum LedgerSource {
+  CARD_TOPUP
+  CASH_TOPUP
+  SESSION
+  ADJUSTMENT
+  REFUND
+}
+
+enum HoldStatus {
+  ACTIVE // Bloke devam ediyor
+  CAPTURED // Tahsil edildi (kalan kismi serbest birakildi)
+  RELEASED // Tamamen serbest birakildi
+}
+
+enum BayStatus {
+  IDLE
+  WAITING
+  RUNNING
+  OFFLINE
+  MAINTENANCE
+  ERROR
+}
+
+model User {
+  id              String     @id @default(uuid())
+  email           String     @unique
+  passwordHash    String? // Yalnizca Google ile acilan hesapta null (ADR-0009)
+  emailVerifiedAt DateTime?
+  phoneNumber     String?    @unique
+  role            UserRole   @default(USER)
+  status          UserStatus @default(ACTIVE)
+  wallet          Wallet?
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+}
+
+// balanceKurus: cuzdandaki toplam para (bloke dahil).
+// holdKurus:    bunun bloke edilen kismi. Kullanilabilir = balance - hold.
+// Kurallar veritabaninda CHECK constraint ile de zorlanir (migration SQL).
+model Wallet {
+  id            String        @id @default(uuid())
+  userId        String        @unique
+  user          User          @relation(fields: [userId], references: [id], onDelete: Restrict)
+  balanceKurus  BigInt        @default(0)
+  holdKurus     BigInt        @default(0)
+  currency      String        @default("TRY")
+  ledgerEntries LedgerEntry[]
+  holds         WalletHold[]
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+}
+
+// Degistirilemez muhasebe kaydi. UPDATE/DELETE veritabani trigger'i ile engellenir.
+model LedgerEntry {
+  id                String       @id @default(uuid())
+  walletId          String
+  wallet            Wallet       @relation(fields: [walletId], references: [id], onDelete: Restrict)
+  type              LedgerType
+  source            LedgerSource
+  amountKurus       BigInt // Her zaman > 0; yon `type` ile belirlenir
+  balanceAfterKurus BigInt
+  holdAfterKurus    BigInt
+  holdId            String?
+  hold              WalletHold?  @relation(fields: [holdId], references: [id], onDelete: Restrict)
+  referenceId       String? // SessionId, PaymentId, CashTopUpId...
+  idempotencyKey    String?      @unique
+  note              String?
+  createdAt         DateTime     @default(now())
+
+  @@index([walletId, createdAt])
+}
+
+// Her bloke ayri izlenir: bir bloke yalnizca bir kez tahsil/serbest birakilabilir
+// ve bloke edilenden fazla tahsil edilemez.
+model WalletHold {
+  id             String        @id @default(uuid())
+  walletId       String
+  wallet         Wallet        @relation(fields: [walletId], references: [id], onDelete: Restrict)
+  amountKurus    BigInt // Bloke edilen tutar (> 0)
+  capturedKurus  BigInt        @default(0)
+  status         HoldStatus    @default(ACTIVE)
+  source         LedgerSource
+  referenceId    String?
+  idempotencyKey String        @unique
+  ledgerEntries  LedgerEntry[]
+  createdAt      DateTime      @default(now())
+  settledAt      DateTime?
+
+  @@index([walletId, status])
+}
+
+model Station {
+  id        String        @id @default(uuid())
+  code      String        @unique // Orn: "STATION-01"
+  name      String
+  bays      Bay[]
+  programs  WashProgram[]
+  createdAt DateTime      @default(now())
+}
+
+model Bay {
+  id        String       @id @default(uuid())
+  bayCode   String       @unique // QR icerigi (Orn: "BAY-001")
+  name      String
+  status    BayStatus    @default(IDLE)
+  stationId String
+  station   Station      @relation(fields: [stationId], references: [id], onDelete: Restrict)
+  programs  BayProgram[]
+  createdAt DateTime     @default(now())
+}
+
+// Fiyatlari admin belirler; seed degerleri yalnizca ornektir.
+model WashProgram {
+  id                  String       @id @default(uuid())
+  stationId           String
+  station             Station      @relation(fields: [stationId], references: [id], onDelete: Restrict)
+  code                String // "WATER", "FOAM", "WAX", "AIR" veya admin'in ekledigi kod
+  name                String
+  description         String?
+  icon                String?
+  pricePerSecondKurus Int // Orn: 50 = 0,50 TL/sn
+  isActive            Boolean      @default(true)
+  bayPrograms         BayProgram[]
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+  deletedAt           DateTime? // Soft-delete: gecmis kayitlar korunur
+
+  @@unique([stationId, code])
+}
+
+// Hangi peronda hangi program gecerli ve hangi role kanalina bagli.
+model BayProgram {
+  id         String      @id @default(uuid())
+  bayId      String
+  bay        Bay         @relation(fields: [bayId], references: [id], onDelete: Cascade)
+  programId  String
+  program    WashProgram @relation(fields: [programId], references: [id], onDelete: Restrict)
+  relayIndex Int // Bu perondaki ESP32 role kanali (1..4)
+  isEnabled  Boolean     @default(true)
+
+  @@unique([bayId, programId])
+  @@unique([bayId, relayIndex])
+}

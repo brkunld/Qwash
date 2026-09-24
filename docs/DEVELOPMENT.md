@@ -64,14 +64,23 @@ Host portları bilinçli olarak standart dışıdır, çünkü 5432/6379/1883 ç
 | MQTT | `11883` | `MQTT_HOST_PORT` |
 | MQTT WebSocket | `19001` | `MQTT_WS_HOST_PORT` |
 
-### 4. Veritabanı Şemasını ve Seed Verilerini Yükle (Faz 2'de eklenecek)
+### 4. Veritabanı Şemasını ve Seed Verilerini Yükle
 ```bash
-# Geliştirme ortamında şema senkronizasyonu
+# Migration'ları geliştirme veritabanına uygula
 pnpm db:migrate:dev
 
-# Örnek test verilerini yükle
+# Örnek veri: STATION-01 / BAY-001, 4 program, demo@qwash.local (150,00 ₺).
+# Tekrar çalıştırılabilir; bakiye iki kez yüklenmez.
 pnpm db:seed
 ```
+
+> Prisma 7 notları: Şema `apps/backend/prisma/schema.prisma`, ayarlar `apps/backend/prisma.config.ts`. İstemci `apps/backend/src/generated/prisma` altına üretilir (git'e girmez); `build`, `typecheck`, `lint` ve `test` komutları önce `prisma generate` çalıştırır. Prisma resmi olarak Node 20.19 / 22.12 / 24 destekler; Node 26'da uyarı verir ama çalışır.
+
+### Entegrasyon Testleri
+```bash
+pnpm test:integration
+```
+Gerçek PostgreSQL gerektirir (`pnpm infra:up`). Ayrı bir `qwash_test` veritabanı otomatik oluşturulur ve migration'lar uygulanır; geliştirme veritabanına dokunulmaz. Güvenlik için test veritabanı adının `_test` ile bitmesi zorunludur.
 
 ### 5. Tüm Uygulamaları Geliştirme Modunda Çalıştır
 ```bash

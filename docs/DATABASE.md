@@ -78,21 +78,53 @@ model Wallet {
 }
 ```
 
-### `LedgerEntry` (Çift Girişli Muhasebe Kaydı)
+> **Kaynak gerçek:** Faz 2'den itibaren uygulanan şema `apps/backend/prisma/schema.prisma` ve `apps/backend/prisma/migrations/` altındadır. Bu belge tasarımı açıklar; alan düzeyinde fark olursa şema dosyası geçerlidir.
+
+### `LedgerEntry` (Değiştirilemez Muhasebe Kaydı)
 ```prisma
 model LedgerEntry {
-  id             String         @id @default(uuid())
-  walletId       String
-  wallet         Wallet         @relation(fields: [walletId], references: [id])
-  amountKurus    BigInt
-  type           LedgerType     // CREDIT, DEBIT, HOLD, CAPTURE, RELEASE
-  source         LedgerSource   // CARD_TOPUP, CASH_TOPUP, SESSION, ADJUSTMENT, REFUND
-  balanceAfter   BigInt
-  referenceId    String?        // SessionId, PaymentId veya CashTopUpId
-  idempotencyKey String?        @unique
-  createdAt      DateTime       @default(now())
+  id                String       @id @default(uuid())
+  walletId          String
+  type              LedgerType   // CREDIT, DEBIT, HOLD, CAPTURE, RELEASE
+  source            LedgerSource // CARD_TOPUP, CASH_TOPUP, SESSION, ADJUSTMENT, REFUND
+  amountKurus       BigInt       // Her zaman > 0; yön `type` ile belirlenir
+  balanceAfterKurus BigInt       // Hareket sonrası bakiye
+  holdAfterKurus    BigInt       // Hareket sonrası bloke
+  holdId            String?      // HOLD/CAPTURE/RELEASE hareketinin ait olduğu bloke
+  referenceId       String?      // SessionId, PaymentId veya CashTopUpId
+  idempotencyKey    String?      @unique
+  note              String?
+  createdAt         DateTime     @default(now())
 }
 ```
+
+### `WalletHold` (Bloke Kaydı)
+Her bloke ayrı izlenir. Bir bloke yalnızca bir kez kapatılabilir (`CAPTURED` veya `RELEASED`) ve bloke edilenden fazla tahsil edilemez. Cüzdandaki `holdKurus`, aktif blokelerin toplamıdır.
+```prisma
+model WalletHold {
+  id             String       @id @default(uuid())
+  walletId       String
+  amountKurus    BigInt       // > 0
+  capturedKurus  BigInt       @default(0) // 0 <= captured <= amount
+  status         HoldStatus   @default(ACTIVE) // ACTIVE, CAPTURED, RELEASED
+  source         LedgerSource
+  referenceId    String?
+  idempotencyKey String       @unique
+  createdAt      DateTime     @default(now())
+  settledAt      DateTime?    // status ACTIVE ise null, degilse dolu (CHECK)
+}
+```
+
+**Hareket anlamları:**
+| Hareket | Bakiye | Bloke | Örnek |
+|---|---|---|---|
+| `CREDIT` | `+tutar` | — | Kart/nakit yükleme |
+| `HOLD` | — | `+tutar` (kullanılabilir bakiye yeterliyse) | Seans başlangıcı |
+| `CAPTURE` | `-kullanılan` | `-kullanılan` | Seans sonu tahsilat |
+| `RELEASE` | — | `-kalan` | Kullanılmayan kısım / ACK gelmedi |
+| `DEBIT` | `-tutar` | — | Düzeltme |
+
+Örnek: 3000 kuruş bloke, 1800 kuruş kullanıldı → `CAPTURE 1800` + `RELEASE 1200`.
 
 ### `CashTopUp` (Kasada Nakit Yükleme)
 Operatör kasada müşteriden nakit alır ve müşterinin bakiyesine yükler. Kart yüklemeden (Iyzico) ve hata düzeltmeden (`ADJUSTMENT`) ayrı bir akıştır; gün sonu kasa mutabakatı bu tablodan yapılır.
