@@ -131,6 +131,7 @@ Faz 2 ve Faz 3 birbirinden bagimsizdir; iki kisi veya iki paralel calisma akisi 
 - [ ] NestJS backend: health endpoint, structured logging (Pino).
 - [ ] Deterministik seans state machine (ADR-0007): `WAITING → STARTING → RUNNING → COMPLETED/FAILED`.
 - [ ] Two-phase ACK: HOLD → MQTT START → STARTED_ACK → CAPTURE. ACK gelmezse RELEASE (5 sn timeout).
+- [ ] **Gec ACK kurali:** RELEASE edilmis/iptal edilmis bir seans icin sonradan `STARTED_ACK` gelirse backend derhal STOP gonderir ve olayi kaydeder. Gerekce: saati senkron olmayan cihaz `expiresAt` kontrolunu yapamaz ve suresi dolmus START'i kabul eder (Faz 3'te cihazda goruldu, 2026-09-25).
 - [ ] Komutlar icin transactional outbox, ACK/telemetri icin idempotent inbox (ADR-0005).
 - [ ] **Seans sonu mutabakati:** Cihazin bildirdigi gercek calisma suresi ile tahsil edilen tutar karsilastirilir; fark iade veya duzeltme entry'si olarak islenir. Seans ortasinda cihaz kaybolursa (guc/ag) seans `RECONCILING` durumuna alinir ve cihaz geri geldiginde kapatilir.
 - [ ] Device twin: desired/reported state, drift tespiti (ADR-0006).
