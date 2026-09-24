@@ -29,6 +29,7 @@ constexpr uint32_t NVS_SAVE_EVERY_MS = 10000; // Seans kalan suresi kayit aralig
 // ---- Zamanlamalar ----
 constexpr uint32_t HEARTBEAT_EVERY_MS = 30000;
 constexpr uint32_t MQTT_RETRY_MS = 5000;
+constexpr uint32_t WIFI_RETRY_MS = 15000;  // Wi-Fi kopunca kendi yeniden deneme araligi.
 
 // ---- Portal ile ayarlanabilen varsayilanlar (NVS'te saklanir) ----
 #define DEFAULT_MQTT_HOST "192.168.1.100"  // Bilgisayarinin LAN IP'si

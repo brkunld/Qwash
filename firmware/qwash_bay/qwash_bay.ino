@@ -502,6 +502,20 @@ void loop() {
     configTime(0, 0, "pool.ntp.org", "time.google.com");
     ntpStarted = true;
   }
+  // Kendi yeniden baglanma dongumuz: core'un auto-reconnect'i AP tamamen kaybolunca
+  // (NO_AP_FOUND) vazgeciyor; modem yeniden baslayinca peron kalici cevrimdisi kaliyordu.
+  static uint32_t wifiLostAt = 0, lastWifiRetry = 0;
+  if (WiFi.isConnected()) {
+    wifiLostAt = 0;
+  } else if (!wm.getConfigPortalActive()) {
+    if (!wifiLostAt) wifiLostAt = millis();
+    if (millis() - wifiLostAt >= WIFI_RETRY_MS && millis() - lastWifiRetry >= WIFI_RETRY_MS) {
+      lastWifiRetry = millis();
+      Serial.println("[wifi] yeniden baglaniliyor");
+      WiFi.disconnect(false);
+      WiFi.begin();  // NVS'teki kayitli SSID/sifre ile
+    }
+  }
   static bool ntpLogged = false;
   if (!ntpLogged && timeSynced()) {
     ntpLogged = true;

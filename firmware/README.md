@@ -64,6 +64,6 @@ Ilk cihaz olcumu (2026-09-25, kuru calisma, ev Wi-Fi'i, RSSI -43): START→START
 
 - Guc kesilince kurtarilan sure, son NVS kaydindaki (en fazla 10 sn onceki) kalan sureden devam eder; kesinti suresi sayilmaz (RTC yok). Sunucu mutabakati (Faz 4) bunu duzeltir.
 - MQTT su an sifresiz/TLS'siz (yalniz dev). TLS, cihaz kimligi ve ACL Faz 4'te.
-- Wi-Fi seans disinda koparsa portal otomatik yeniden acilmaz; cihaz yeniden baslatilinca acilir.
+- Wi-Fi koparsa cihaz 15 sn'de bir kayitli aga yeniden baglanmayi dener (core'un auto-reconnect'i AP tamamen kaybolunca vazgeciyordu; 2026-09-25'te cihazda goruldu). Portal ise kendiliginden yeniden acilmaz; ag bilgisi degistiyse cihaz yeniden baslatilmali.
 - QR taban adresi (`https://qwash.example/b/`) yer tutucudur.
 - WDT sifirlamasinda GPIO'lar kisa sure kayan olabilir; gercek role kartinda pull-down ile guvenli konuma cekilmesi donanim tarafinda kontrol edilmeli.
