@@ -119,7 +119,23 @@ model Bay {
   station     Station      @relation(fields: [stationId], references: [id])
   device      Device?
   sessions    WashSession[]
+  programs    BayProgram[] // Bu peronda gecerli programlar
   createdAt   DateTime     @default(now())
+}
+
+// Hangi peronda hangi programin gecerli oldugu ve hangi role kanalina bagli oldugu.
+// Program istasyon duzeyinde tanimlanir; perona atama ve role eslemesi burada yapilir.
+model BayProgram {
+  id         String      @id @default(uuid())
+  bayId      String
+  bay        Bay         @relation(fields: [bayId], references: [id])
+  programId  String
+  program    WashProgram @relation(fields: [programId], references: [id])
+  relayIndex Int         // Bu perondaki ESP32 role kanali (1..4)
+  isEnabled  Boolean     @default(true)
+
+  @@unique([bayId, programId])
+  @@unique([bayId, relayIndex]) // Ayni role iki programa atanamaz
 }
 
 model Device {
@@ -131,8 +147,8 @@ model Device {
   firmwareVersion        String
   status                 DeviceStatus @default(OFFLINE) // OFFLINE, ONLINE, BUSY, ERROR, MAINTENANCE
   certificateFingerprint String?      // MQTTS TLS X.509 istemci sertifika parmak izi
-  desiredRelay           Boolean      @default(false)
-  reportedRelay          Boolean      @default(false)
+  desiredRelayIndex      Int?         // null = tum roleler kapali; 1..4 = aktif role (device twin)
+  reportedRelayIndex     Int?
   lastSeenAt             DateTime?
   ipAddress              String?
 }
@@ -165,7 +181,7 @@ model WashProgram {
   description         String?               // Opsiyonel program aciklamasi
   icon                String?               // UI ikon referansi (orn: "water-drop", "sparkles")
   pricePerSecondKurus Int                   // Orn: 50 (0.50 TL/sn), 100 (1.00 TL/sn), 150 (1.50 TL/sn)
-  relayIndex          Int                   // ESP32 roler kanali (1, 2, 3, 4...)
+  bayPrograms         BayProgram[]          // Role kanali perona gore BayProgram.relayIndex'te tutulur
   isActive            Boolean               @default(true)
   createdAt           DateTime              @default(now())
   updatedAt           DateTime              @updatedAt

@@ -83,7 +83,7 @@ Ağ kopması nedeniyle aynı istek tekrar gönderilirse backend işlemi yeniden 
 ### 🚗 Peron & Program Yönetimi (`/api/v1/bays`)
 * `GET /api/v1/bays` — Tüm peronların genel durum listesi (IDLE, RUNNING, MAINTENANCE).
 * `GET /api/v1/bays/:bayCode` — QR okutulduğunda peron detayını ve seans hazırlığını getirme.
-* `GET /api/v1/bays/:bayCode/programs` — Perondaki aktif yıkama programları ve saniyelik kuruş tarifeleri (Örn: Su: 50 kr/sn, Köpük: 100 kr/sn, Cila: 150 kr/sn, Hava: 75 kr/sn).
+* `GET /api/v1/bays/:bayCode/programs` — Yalnızca bu perona atanmış ve etkin (`BayProgram.isEnabled`) yıkama programları ve saniyelik kuruş tarifeleri (Örn: Su: 50 kr/sn, Köpük: 100 kr/sn, Cila: 150 kr/sn, Hava: 75 kr/sn).
 * `POST /api/v1/bays/:id/prepare` — Peronu 30 saniyeliğine kullanıcıya rezerve etme (`WAITING`).
 * `POST /api/v1/bays/:id/cancel-waiting` — Rezervasyonu iptal edip peronu boşa çıkarma.
 
@@ -105,7 +105,8 @@ Ağ kopması nedeniyle aynı istek tekrar gönderilirse backend işlemi yeniden 
 * `GET /api/v1/admin/dashboard` — Anlık telemetri, aktif seanslar ve ciro metrikleri.
 * `POST /api/v1/admin/programs` — Sıfırdan yeni yıkama programı/paketi ekleme (`code`, `name`, `description?`, `icon?`, `pricePerSecondKurus`, `relayIndex`, `stationId?`).
 * `GET /api/v1/admin/programs` — İstasyon/peron yıkama programlarını ve saniyelik fiyat tarifelerini listeleme (`includeInactive` filtresi ile).
-* `PUT /api/v1/admin/programs/:id` — Program bilgilerini, saniyelik kuruş fiyatını veya röle numarasını güncelleme.
+* `PUT /api/v1/admin/programs/:id` — Program bilgilerini ve saniyelik kuruş fiyatını güncelleme.
+* `PUT /api/v1/admin/bays/:id/programs` — Peronda geçerli programları ve her birinin röle kanalını atama (`[{ programId, relayIndex, isEnabled }]`). Aynı röle iki programa atanamaz.
 * `PATCH /api/v1/admin/programs/:id/toggle` — Programı anında aktif/pasif duruma alma (`isActive`).
 * `DELETE /api/v1/admin/programs/:id` — Programı sistemden silme (Finansal tutarlılık ve geçmiş seansların korunması için Soft-Delete: `deletedAt` atanır, müşteri ekranından derhal kaldırılır).
 * `POST /api/v1/admin/bays/:id/maintenance` — Peronu bakım moduna alma/çıkarma.
