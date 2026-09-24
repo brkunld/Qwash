@@ -51,9 +51,18 @@ cp .env.example .env
 
 ### 3. Altyapı Konteynerlerini Başlat (PostgreSQL, Redis, MQTT)
 ```bash
-pnpm infra:up      # docker compose -f docker/docker-compose.dev.yml up -d
+pnpm infra:up      # konteynerleri başlatır ve healthy olana kadar bekler
 pnpm infra:down
 ```
+
+Host portları bilinçli olarak standart dışıdır, çünkü 5432/6379/1883 çoğu makinede başka projeler veya yerel servisler tarafından kullanılır:
+
+| Servis | Host portu | `.env` değişkeni |
+|---|---|---|
+| PostgreSQL | `15432` | `POSTGRES_HOST_PORT` |
+| Redis | `16379` | `REDIS_HOST_PORT` |
+| MQTT | `11883` | `MQTT_HOST_PORT` |
+| MQTT WebSocket | `19001` | `MQTT_WS_HOST_PORT` |
 
 ### 4. Veritabanı Şemasını ve Seed Verilerini Yükle (Faz 2'de eklenecek)
 ```bash

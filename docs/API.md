@@ -110,7 +110,9 @@ Ağ kopması nedeniyle aynı istek tekrar gönderilirse backend işlemi yeniden 
 * `PATCH /api/v1/admin/programs/:id/toggle` — Programı anında aktif/pasif duruma alma (`isActive`).
 * `DELETE /api/v1/admin/programs/:id` — Programı sistemden silme (Finansal tutarlılık ve geçmiş seansların korunması için Soft-Delete: `deletedAt` atanır, müşteri ekranından derhal kaldırılır).
 * `POST /api/v1/admin/bays/:id/maintenance` — Peronu bakım moduna alma/çıkarma.
-* `POST /api/v1/admin/users/:id/adjust-balance` — Manuel bakiye tanımlama (Zorunlu audit açıklaması).
+* `POST /api/v1/admin/users/:id/adjust-balance` — Hata düzeltme amaçlı manuel bakiye değişikliği (Zorunlu audit açıklaması, yalnız `SUPER_ADMIN`). Nakit yükleme için kullanılmaz.
+* `POST /api/v1/admin/users/:id/cash-topup` — Kasada nakit alıp müşterinin bakiyesine yükleme. Body: `{ "amountKurus": 10000, "note": "..." }`, `Idempotency-Key` zorunlu. Makbuz numarası üretir; `CashTopUp` + `LedgerEntry(CREDIT, source=CASH_TOPUP)` aynı transaction'da yazılır.
+* `GET /api/v1/admin/cash-topups?stationId=&date=` — Gün sonu kasa mutabakatı: istasyon/gün/operatör bazında nakit yükleme listesi ve toplamı.
 * `GET /api/v1/admin/audit-logs` — Yönetici işlem denetim geçmişi.
 
 ---

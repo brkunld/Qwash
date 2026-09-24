@@ -14,9 +14,9 @@
     "test": "turbo run test",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "infra:up": "docker compose -f docker/docker-compose.dev.yml up -d",
-    "infra:down": "docker compose -f docker/docker-compose.dev.yml down",
-    "infra:check": "docker compose -f docker/docker-compose.dev.yml config --quiet"
+    "infra:up": "docker compose --project-directory . -f docker/docker-compose.dev.yml up -d --wait",
+    "infra:down": "docker compose --project-directory . -f docker/docker-compose.dev.yml down",
+    "infra:check": "docker compose --project-directory . -f docker/docker-compose.dev.yml config --quiet"
   },
   "devDependencies": {
     "prettier": "^3.9.9",

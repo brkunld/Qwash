@@ -76,7 +76,7 @@ Faz 2 ve Faz 3 birbirinden bagimsizdir; iki kisi veya iki paralel calisma akisi 
 
 **Tamamlanma Kriterleri**
 - [x] `pnpm install`, `pnpm build`, `pnpm typecheck`, `pnpm lint`, `pnpm test` repo kokunden basarili calisir (2026-09-25).
-- [ ] Lokal altyapi Docker Compose ile ayaga kalkar. (Compose dosyasi dogrulandi; Docker Desktop calisirken `pnpm infra:up` ile denenmeli.)
+- [x] Lokal altyapi Docker Compose ile ayaga kalkar (2026-09-25: Postgres, Redis, Mosquitto healthy; host portlari 15432/16379/11883/19001).
 - [ ] CI GitHub'da ilk kez yesil calisir (dal henuz itilmedi).
 
 ---
@@ -174,7 +174,8 @@ Faz 2 ve Faz 3 birbirinden bagimsizdir; iki kisi veya iki paralel calisma akisi 
 - [ ] Canli peron durumu dashboard'u.
 - [ ] Bakim modu ve acil durdurma.
 - [ ] Kullanici ve cuzdan arama.
-- [ ] Zorunlu gerekce ve audit kaydi ile manuel bakiye duzeltme.
+- [ ] Kasada nakit yukleme: operator musteriyi bulur (e-posta), tutari girer, makbuz numarasi uretilir, idempotent yazilir. Gun sonu kasa raporu (istasyon/gun/operator toplami). (Karar: Burak, 2026-09-25)
+- [ ] Zorunlu gerekce ve audit kaydi ile manuel bakiye duzeltme (yalniz hata duzeltme, nakit yukleme icin kullanilmaz).
 - [ ] Program/tarife yonetimi (ekleme, fiyat degistirme, soft-delete, role esleme).
 - [ ] Cihaz sagligi: heartbeat, RSSI, alarm gorunurlugu.
 - [ ] Admin girisi guclendirme: rol tabanli yetki, oturum suresi, gerekirse MFA.

@@ -86,10 +86,28 @@ model LedgerEntry {
   wallet         Wallet         @relation(fields: [walletId], references: [id])
   amountKurus    BigInt
   type           LedgerType     // CREDIT, DEBIT, HOLD, CAPTURE, RELEASE
+  source         LedgerSource   // CARD_TOPUP, CASH_TOPUP, SESSION, ADJUSTMENT, REFUND
   balanceAfter   BigInt
-  referenceId    String?        // SessionId veya PaymentId
+  referenceId    String?        // SessionId, PaymentId veya CashTopUpId
   idempotencyKey String?        @unique
   createdAt      DateTime       @default(now())
+}
+```
+
+### `CashTopUp` (Kasada Nakit Yükleme)
+Operatör kasada müşteriden nakit alır ve müşterinin bakiyesine yükler. Kart yüklemeden (Iyzico) ve hata düzeltmeden (`ADJUSTMENT`) ayrı bir akıştır; gün sonu kasa mutabakatı bu tablodan yapılır.
+```prisma
+model CashTopUp {
+  id             String   @id @default(uuid())
+  walletId       String
+  wallet         Wallet   @relation(fields: [walletId], references: [id])
+  amountKurus    BigInt   // > 0 (CHECK constraint)
+  operatorId     String   // Yuklemeyi yapan admin/operator (User.id)
+  stationId      String   // Hangi istasyonun kasasi
+  receiptNo      String   @unique // Musteriye verilen makbuz numarasi
+  note           String?
+  idempotencyKey String   @unique // Cift tiklamada iki kez yuklenmesin
+  createdAt      DateTime @default(now())
 }
 ```
 

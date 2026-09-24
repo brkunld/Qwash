@@ -1,6 +1,8 @@
 # QWASH yerel gelistirme altyapisi.
 # Portlar yalnizca 127.0.0.1'e baglanir; disaridan erisilemez.
-# Kullanim: pnpm infra:up  (degiskenler kok dizindeki .env dosyasindan okunur)
+# Varsayilan portlar standart portlardan farklidir (5432/6379/1883 cogu makinede
+# baska projeler veya yerel servisler tarafindan kullaniliyor). Degistirmek icin .env.
+# Kullanim: pnpm infra:up  (kok dizinden calisir, kok .env dosyasini okur)
 name: qwash-dev
 
 services:
@@ -11,7 +13,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me-local-only}
       POSTGRES_DB: ${POSTGRES_DB:-qwash_dev}
     ports:
-      - '127.0.0.1:5432:5432'
+      - '127.0.0.1:${POSTGRES_HOST_PORT:-15432}:5432'
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
@@ -24,7 +26,7 @@ services:
     image: redis:8-alpine
     command: ['redis-server', '--appendonly', 'yes']
     ports:
-      - '127.0.0.1:6379:6379'
+      - '127.0.0.1:${REDIS_HOST_PORT:-16379}:6379'
     volumes:
       - redis-data:/data
     healthcheck:
@@ -36,11 +38,16 @@ services:
   mosquitto:
     image: eclipse-mosquitto:2
     ports:
-      - '127.0.0.1:1883:1883' # MQTT
-      - '127.0.0.1:9001:9001' # MQTT over WebSocket
+      - '127.0.0.1:${MQTT_HOST_PORT:-11883}:1883' # MQTT
+      - '127.0.0.1:${MQTT_WS_HOST_PORT:-19001}:9001' # MQTT over WebSocket
     volumes:
-      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - ./docker/mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
       - mosquitto-data:/mosquitto/data
+    healthcheck:
+      test: ['CMD', 'mosquitto_sub', '-t', '$$SYS/broker/uptime', '-C', '1', '-W', '3']
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
 volumes:
   postgres-data:
