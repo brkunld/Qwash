@@ -44,13 +44,26 @@ Bu doküman, PostgreSQL veritabanı şemasını, tablo ilişkilerini, değişmez
 model User {
   id           String       @id @default(uuid())
   email        String       @unique
-  passwordHash String
-  phoneNumber  String?      @unique
+  passwordHash String?      // Yalnızca Google ile açılan hesapta null (ADR-0009)
+  emailVerifiedAt DateTime?
+  phoneNumber  String?      @unique // Opsiyonel; MVP'de zorunlu değil
+  identities   AuthIdentity[]
   role         UserRole     @default(USER) // USER, ADMIN, SUPER_ADMIN
   status       UserStatus   @default(ACTIVE)
   wallet       Wallet?
   sessions     WashSession[]
   createdAt    DateTime     @default(now())
+}
+
+model AuthIdentity {
+  id             String   @id @default(uuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider       String   // "password" | "google"
+  providerUserId String   // Google için sub claim'i
+  createdAt      DateTime @default(now())
+
+  @@unique([provider, providerUserId])
 }
 
 model Wallet {

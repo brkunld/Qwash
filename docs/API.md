@@ -71,8 +71,12 @@ Ağ kopması nedeniyle aynı istek tekrar gönderilirse backend işlemi yeniden 
 ## 4. REST Endpoint Matrisi
 
 ### 🔐 Kimlik Doğrulama (`/api/v1/auth`)
-* `POST /api/v1/auth/register` — Yeni kullanıcı kaydı.
+* `POST /api/v1/auth/register` — E-posta + şifre ile yeni kullanıcı kaydı (e-posta doğrulama bağlantısı gönderilir). Misafir kullanım yoktur ([ADR-0009](adr/0009-customer-authentication.md)).
 * `POST /api/v1/auth/login` — E-posta ve şifre ile giriş (Access Token döner, Refresh Token HTTP-only cookie'ye yazılır).
+* `POST /api/v1/auth/google` — Google ID token ile giriş/kayıt. Token sunucuda doğrulanır; `email_verified` olmayan hesap kabul edilmez.
+* `POST /api/v1/auth/verify-email` — E-posta doğrulama token'ı ile hesabı doğrulama. Doğrulanmamış hesap bakiye yükleyemez.
+* `POST /api/v1/auth/forgot-password` / `POST /api/v1/auth/reset-password` — Tek kullanımlık token ile şifre sıfırlama.
+* `PATCH /api/v1/me/profile` — Ad ve opsiyonel telefon numarası güncelleme (telefon yalnızca gerekirse istenir).
 * `POST /api/v1/auth/refresh` — Refresh token ile yeni access token alma.
 * `POST /api/v1/auth/logout` — Oturumu sonlandırma ve token'ı kara listeye alma.
 
