@@ -78,9 +78,11 @@ static void uiCenterText(const char* text, int y, int size, uint16_t color) {
 // Bosta: peron QR'i + kisa peron kodu. QR yalniz cihazin urettigi adrestir.
 static void uiIdle(const char* qrUrl, const char* bayId, bool wifiOk, bool mqttOk) {
   gfx.fillScreen(TFT_BLACK);
-  int qrSize = gfx.height() - 60;
-  gfx.qrcode(qrUrl, (gfx.width() - qrSize) / 2, 4, qrSize, 4);
-  // QR beyaz zemin uzerinde okunur; siyah zemin sorun cikarirsa fillRect ile beyaz cerceve ekle.
+  int qrSize = gfx.height() - 72;
+  int qx = (gfx.width() - qrSize) / 2, qy = 10;
+  // Okuyucular icin QR'in cevresinde beyaz sessiz bolge (quiet zone) gerekir.
+  gfx.fillRect(qx - 8, qy - 8, qrSize + 16, qrSize + 16, TFT_WHITE);
+  gfx.qrcode(qrUrl, qx, qy, qrSize, 4);
   uiCenterText(bayId, gfx.height() - 50, 3, TFT_WHITE);
   const char* st = !wifiOk ? "WIFI YOK" : (!mqttOk ? "SUNUCU YOK" : "HAZIR");
   uiCenterText(st, gfx.height() - 22, 2, (wifiOk && mqttOk) ? TFT_GREEN : TFT_YELLOW);

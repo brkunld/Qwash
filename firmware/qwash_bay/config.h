@@ -11,7 +11,7 @@ constexpr int PIN_TFT_MISO = 12;
 constexpr int PIN_TFT_CS = 15;
 constexpr int PIN_TFT_DC = 2;
 constexpr int PIN_TFT_BL = 27;
-constexpr bool TFT_INVERT = false;  // Renkler ters gorunurse true yap.
+constexpr bool TFT_INVERT = true;  // E32R32P'de dogrulandi (false iken renkler tersti).
 constexpr int TFT_ROTATION = 1;     // 1 = yatay (320x240). 0/2 dikey.
 
 // ---- Role pinleri ----
