@@ -181,6 +181,7 @@ static void publishStatus(const char* status) {
     p["type"] = "DEVICE_STATUS";
     p["status"] = status;
     p["firmwareVersion"] = FW_VERSION;
+    p["resetReason"] = (int)esp_reset_reason();  // 1 guc, 3 yazilim, 4 panic, 5-7 WDT, 9 brownout
   });
 }
 
@@ -243,6 +244,7 @@ static void endSession(const char* reason) {
     p["reason"] = reason;
     p["remainingSec"] = rem;
   });
+  publishStatus("ONLINE");  // Retained BUSY'yi temizle.
   uiMode = UiMode::DONE;
   doneUntilMs = millis() + 5000;
   lastUiSec = 0xFFFFFFFF;
@@ -292,6 +294,7 @@ static void handleStart(JsonObject env, JsonObject pl, const char* commandId, co
   uiMode = UiMode::RUNNING;
   lastUiSec = 0xFFFFFFFF;
   publishAck("STARTED_ACK", commandId, sessionId, "SUCCESS");
+  publishStatus("BUSY");
 }
 
 static void handleStop(JsonObject pl, const char* commandId, const char* sessionId) {
@@ -377,7 +380,9 @@ static void mqttTryConnect() {
     mqtt.subscribe(tCmd, 1);
     publishStatus(sess.active ? "BUSY" : "ONLINE");
     if (recoveredPending) {
-      publishSimpleEvent("SESSION_RECOVERED", "POWER_LOSS_OR_RESET");
+      char detail[32];
+      snprintf(detail, sizeof(detail), "RESET_REASON_%d", (int)esp_reset_reason());
+      publishSimpleEvent("SESSION_RECOVERED", detail);
       recoveredPending = false;
     }
   } else {

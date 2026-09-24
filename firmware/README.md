@@ -56,13 +56,13 @@ Ilk cihaz olcumu (2026-09-25, kuru calisma, ev Wi-Fi'i, RSSI -43): START→START
 - [x] Ayni `commandId` ikinci kez gelince role tekrar cekilmez.
 - [x] Komut-ACK gecikmesi olculur (~265 ms).
 - [x] Sure ortasinda Wi-Fi/broker kesilse de sure dolunca role kapanir. _(2026-09-25: 60 sn seansta erisim noktasi kapatildi; sayac durmadan bitti, `BITTI` goruldu, broker LWT ile `OFFLINE` yayinladi. Cevrimdisi biten seansin `SESSION_ENDED` olayi kaybolur; Faz 4 mutabakati kapatir.)_
-- [ ] Sure ortasinda guc cekilip takilinca kalan sureyle devam eder, `SESSION_RECOVERED` olayi gelir.
+- [x] Sure ortasinda guc cekilip takilinca kalan sureyle devam eder, `SESSION_RECOVERED` olayi gelir. _(2026-09-25: gecti. Ancak 90 sn seans 3 yeniden baslama nedeniyle duvar saatiyle 129 sn surdu; ucuncu yeniden baslamanin sebebi bilinmiyor. NVS kayit araligi 10→3 sn yapildi, reset sebebi olaylara eklendi.)_
 - [ ] `durationSec` > 3600 veya gecersiz `relayIndex` reddedilir.
 - [ ] Bosta ekranda QR + peron kodu, seansta kalan sure + `CALISIYOR`/`BITTI`.
 
 ## Bilinen sinirlar (spike)
 
-- Guc kesilince kurtarilan sure, son NVS kaydindaki (en fazla 10 sn onceki) kalan sureden devam eder; kesinti suresi sayilmaz (RTC yok). Sunucu mutabakati (Faz 4) bunu duzeltir.
+- Guc kesilince kurtarilan sure, son NVS kaydindaki (en fazla 3 sn onceki) kalan sureden devam eder; kesinti suresi sayilmaz (RTC yok). Sunucu mutabakati (Faz 4) bunu duzeltir.
 - MQTT su an sifresiz/TLS'siz (yalniz dev). TLS, cihaz kimligi ve ACL Faz 4'te.
 - Wi-Fi koparsa cihaz 15 sn'de bir kayitli aga yeniden baglanmayi dener (core'un auto-reconnect'i AP tamamen kaybolunca vazgeciyordu; 2026-09-25'te cihazda goruldu). Portal ise kendiliginden yeniden acilmaz; ag bilgisi degistiyse cihaz yeniden baslatilmali.
 - QR taban adresi (`https://qwash.example/b/`) yer tutucudur.

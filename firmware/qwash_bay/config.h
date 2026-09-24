@@ -24,7 +24,7 @@ constexpr bool RELAY_ACTIVE_HIGH = true;
 // ---- Guvenlik sinirlari ----
 constexpr uint32_t MAX_SESSION_SEC = 3600;   // Bundan uzun START reddedilir.
 constexpr uint32_t WDT_TIMEOUT_SEC = 15;     // docs/IOT.md
-constexpr uint32_t NVS_SAVE_EVERY_MS = 10000; // Seans kalan suresi kayit araligi.
+constexpr uint32_t NVS_SAVE_EVERY_MS = 3000;  // Seans kalan suresi kayit araligi (yeniden baslamada kaybedilen sure <= 3 sn).
 
 // ---- Zamanlamalar ----
 constexpr uint32_t HEARTBEAT_EVERY_MS = 30000;
