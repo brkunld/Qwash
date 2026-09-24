@@ -16,6 +16,7 @@
 #include <esp_task_wdt.h>
 #include <esp_system.h>
 #include <time.h>
+#include <functional>
 #include "config.h"
 #include "display.h"
 
@@ -153,8 +154,8 @@ static void buildTopics() {
 
 // ---------- MQTT yayin ----------
 // EventEnvelope (docs/IOT.md 4.B). payloadFill payload nesnesini doldurur.
-template <typename F>
-static void publishEvent(const char* topic, bool retain, F payloadFill) {
+// (Arduino IDE'nin prototip uretici'si template'lerde takildigi icin std::function kullanilir.)
+static void publishEvent(const char* topic, bool retain, std::function<void(JsonObject)> payloadFill) {
   if (!mqtt.connected()) return;
   JsonDocument doc;
   char id[40], ts[32];
