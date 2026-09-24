@@ -55,7 +55,7 @@ Ilk cihaz olcumu (2026-09-25, kuru calisma, ev Wi-Fi'i, RSSI -43): START→START
 - [x] START rolei ceker (kuru calismada log basar), sure dolunca kapatir. _(kuru calismada dogrulandi; gercek role bekliyor)_
 - [x] Ayni `commandId` ikinci kez gelince role tekrar cekilmez.
 - [x] Komut-ACK gecikmesi olculur (~265 ms).
-- [ ] Sure ortasinda Wi-Fi/broker kesilse de sure dolunca role kapanir.
+- [x] Sure ortasinda Wi-Fi/broker kesilse de sure dolunca role kapanir. _(2026-09-25: 60 sn seansta erisim noktasi kapatildi; sayac durmadan bitti, `BITTI` goruldu, broker LWT ile `OFFLINE` yayinladi. Cevrimdisi biten seansin `SESSION_ENDED` olayi kaybolur; Faz 4 mutabakati kapatir.)_
 - [ ] Sure ortasinda guc cekilip takilinca kalan sureyle devam eder, `SESSION_RECOVERED` olayi gelir.
 - [ ] `durationSec` > 3600 veya gecersiz `relayIndex` reddedilir.
 - [ ] Bosta ekranda QR + peron kodu, seansta kalan sure + `CALISIYOR`/`BITTI`.
