@@ -27,7 +27,7 @@ Yıkama otomasyonunda kullanıcı "Başlat" butonuna tıkladığında, bakiye d�
    |---|---|
    | **Aşama 1 — Hazırlık & Bloke** | Kullanıcı başlatır → Para düşülmez, `HOLD` edilir → MQTT `START` komutu gönderilir |
    | **Aşama 2 — Onay & Tahsilat** | ESP32 röleyi fiziksel çeker → `STARTED_ACK` gönderir → Bakiye `CAPTURED`, seans `RUNNING` |
-   | **Zaman Aşımı / Hata** | 5 sn içinde ACK gelmezse → `RELEASED`, kullanıcıya iade, peron `ERROR` moda alınır |
+   | **Zaman Aşımı / Hata** | 10 sn içinde ACK gelmezse → `RELEASED`, kullanıcıya iade, peron `ERROR` moda alınır |
 
 ## Gerekçe
 

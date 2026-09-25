@@ -107,7 +107,7 @@ Seans yönetimi keyfi `if/else` bloklarıyla değil, deterministik bir durum mak
      │                                     ▼ (ESP32 STOPPED_ACK)
      │                                 [ COMPLETED ]
      │
-     └── (5 sn Timeout / NACK)
+     └── (10 sn Timeout / NACK)
              │
              ▼
         [ START_TIMEOUT ] ──► [ FUNDS_RELEASED ] ──► [ FAILED ]
