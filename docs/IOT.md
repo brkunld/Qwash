@@ -9,8 +9,14 @@ Bu doküman, peronlarda çalışan ESP32 gömülü sisteminin haberleşme protok
 - **Donanımsal Kimlik (MAC Adresi):** `WiFi.macAddress()` üzerinden okunan donanımsal MAC adresi (örn: `246F28ABCDEF`) cihazın tekil kodu (`deviceId`) olarak kullanılır. Elle kod içine seri no yazılmaz (Zero-Config Provisioning).
 - **Wi-Fi Kurulumu (Captive Portal / AP Modu):** Cihaz ilk kez açıldığında veya kayıtlı Wi-Fi ağına bağlanamadığında otomatik olarak `QWASH-AP-<MAC>` adında bir erişim noktası (Access Point) açar. Teknisyen/işletmeci telefondan bu ağa bağlanarak web arayüzü üzerinden istasyonun Wi-Fi adı ve şifresini girer; ayarlar ESP32'nin kalıcı NVS belleğine kaydedilir.
 - **Mikrodenetleyici:** ESP32 WROOM-32 / WROVER (Çift Çekirdek 240MHz, Wi-Fi 802.11 b/g/n, Flash FS / NVS).
-- **Ekran:** 2.8" / 3.2" SPI TFT LCD (`TFT_eSPI` kütüphanesi).
-- **Kullanıcı Arayüzü:** Dinamik QR Kod (`qrcode.h`) + Dokunmatik veya 3x Endüstriyel Buton (Su, Köpük, İptal).
+- **Ekran:** Dokunmatik SPI TFT LCD (2.8" / 3.2", `TFT_eSPI` kütüphanesi). Kurulu cihazda dokunmatik ekran mevcuttur.
+- **Kullanıcı Arayüzü (MVP):** Ekran iki durumda çalışır:
+  - **Boşta (`IDLE`):** Peron QR kodu (yalnızca QWASH alan adına giden `bayCode` içeren adres, cihaz tarafından üretilir) ve altında kısa peron kodu/numarası.
+  - **Seans sırasında:** Yalnızca **kalan süre** ve kısa durum metni (`ÇALIŞIYOR`, `BİTTİ`, `HATA`).
+  - Dokunmatik giriş MVP'de kullanılmaz; seans başlatma/durdurma müşteri PWA'sından yapılır.
+- **Neden basılı QR etiketi değil:** Basılı etiketin üzerine sahte bir QR yapıştırılarak müşteri sahte bir siteye yönlendirilebilir (QR-jacking). QR ekranda gösterildiğinde üzerine etiket yapıştırmak süre/QR görünümünü de kapatır ve hemen fark edilir. PWA tarafında ek olarak "Peron X'e bağlanıyorsunuz" onay adımı vardır.
+- **Kullanıcı Arayüzü (sonraya):** Dönen (rotating) QR (fiziksel bulunmayı kanıtlar, uzaktan rezervasyonu zorlaştırır), fiziksel "İptal" düğmesi, program adı gösterimi. Dokunmatik ekran sayesinde donanım değişikliği gerekmez.
+- **Süre kaynağı:** Ekrandaki geri sayım ESP32'nin yerel sayacından gelir (bkz. bölüm 5/6); sunucu bağlantısı kopsa da ekran ve röle tutarlı kalır.
 - **Çıkışlar:** Optokuplör yalıtımlı 4 Kanal 220V 10A Röle Kartı (Röle 1: Basınçlı Su, Röle 2: Aktif Köpük, Röle 3: Sıcak Cila, Röle 4: Hava / Kurutma).
 - **Geri Bildirim:** Piezo Buzzer (Geri sayım bip tonları, seans bitiş alarmı).
 - **Güvenlik Donanımı:** Hardware Watchdog Timer (WDT - 15 saniye zaman aşımı).

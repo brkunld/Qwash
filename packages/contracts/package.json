@@ -1,0 +1,35 @@
+{
+  "name": "@qwash/contracts",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Backend ve web uygulamalari arasinda ortak tipler, enum'lar ve Zod semalari",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "dev": "tsc -p tsconfig.build.json --watch --preserveWatchOutput",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint .",
+    "test": "node --test \"src/**/*.test.ts\""
+  },
+  "dependencies": {
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@qwash/eslint-config": "workspace:*",
+    "@qwash/tsconfig": "workspace:*",
+    "@types/node": "^26.6.2",
+    "eslint": "^9.39.5",
+    "typescript": "~6.0.3"
+  }
+}

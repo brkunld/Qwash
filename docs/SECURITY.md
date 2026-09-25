@@ -48,6 +48,8 @@ POST /auth/login
 
 * **Algoritma:** `bcrypt` (work factor: `12`)
 * **Kural:** Kullanıcı şifresi asla loglanmaz, asla düz metin olarak DB'ye yazılmaz.
+* **Google girişi:** ID token sunucuda doğrulanır (imza, `aud`, `iss`, `exp`, `email_verified`). Hesap birleştirme yalnızca doğrulanmış e-postayla yapılır ([ADR-0009](adr/0009-customer-authentication.md)).
+* **E-posta doğrulama:** Doğrulanmamış hesap bakiye yükleyemez ve seans başlatamaz.
 * **Admin Sıfırlama:** Admin şifre sıfırlama işlemi tek kullanımlık token (`crypto.randomBytes(32)`) + e-posta akışıyla yapılır. Token 1 saat geçerlidir.
 
 ---

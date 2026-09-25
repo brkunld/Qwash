@@ -11,7 +11,7 @@ Dokumanlar; hedef mimariyi, teslimat planini, guvenlik modelini, IoT davranisini
 | Dokuman | Amac | Hedef Okuyucu |
 |---|---|---|
 | [PROJECT_PLAN.md](PROJECT_PLAN.md) | Vizyon, MVP kapsami, non-goals, mimari sinirlar ve mevcut uygulama durumu. | Urun, teknik liderler |
-| [ROADMAP.md](ROADMAP.md) | Dokumantasyon temelinden pilot guclendirmeye kadar fazli teslimat plani. | Tum katilimcilar |
+| [ROADMAP.md](ROADMAP.md) | Riske gore siralanmis 8 fazli teslimat plani, bagimliliklar ve acik sorular. | Tum katilimcilar |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Planlanan sistem topolojisi, ledger, state machine, outbox/inbox ve device twin. | Backend, platform, mimari |
 | [API.md](API.md) | Planlanan REST endpointleri, cevap desenleri, idempotency ve anlik kanallar. | Frontend, backend |
 | [DATABASE.md](DATABASE.md) | Planlanan PostgreSQL ve Prisma model tasarimi. | Backend, veritabani |
@@ -34,6 +34,8 @@ Dokumanlar; hedef mimariyi, teslimat planini, guvenlik modelini, IoT davranisini
 | [0005](adr/0005-outbox-inbox-pattern.md) | Guvenilir yan etkiler icin outbox/inbox patternleri kullanilacak. |
 | [0006](adr/0006-device-twin-architecture.md) | Cihazlarda desired ve reported state takip edilecek. |
 | [0007](adr/0007-session-state-machine-and-two-phase-ack.md) | Deterministik session state machine ve two-phase ACK kullanilacak. |
+| [0008](adr/0008-pwa-first-client-strategy.md) | Ilk surumde musteri istemcisi PWA olacak, native uygulama sonraya birakildi. |
+| [0009](adr/0009-customer-authentication.md) | Musteri girisi e-posta/sifre ve Google ile, misafir yok, telefon opsiyonel. |
 
 ---
 

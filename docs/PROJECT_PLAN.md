@@ -49,7 +49,7 @@ Ilk anlamli urun kilometre tasi, tek istasyon ve tek peron ile tam bir odemeli y
 MVP kapsaminda olanlar:
 
 - QR tabanli peron erisimi icin musteri PWA.
-- Basit kullanici hesabi veya test musterisi akisi.
+- Kullanici hesabi: e-posta/sifre ve Google girisi; misafir kullanim yok (ADR-0009).
 - Iyzico sandbox ile tek TL cuzdan yukleme (kullanicinin ayri ayri kredi tipleri olmaz, tum servisler tek bakiyeden duser).
 - Coklu yikama programi tarifesi (Su: 0.50 TL/sn, Kopuk: 1.00 TL/sn, Cila: 1.50 TL/sn, Hava: 0.75 TL/sn gibi admin tarafindan yonetilen saniyelik kurus birim fiyatlari).
 - Tuketilen saniye basina dinamik cuzdan hold, capture ve release islemleri.
@@ -61,7 +61,7 @@ MVP kapsaminda olanlar:
 
 MVP kapsaminda olmayanlar:
 
-- Native iOS veya Android uygulamalari.
+- Native iOS veya Android uygulamalari (karar: ADR-0008, PWA-first).
 - Cok istasyonlu enterprise raporlama.
 - Firmware OTA.
 - Gelismis analitik veya makine ogrenimi.
@@ -74,7 +74,7 @@ MVP kapsaminda olmayanlar:
 
 Teslimati odakli tutmak icin asagidaki maddeler ilk surumden bilerek cikarilmistir:
 
-- **Native mobil uygulamalar:** Ilk surum PWA kullanir; App Store ve Google Play surecleri ertelenir.
+- **Native mobil uygulamalar:** Ilk surum PWA kullanir (gerekce: [ADR-0008](adr/0008-pwa-first-client-strategy.md)); App Store ve Google Play surecleri ertelenir. Backend API'si istemciden bagimsiz tasarlandigi icin native uygulama sonradan eklenebilir.
 - **Microservices:** Ilk surum operasyon ve deployment karmasikligini azaltmak icin modular monolith kullanir.
 - **Multi-currency:** Ilk surum Turkiye ve TRY/kurus odaklidir.
 - **Kafka veya event-store altyapisi:** Ilk urun asamasi icin PostgreSQL outbox ve Redis/BullMQ yeterlidir.
@@ -141,16 +141,16 @@ Repo dogrulamalari sunlari kapsamalidir:
 
 | Alan | Durum |
 |---|---|
-| Urun ve mimari dokumantasyonu | Devam ediyor |
-| ADR'lar | Taslak hazir |
-| Monorepo konfigürasyonu | Baslamadi |
-| Backend uygulamasi | Baslamadi |
-| Musteri PWA | Baslamadi |
-| Admin paneli | Baslamadi |
-| Ortak contracts paketi | Baslamadi |
-| Veritabani semasi | Planlandi |
-| ESP32 firmware | Planlandi |
-| Docker gelistirme stack'i | Planlandi |
-| CI/CD | Planlandi |
+| Urun ve mimari dokumantasyonu | Devam ediyor (Faz 0) |
+| ADR'lar | 0001–0009 hazir |
+| Monorepo konfigürasyonu | Tamamlandi (Faz 1, `feat/faz-1-monorepo`; Docker ve CI ilk calistirma bekliyor) |
+| Cuzdan ve ledger | Baslamadi (Faz 2) |
+| ESP32 firmware / donanim spike | Baslamadi (Faz 3) |
+| Backend, seans ve IoT entegrasyonu | Baslamadi (Faz 4) |
+| Odeme ve musteri PWA | Baslamadi (Faz 5) |
+| Admin paneli | Baslamadi (Faz 6) |
+| Pilot guclendirme, CI/CD, deployment | Planlandi (Faz 7) |
+
+Faz sirasi ve gerekceleri icin [ROADMAP.md](ROADMAP.md) belgesine bakin.
 
 Bu bolum, uygulama dosyalari eklendikce guncellenmelidir.

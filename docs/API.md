@@ -71,15 +71,19 @@ Ağ kopması nedeniyle aynı istek tekrar gönderilirse backend işlemi yeniden 
 ## 4. REST Endpoint Matrisi
 
 ### 🔐 Kimlik Doğrulama (`/api/v1/auth`)
-* `POST /api/v1/auth/register` — Yeni kullanıcı kaydı.
+* `POST /api/v1/auth/register` — E-posta + şifre ile yeni kullanıcı kaydı (e-posta doğrulama bağlantısı gönderilir). Misafir kullanım yoktur ([ADR-0009](adr/0009-customer-authentication.md)).
 * `POST /api/v1/auth/login` — E-posta ve şifre ile giriş (Access Token döner, Refresh Token HTTP-only cookie'ye yazılır).
+* `POST /api/v1/auth/google` — Google ID token ile giriş/kayıt. Token sunucuda doğrulanır; `email_verified` olmayan hesap kabul edilmez.
+* `POST /api/v1/auth/verify-email` — E-posta doğrulama token'ı ile hesabı doğrulama. Doğrulanmamış hesap bakiye yükleyemez.
+* `POST /api/v1/auth/forgot-password` / `POST /api/v1/auth/reset-password` — Tek kullanımlık token ile şifre sıfırlama.
+* `PATCH /api/v1/me/profile` — Ad ve opsiyonel telefon numarası güncelleme (telefon yalnızca gerekirse istenir).
 * `POST /api/v1/auth/refresh` — Refresh token ile yeni access token alma.
 * `POST /api/v1/auth/logout` — Oturumu sonlandırma ve token'ı kara listeye alma.
 
 ### 🚗 Peron & Program Yönetimi (`/api/v1/bays`)
 * `GET /api/v1/bays` — Tüm peronların genel durum listesi (IDLE, RUNNING, MAINTENANCE).
 * `GET /api/v1/bays/:bayCode` — QR okutulduğunda peron detayını ve seans hazırlığını getirme.
-* `GET /api/v1/bays/:bayCode/programs` — Perondaki aktif yıkama programları ve saniyelik kuruş tarifeleri (Örn: Su: 50 kr/sn, Köpük: 100 kr/sn, Cila: 150 kr/sn, Hava: 75 kr/sn).
+* `GET /api/v1/bays/:bayCode/programs` — Yalnızca bu perona atanmış ve etkin (`BayProgram.isEnabled`) yıkama programları ve saniyelik kuruş tarifeleri (Örn: Su: 50 kr/sn, Köpük: 100 kr/sn, Cila: 150 kr/sn, Hava: 75 kr/sn).
 * `POST /api/v1/bays/:id/prepare` — Peronu 30 saniyeliğine kullanıcıya rezerve etme (`WAITING`).
 * `POST /api/v1/bays/:id/cancel-waiting` — Rezervasyonu iptal edip peronu boşa çıkarma.
 
@@ -101,11 +105,14 @@ Ağ kopması nedeniyle aynı istek tekrar gönderilirse backend işlemi yeniden 
 * `GET /api/v1/admin/dashboard` — Anlık telemetri, aktif seanslar ve ciro metrikleri.
 * `POST /api/v1/admin/programs` — Sıfırdan yeni yıkama programı/paketi ekleme (`code`, `name`, `description?`, `icon?`, `pricePerSecondKurus`, `relayIndex`, `stationId?`).
 * `GET /api/v1/admin/programs` — İstasyon/peron yıkama programlarını ve saniyelik fiyat tarifelerini listeleme (`includeInactive` filtresi ile).
-* `PUT /api/v1/admin/programs/:id` — Program bilgilerini, saniyelik kuruş fiyatını veya röle numarasını güncelleme.
+* `PUT /api/v1/admin/programs/:id` — Program bilgilerini ve saniyelik kuruş fiyatını güncelleme.
+* `PUT /api/v1/admin/bays/:id/programs` — Peronda geçerli programları ve her birinin röle kanalını atama (`[{ programId, relayIndex, isEnabled }]`). Aynı röle iki programa atanamaz.
 * `PATCH /api/v1/admin/programs/:id/toggle` — Programı anında aktif/pasif duruma alma (`isActive`).
 * `DELETE /api/v1/admin/programs/:id` — Programı sistemden silme (Finansal tutarlılık ve geçmiş seansların korunması için Soft-Delete: `deletedAt` atanır, müşteri ekranından derhal kaldırılır).
 * `POST /api/v1/admin/bays/:id/maintenance` — Peronu bakım moduna alma/çıkarma.
-* `POST /api/v1/admin/users/:id/adjust-balance` — Manuel bakiye tanımlama (Zorunlu audit açıklaması).
+* `POST /api/v1/admin/users/:id/adjust-balance` — Hata düzeltme amaçlı manuel bakiye değişikliği (Zorunlu audit açıklaması, yalnız `SUPER_ADMIN`). Nakit yükleme için kullanılmaz.
+* `POST /api/v1/admin/users/:id/cash-topup` — Kasada nakit alıp müşterinin bakiyesine yükleme. Body: `{ "amountKurus": 10000, "note": "..." }`, `Idempotency-Key` zorunlu. Makbuz numarası üretir; `CashTopUp` + `LedgerEntry(CREDIT, source=CASH_TOPUP)` aynı transaction'da yazılır.
+* `GET /api/v1/admin/cash-topups?stationId=&date=` — Gün sonu kasa mutabakatı: istasyon/gün/operatör bazında nakit yükleme listesi ve toplamı.
 * `GET /api/v1/admin/audit-logs` — Yönetici işlem denetim geçmişi.
 
 ---

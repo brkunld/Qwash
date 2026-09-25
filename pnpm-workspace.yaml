@@ -1,0 +1,9 @@
+packages:
+  - 'apps/*'
+  - 'packages/*'
+
+# Kurulum betigi calistirmasina izin verilen paketler (bilincli karar).
+allowBuilds:
+  '@parcel/watcher': true # Next/Nest dosya izleyicisi icin native modul
+  unrs-resolver: true # ESLint import cozumleyicisinin native modulu
+  '@scarf/scarf': false # Kullanim telemetrisi; gerekli degil

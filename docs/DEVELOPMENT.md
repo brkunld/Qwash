@@ -5,11 +5,12 @@ Bu doküman, yeni bir geliştiricinin projeyi klonlayıp 10 dakika içinde yerel
 ---
 
 ## 1. Ön Gereksinimler
-* **Node.js:** v20+ (LTS önerilir)
-* **Paket Yöneticisi:** `pnpm` (v9+)
+* **Node.js:** v22.12+ (CI v24 LTS kullanır). NestJS 12 ESM dağıtıldığı için CommonJS'ten ESM yükleme (`require(esm)`) desteği gerekir.
+* **Paket Yöneticisi:** `pnpm` v12 (sürüm kök `package.json` içindeki `packageManager` alanında sabitlidir)
   ```bash
-  corepack enable && corepack prepare pnpm@latest --activate
+  corepack enable
   ```
+* **Not:** TypeScript bilinçli olarak 6.0'a sabitlidir; `typescript-eslint` ve `ts-jest` henüz 7.x'i desteklemiyor.
 * **Docker & Docker Compose:** PostgreSQL, Redis ve Mosquitto konteynerleri için.
 * **VS Code / Cursor:** Önerilen eklentiler: ESLint, Prettier, Prisma, Tailwind CSS.
 
@@ -50,10 +51,20 @@ cp .env.example .env
 
 ### 3. Altyapı Konteynerlerini Başlat (PostgreSQL, Redis, MQTT)
 ```bash
-docker compose -f docker/docker-compose.dev.yml up -d
+pnpm infra:up      # konteynerleri başlatır ve healthy olana kadar bekler
+pnpm infra:down
 ```
 
-### 4. Veritabanı Şemasını ve Seed Verilerini Yükle
+Host portları bilinçli olarak standart dışıdır, çünkü 5432/6379/1883 çoğu makinede başka projeler veya yerel servisler tarafından kullanılır:
+
+| Servis | Host portu | `.env` değişkeni |
+|---|---|---|
+| PostgreSQL | `15432` | `POSTGRES_HOST_PORT` |
+| Redis | `16379` | `REDIS_HOST_PORT` |
+| MQTT | `11883` | `MQTT_HOST_PORT` |
+| MQTT WebSocket | `19001` | `MQTT_WS_HOST_PORT` |
+
+### 4. Veritabanı Şemasını ve Seed Verilerini Yükle (Faz 2'de eklenecek)
 ```bash
 # Geliştirme ortamında şema senkronizasyonu
 pnpm db:migrate:dev

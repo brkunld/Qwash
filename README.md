@@ -96,17 +96,23 @@ PostgreSQL Redis  MQTT Broker
 - [ADR-0005: Outbox ve Inbox Deseni](docs/adr/0005-outbox-inbox-pattern.md)
 - [ADR-0006: Device Twin Mimarisi](docs/adr/0006-device-twin-architecture.md)
 - [ADR-0007: Seans Durum Makinesi ve Two-Phase ACK](docs/adr/0007-session-state-machine-and-two-phase-ack.md)
+- [ADR-0008: Once PWA, Native Sonra](docs/adr/0008-pwa-first-client-strategy.md)
+- [ADR-0009: Musteri Kimlik Dogrulama](docs/adr/0009-customer-authentication.md)
 
 ---
 
 ## Yol Haritasi Ozeti
 
-1. **Dokumantasyon ve Mimari Temel:** Kapsam, ana kararlar ve uygulama sinirlari.
-2. **Monorepo Temeli:** Workspaces, ortak konfig, contracts ve lokal altyapi.
-3. **MVP Dikey Dilim:** Tek peron, tek test cihazi, seans baslat/durdur ve temel anlik durum.
-4. **Cuzdan ve Odeme Cekirdegi:** Ledger, idempotency, Iyzico sandbox akisi ve reconciliation.
-5. **Admin ve Operasyon:** Peron izleme, bakim modu, cihaz sagligi ve manuel operasyonlar.
-6. **Pilot Guclendirme:** Guvenlik kontrolu, yedekleme, gozlemlenebilirlik, yuk testleri ve saha testi.
+0. **Dokumantasyon ve Mimari Temel:** Kapsam, ana kararlar ve uygulama sinirlari.
+1. **Monorepo Temeli:** Workspaces, ortak konfig, contracts ve lokal altyapi.
+2. **Cuzdan ve Ledger Cekirdegi:** Para dogrulugu, constraint'ler, idempotency.
+3. **Donanim Spike:** ESP32, role, MQTT, fail-safe (Faz 2 ile paralel yapilabilir).
+4. **Seans ve IoT Entegrasyonu:** State machine, two-phase ACK, outbox/inbox, device twin, mutabakat.
+5. **Odeme ve Musteri PWA:** Iyzico sandbox, webhook reconciliation, uctan uca musteri akisi.
+6. **Admin Operasyonlari:** Peron izleme, bakim modu, cihaz sagligi, manuel islemler.
+7. **Pilot Guclendirme:** Guvenlik gozden gecirmesi, yedekleme, gozlemlenebilirlik, yuk testleri.
+
+Ayrintilar: [Roadmap](docs/ROADMAP.md).
 
 ---
 

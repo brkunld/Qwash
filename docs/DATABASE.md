@@ -44,13 +44,26 @@ Bu doküman, PostgreSQL veritabanı şemasını, tablo ilişkilerini, değişmez
 model User {
   id           String       @id @default(uuid())
   email        String       @unique
-  passwordHash String
-  phoneNumber  String?      @unique
+  passwordHash String?      // Yalnızca Google ile açılan hesapta null (ADR-0009)
+  emailVerifiedAt DateTime?
+  phoneNumber  String?      @unique // Opsiyonel; MVP'de zorunlu değil
+  identities   AuthIdentity[]
   role         UserRole     @default(USER) // USER, ADMIN, SUPER_ADMIN
   status       UserStatus   @default(ACTIVE)
   wallet       Wallet?
   sessions     WashSession[]
   createdAt    DateTime     @default(now())
+}
+
+model AuthIdentity {
+  id             String   @id @default(uuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider       String   // "password" | "google"
+  providerUserId String   // Google için sub claim'i
+  createdAt      DateTime @default(now())
+
+  @@unique([provider, providerUserId])
 }
 
 model Wallet {
@@ -73,10 +86,28 @@ model LedgerEntry {
   wallet         Wallet         @relation(fields: [walletId], references: [id])
   amountKurus    BigInt
   type           LedgerType     // CREDIT, DEBIT, HOLD, CAPTURE, RELEASE
+  source         LedgerSource   // CARD_TOPUP, CASH_TOPUP, SESSION, ADJUSTMENT, REFUND
   balanceAfter   BigInt
-  referenceId    String?        // SessionId veya PaymentId
+  referenceId    String?        // SessionId, PaymentId veya CashTopUpId
   idempotencyKey String?        @unique
   createdAt      DateTime       @default(now())
+}
+```
+
+### `CashTopUp` (Kasada Nakit Yükleme)
+Operatör kasada müşteriden nakit alır ve müşterinin bakiyesine yükler. Kart yüklemeden (Iyzico) ve hata düzeltmeden (`ADJUSTMENT`) ayrı bir akıştır; gün sonu kasa mutabakatı bu tablodan yapılır.
+```prisma
+model CashTopUp {
+  id             String   @id @default(uuid())
+  walletId       String
+  wallet         Wallet   @relation(fields: [walletId], references: [id])
+  amountKurus    BigInt   // > 0 (CHECK constraint)
+  operatorId     String   // Yuklemeyi yapan admin/operator (User.id)
+  stationId      String   // Hangi istasyonun kasasi
+  receiptNo      String   @unique // Musteriye verilen makbuz numarasi
+  note           String?
+  idempotencyKey String   @unique // Cift tiklamada iki kez yuklenmesin
+  createdAt      DateTime @default(now())
 }
 ```
 
@@ -106,7 +137,23 @@ model Bay {
   station     Station      @relation(fields: [stationId], references: [id])
   device      Device?
   sessions    WashSession[]
+  programs    BayProgram[] // Bu peronda gecerli programlar
   createdAt   DateTime     @default(now())
+}
+
+// Hangi peronda hangi programin gecerli oldugu ve hangi role kanalina bagli oldugu.
+// Program istasyon duzeyinde tanimlanir; perona atama ve role eslemesi burada yapilir.
+model BayProgram {
+  id         String      @id @default(uuid())
+  bayId      String
+  bay        Bay         @relation(fields: [bayId], references: [id])
+  programId  String
+  program    WashProgram @relation(fields: [programId], references: [id])
+  relayIndex Int         // Bu perondaki ESP32 role kanali (1..4)
+  isEnabled  Boolean     @default(true)
+
+  @@unique([bayId, programId])
+  @@unique([bayId, relayIndex]) // Ayni role iki programa atanamaz
 }
 
 model Device {
@@ -118,8 +165,8 @@ model Device {
   firmwareVersion        String
   status                 DeviceStatus @default(OFFLINE) // OFFLINE, ONLINE, BUSY, ERROR, MAINTENANCE
   certificateFingerprint String?      // MQTTS TLS X.509 istemci sertifika parmak izi
-  desiredRelay           Boolean      @default(false)
-  reportedRelay          Boolean      @default(false)
+  desiredRelayIndex      Int?         // null = tum roleler kapali; 1..4 = aktif role (device twin)
+  reportedRelayIndex     Int?
   lastSeenAt             DateTime?
   ipAddress              String?
 }
@@ -152,7 +199,7 @@ model WashProgram {
   description         String?               // Opsiyonel program aciklamasi
   icon                String?               // UI ikon referansi (orn: "water-drop", "sparkles")
   pricePerSecondKurus Int                   // Orn: 50 (0.50 TL/sn), 100 (1.00 TL/sn), 150 (1.50 TL/sn)
-  relayIndex          Int                   // ESP32 roler kanali (1, 2, 3, 4...)
+  bayPrograms         BayProgram[]          // Role kanali perona gore BayProgram.relayIndex'te tutulur
   isActive            Boolean               @default(true)
   createdAt           DateTime              @default(now())
   updatedAt           DateTime              @updatedAt

@@ -1,164 +1,234 @@
 # QWASH — Muhendislik Roadmap'i
 
-Bu roadmap, projenin once calisan bir urun cekirdegine ulasmasini, daha sonra production seviyesinde guclendirilmesini hedefler. Ana prensip basittir: Her faz yalnizca dokuman degil, dogrulanabilir bir teslimat uretmelidir.
+Bu roadmap, projenin once **en buyuk riskleri erken kanitlayan** bir cekirdege, sonra pilot hazirligina ulasmasini hedefler. Her faz yalnizca dokuman degil, dogrulanabilir bir teslimat uretmelidir.
 
-> Mevcut durum: Proje su anda dokumantasyon ve mimari planlama asamasindadir. Uygulama kodu, monorepo konfigürasyonu ve altyapi dosyalari henuz repoda mevcut degildir.
+> Mevcut durum: Proje dokumantasyon ve mimari planlama asamasindadir. Uygulama kodu henuz yoktur. Bu roadmap, faz sirasini gozden gecirmis (2026-09-24) son halidir.
 
 ---
 
 ## Teslimat Prensipleri
 
-| Prensip                      | Anlami                                                                                          |
-| ---------------------------- | ----------------------------------------------------------------------------------------------- |
-| Once MVP, sonra olcek        | Cok istasyonlu yapiya gecmeden once tek peron akisi calismalidir.                               |
-| Para guvenligi cekirdektir   | Cuzdan, ledger, idempotency ve veritabani kurallari sonradan eklenecek detaylar degildir.       |
-| Donanim gercegi onceliklidir | ESP32 davranisi yalnizca mock API ile degil, gercek cihaz geri bildirimiyle test edilmelidir.   |
-| Karmasiklik fazlandirilir    | OTA, chaos testing ve MFA gibi enterprise ozellikler MVP akisi kanitlandiktan sonra ele alinir. |
+| Prensip | Anlami |
+|---|---|
+| Riski once kanitla | En pahali yanlislar para ve donanimdadir. Ikisi de gercek entegrasyondan once ayri ayri, izole olarak kanitlanir. |
+| Para guvenligi cekirdektir | Cuzdan, ledger, idempotency ve DB kurallari sonradan eklenen detay degildir. Seans mantigi ledger'in uzerine kurulur, tersi degil. |
+| Guvenlik faza gomulur | Webhook dogrulama, MQTT cihaz kimligi ve yetkilendirme ilgili fazin tamamlanma kriteridir. Pilot oncesine birakilmaz. |
+| Once MVP, sonra olcek | Cok istasyona gecmeden once tek peron akisi calismalidir. |
+| Atilabilir prototip acikca etiketlenir | Sonradan yeniden yazilacak kod "spike" diye adlandirilir ve ana koda karismaz. |
+| Karmasiklik fazlandirilir | OTA, MFA, native uygulama gibi ozellikler MVP kanitlandiktan sonra ele alinir. |
+
+---
+
+## Faz Ozeti ve Bagimliliklar
+
+```text
+Faz 0 Dokumantasyon
+   │
+Faz 1 Monorepo Temeli
+   ├────────────────────────┐
+Faz 2 Cuzdan & Ledger     Faz 3 Donanim Spike (paralel yapilabilir)
+   │                        │
+   └───────────┬────────────┘
+        Faz 4 Seans + IoT Entegrasyonu (state machine, two-phase ACK, outbox/inbox)
+               │
+        Faz 5 Odeme (Iyzico) ve Musteri PWA
+               │
+        Faz 6 Admin Operasyonlari
+               │
+        Faz 7 Pilot Guclendirme
+```
+
+Faz 2 ve Faz 3 birbirinden bagimsizdir; iki kisi veya iki paralel calisma akisi varsa ayni anda yurutulebilir. Ikisi de bitmeden Faz 4'e gecilmez.
 
 ---
 
 ## Faz 0: Dokumantasyon ve Mimari Temel
 
-**Hedef:** Kodlamaya baslamadan once kapsam, non-goals, mimari ve uygulama sinirlarini netlestirmek.
+**Hedef:** Kodlamaya baslamadan once kapsam, karar ve sinirlarin tutarli olmasi.
 
-- [ ] Urun vizyonu ve kapsam dokumante edildi.
-- [ ] Temel mimari kararlar ADR olarak yazildi.
-- [ ] IoT, API, veritabani, guvenlik ve test yonu dokumante edildi.
-- [ ] Dokumantasyon linkleri kontrol edildi.
-- [ ] Mevcut uygulama durumu ile planlanan mimari ayrildi.
+- [x] Urun vizyonu ve kapsam dokumante edildi.
+- [x] Temel mimari kararlar ADR olarak yazildi (0001–0008).
+- [x] IoT, API, veritabani, guvenlik ve test yonu dokumante edildi.
+- [x] Istemci stratejisi kararlastirildi: PWA-first (ADR-0008).
+- [x] Musteri kimlik dogrulama karari: e-posta/sifre + Google, misafir yok (ADR-0009).
+- [x] Tarife karari: fiyatlari admin belirler; baslangic (seed) degerleri ornek olarak verilir.
+- [x] Belge linkleri kontrol edildi (2026-09-25, kirik link yok).
+- [x] Peron QR'i ekranda gosterilecek, basili etiket degil (QR-jacking riski, `IOT.md`).
+- [ ] Acik sorulardan Faz 1 oncesi kapanmasi gerekenler kapatildi (asagida "Acik Sorular").
 
 **Tamamlanma Kriterleri**
-
-- Yeni bir gelistirici neyin insa edilecegini, neyin bilerek kapsam disinda tutuldugunu ve hangi muhendislik kararlarinin korunmasi gerektigini anlayabilir.
-- Dokumantasyon, henuz uygulanmamis kodlar varmis gibi izlenim vermez.
+- Yeni bir gelistirici neyin insa edilecegini, neyin kapsam disinda oldugunu ve hangi kararlarin korunmasi gerektigini anlayabilir.
+- Dokumantasyon, henuz yazilmamis kodlar varmis gibi izlenim vermez.
 
 ---
 
 ## Faz 1: Monorepo Temeli
 
-**Hedef:** Kurulabilen, kontrol edilebilen ve tutarli sekilde calistirilabilen bir gelistirme temeli olusturmak.
+**Hedef:** Kurulabilen, kontrol edilebilen ve tutarli calistirilabilen gelistirme temeli.
 
-- [ ] Root `package.json`, `pnpm-workspace.yaml` ve `turbo.json`.
-- [ ] `apps/backend`, `apps/web-customer`, `apps/web-admin`.
-- [ ] `packages/contracts`, `packages/tsconfig`, `packages/eslint-config`.
-- [ ] TypeScript strict mode, ortak lint ve formatlama.
-- [ ] PostgreSQL, Redis ve Mosquitto icin Docker Compose.
-- [ ] Guvenli placeholder degerler iceren `.env.example`.
-- [ ] Lint, typecheck ve build icin CI temeli.
+- [x] Root `package.json`, `pnpm-workspace.yaml`, `turbo.json`.
+- [x] `apps/backend` (NestJS 12, health + Swagger + Pino + env dogrulama), `apps/web-customer` (Next.js 16 PWA, port 3000), `apps/web-admin` (Next.js 16, port 3002).
+- [x] `packages/contracts` (kurus yardimcilari, durum enum'lari, health semasi), `packages/tsconfig`, `packages/eslint-config`.
+- [x] TypeScript strict (6.0; 7.0 lint/test araclari destekleyene kadar bekliyor), ortak lint (ESLint 9) ve Prettier.
+- [x] PostgreSQL, Redis, Mosquitto icin Docker Compose (`docker/docker-compose.dev.yml`, portlar yalniz 127.0.0.1).
+- [x] Placeholder degerli `.env.example`, CI'da gitleaks secret taramasi.
+- [x] CI temeli: format, lint, typecheck, test, build, compose dogrulama (`.github/workflows/ci.yml`).
 
 **Tamamlanma Kriterleri**
-
-- `pnpm install` basariyla tamamlanir.
-- `pnpm typecheck` ve `pnpm lint` repo kokunden calistirilabilir.
-- Lokal altyapi Docker Compose ile baslatilabilir.
+- [x] `pnpm install`, `pnpm build`, `pnpm typecheck`, `pnpm lint`, `pnpm test` repo kokunden basarili calisir (2026-09-25).
+- [x] Lokal altyapi Docker Compose ile ayaga kalkar (2026-09-25: Postgres, Redis, Mosquitto healthy; host portlari 15432/16379/11883/19001).
+- [ ] CI GitHub'da ilk kez yesil calisir (dal henuz itilmedi).
 
 ---
 
-## Faz 2: MVP Dikey Dilim
+## Faz 2: Cuzdan ve Ledger Cekirdegi
 
-**Hedef:** Tek peron, tek test kullanicisi ve tek ESP32 cihaz ile uctan uca yikama akisini kanitlamak.
+**Hedef:** Seans ve odeme mantigi uzerine kurulmadan once para dogrulugunu izole olarak kanitlamak. Bu faz IoT'ye ve gercek odeme saglayicisina bagli degildir.
 
-- [ ] Health endpoint ve structured logging iceren NestJS backend iskeleti.
-- [ ] Seans baslatma ve durdurma icin basit musteri web ekrani.
-- [ ] MQTT komut gonderimi ve ACK dinleme.
-- [ ] ESP32 donanimsal MAC kimligi, Wi-Fi Captive Portal (AP modu), MQTT ve 4 kanalli role kontrolu icin firmware temeli.
-- [ ] Start, running, stop ve timeout icin temel session state akisi.
-- [ ] Socket.IO veya benzeri anlik seans durumu.
-
-**Tamamlanma Kriterleri**
-
-- Kullanici tarayicidan test seansi baslatabilir.
-- Start komutundan sonra ESP32 rolesi fiziksel olarak aktif olur.
-- Seans durdurulabilir ve role kapanir.
-- Timeout davranisi sistemi tahmin edilebilir bir durumda birakir.
-
----
-
-## Faz 3: Cuzdan, Ledger ve Odeme
-
-**Hedef:** Gercek odemeli kullanima gecmeden once finansal dogrulugu saglamak.
-
-- [ ] Kullanici, cuzdan, ledger entry, peron, yikama programlari ve seans icin PostgreSQL/Prisma semasi.
-- [ ] Yikama programlari (Su, Kopuk, Cila, Hava) ve saniyelik kurus tarifesi yonetimi.
-- [ ] Saniyelik kullanim bazli (sure x birim kurus) Hold, capture ve release cuzdan operasyonlari.
-- [ ] Negatif bakiye ve gecersiz bloke durumlarini engelleyen veritabani constraintleri.
+- [ ] Kullanici, cuzdan, ledger entry, yikama programi icin PostgreSQL/Prisma semasi.
+- [ ] Negatif bakiye ve gecersiz hold durumlarini engelleyen DB constraint'leri (ADR-0004).
+- [ ] HOLD / CAPTURE / RELEASE cuzdan operasyonlari (birim + entegrasyon testli).
+- [ ] Yikama programlari ve saniyelik kurus tarifesi yonetimi.
 - [ ] Kritik yazma islemleri icin idempotency.
-- [ ] Iyzico sandbox checkout entegrasyonu.
-- [ ] Webhook dogrulama ve reconciliation worker.
+- [ ] Ledger degismezligi: entry silinmez/guncellenmez; duzeltme yeni entry ile yapilir.
 
 **Tamamlanma Kriterleri**
-
-- Eszamanli istekler cuzdan bakiyesini negatife dusuremez.
-- Her finansal hareket denetlenebilir bir ledger kaydi uretir.
-- Basarisiz veya tekrarlanan odeme callbackleri duplicate bakiye olusturmaz.
+- Eszamanli istekler bakiyeyi negatife dusuremez (concurrency testi ile kanitli).
+- Her finansal hareket denetlenebilir ledger kaydi uretir.
+- Ayni idempotency key ile tekrarlanan istek duplicate hareket olusturmaz.
 
 ---
 
-## Faz 4: IoT Dayanikliligi ve Device Twin
+## Faz 3: Donanim Spike (Atilabilir Prototip)
 
-**Hedef:** Saha davranisini ag problemlerine ve tekrar eden mesajlara karsi dayanikli hale getirmek.
+**Hedef:** ESP32 + role + MQTT zincirinin **fiziksel olarak** calistigini, ag/guc sorunlarinda guvenli davrandigini erken gormek. Backend yalnizca minimal bir MQTT komut betigidir; bu fazin kodu ana backend'e tasinmaz.
 
-- [ ] Cihazlara giden komutlar icin transactional outbox.
-- [ ] ACK ve telemetri mesajlari icin idempotent inbox.
-- [ ] Session start ve payment capture icin two-phase ACK akisi.
-- [ ] ESP32 lokal sayac ve fail-safe kapanis.
-- [ ] Device twin desired/reported state karsilastirmasi.
-- [ ] Drift ve cihaz sagligi alarmlari.
+> Etiket: **SPIKE.** Buradaki backend tarafi kodu Faz 4'te yeniden yazilir. Kalici cikti, firmware ve olculen davranistir.
+
+- [ ] ESP32 firmware temeli: donanimsal MAC kimligi, MQTT over TLS, 4 kanalli role.
+- [ ] Wi-Fi Captive Portal (AP modu) ile saha kurulumu.
+- [ ] NVS'te seans kaydi; guc kesilip gelince kalan sureyle devam.
+- [ ] Baglanti kaybinda lokal sayac ve role kapatma (fail-safe).
+- [ ] Watchdog (WDT) ve yeniden baslatma davranisi.
+- [ ] Olcum: komut-ACK gecikmesi, tekrar eden komut davranisi (ayni `commandId` ikinci kez gelirse role tekrar cekilmemeli).
+- [ ] Dokunmatik TFT ekran: bostayken peron QR'i + kisa peron kodu, seans sirasinda yalnizca kalan sure ve kisa durum metni (`CALISIYOR`, `BITTI`, `HATA`). Dokunmatik giris MVP'de kullanilmaz. Geri sayim yerel sayactan gelir. QR ekranda gosterilir (basili etiket QR-jacking'e aciktir, bkz. `IOT.md`).
+- [ ] Firmware'in kabul edecegi kontrat: `docs/IOT.md` payload'lariyla birebir uyumlu.
 
 **Tamamlanma Kriterleri**
+- Test betigiyle gonderilen START role'yi fiziksel olarak ceker, STOP birakir.
+- Ag ve guc kesintisinde role beklenmedik sekilde acik kalmaz.
+- Ayni komut iki kez gonderilince yan etki bir kez olusur.
 
-- ESP32 start onayi vermezse bloke edilen tutar serbest birakilir.
-- Ag calisan seans sirasinda kopsa bile cihaz lokal olarak kapanir.
+**Not:** Gercek bir ESP32 (dokunmatik ekranli) elde mevcut, bu yuzden faz gercek cihazla yurutulur. Faz 4'te ek olarak mock cihaz simulatoru da kullanilir (CI'da donanimsiz test icin). Gercek role kartina baglanmadan once role bacaklarina kontrol LED'i/multimetre ile dogrulama yapilmasi onerilir; 220V yuk baglantisi ehliyetli kisi tarafindan yapilmalidir.
+
+---
+
+## Faz 4: Seans ve IoT Entegrasyonu
+
+**Hedef:** Faz 2 (para) ve Faz 3 (donanim) sonuclarini, dayanikli bir seans akisinda birlestirmek.
+
+- [ ] NestJS backend: health endpoint, structured logging (Pino).
+- [ ] Deterministik seans state machine (ADR-0007): `WAITING → STARTING → RUNNING → COMPLETED/FAILED`.
+- [ ] Two-phase ACK: HOLD → MQTT START → STARTED_ACK → CAPTURE. ACK gelmezse RELEASE (5 sn timeout).
+- [ ] Komutlar icin transactional outbox, ACK/telemetri icin idempotent inbox (ADR-0005).
+- [ ] **Seans sonu mutabakati:** Cihazin bildirdigi gercek calisma suresi ile tahsil edilen tutar karsilastirilir; fark iade veya duzeltme entry'si olarak islenir. Seans ortasinda cihaz kaybolursa (guc/ag) seans `RECONCILING` durumuna alinir ve cihaz geri geldiginde kapatilir.
+- [ ] Device twin: desired/reported state, drift tespiti (ADR-0006).
+- [ ] MQTT guvenligi: TLS, cihaz basina kimlik/ACL (cihaz yalniz kendi topic'lerine yazar/okur).
+- [ ] Gercek zamanli seans durumu (Socket.IO) + `GET /sessions/active` ile durum geri yukleme.
+
+**Tamamlanma Kriterleri**
+- START'a ACK gelmezse bloke tutar serbest kalir, peron `ERROR` olur.
+- Seans sirasinda ag kopsa da cihaz lokal olarak kapanir ve sunucu mutabakat ile toparlar.
 - Tekrarlanan MQTT mesajlari duplicate yan etki uretmez.
+- Bir cihaz baska peronun topic'ine yazamaz (ACL testi).
+- Ariza enjeksiyon testleri (mesaj kaybi, gec ACK, cift ACK, broker restart) gecer.
 
 ---
 
-## Faz 5: Admin Operasyonlari
+## Faz 5: Odeme (Iyzico) ve Musteri PWA
 
-**Hedef:** Istasyon operatorlerine sistemi calistirmak ve desteklemek icin gerekli araclari vermek.
+**Hedef:** Gercek musteri akisini uctan uca acmak: QR → giris → bakiye yukle → seans baslat → izle.
 
-- [ ] Canli peron durumunu gosteren admin dashboard.
+- [ ] Iyzico sandbox checkout, 3D Secure akisi.
+- [ ] Webhook imza dogrulamasi, idempotent isleme, reconciliation worker (ADR-0003).
+- [ ] Basarisiz/tekrarlanan callback'in duplicate bakiye olusturmadigi testi.
+- [ ] Kimlik dogrulama (ADR-0009): e-posta/sifre + e-posta dogrulama, Google girisi, sifre sifirlama. Google OAuth client/consent ekrani hazirligi. Iyzico zorunlu alici alanlari sandbox'ta dogrulanir; telefon gerekirse profilden istenir.
+- [ ] KVKK: aydinlatma metni, kullanim sartlari (iade politikasi metni dahil), hesap silme akisi.
+- [ ] QR sonrasi peron onay adimi ("Peron X'e baglaniyorsunuz"); QR adresi yalniz QWASH alan adina gider, bilinmeyen `bayCode` icin anlasilir hata.
+- [ ] Musteri PWA (Next.js): QR ile peron baglama, kayit/giris, bakiye yukleme, program secimi, canli seans ekrani (kalan sure/bakiye).
+- [ ] PWA manifest, ana ekrana ekleme, arka plandan donuste seans durumu geri yukleme (ADR-0008).
+- [ ] Kullanici deneyimi: ilk kez gelen musteri icin sade akis, hata durumlarinda anlasilir mesaj (ACK zaman asimi, yetersiz bakiye, peron dolu).
+- [ ] Web Push: opsiyonel, yalnizca pilot ihtiyaci dogarsa.
+
+**Tamamlanma Kriterleri**
+- Sandbox'ta kart ile bakiye yuklenir, seans baslatilir, cihaz fiziksel calisir, kalan bakiye dogru dusulur.
+- Cift webhook / gec webhook / iptal edilen odeme bakiyeyi bozmaz.
+- Mobil tarayicida (iOS Safari, Android Chrome) akis sorunsuz tamamlanir.
+
+---
+
+## Faz 6: Admin Operasyonlari
+
+**Hedef:** Operatore sistemi calistirmak ve desteklemek icin gereken araclari vermek.
+
+- [ ] Canli peron durumu dashboard'u.
 - [ ] Bakim modu ve acil durdurma.
 - [ ] Kullanici ve cuzdan arama.
-- [ ] Zorunlu audit nedeniyle manuel bakiye duzeltme.
-- [ ] Fiyatlandirma konfigürasyonu.
-- [ ] Cihaz sagligi, heartbeat ve alarm gorunurlugu.
+- [ ] Kasada nakit yukleme: operator musteriyi bulur (e-posta), tutari girer, makbuz numarasi uretilir, idempotent yazilir. Gun sonu kasa raporu (istasyon/gun/operator toplami). (Karar: Burak, 2026-09-25)
+- [ ] Zorunlu gerekce ve audit kaydi ile manuel bakiye duzeltme (yalniz hata duzeltme, nakit yukleme icin kullanilmaz).
+- [ ] Program/tarife yonetimi (ekleme, fiyat degistirme, soft-delete, role esleme).
+- [ ] Cihaz sagligi: heartbeat, RSSI, alarm gorunurlugu.
+- [ ] Admin girisi guclendirme: rol tabanli yetki, oturum suresi, gerekirse MFA.
 
 **Tamamlanma Kriterleri**
-
-- Operator peron durumunu ve cihaz sagligini tek ekrandan gorebilir.
-- Bakim aksiyonlari denetlenebilir kayit uretir.
-- Manuel finansal degisiklikler gerekce ister ve ledger/audit kaydi olusturur.
+- Operator peron ve cihaz durumunu tek ekrandan gorur.
+- Tum bakim ve finansal aksiyonlar denetlenebilir kayit uretir.
 
 ---
 
-## Faz 6: Pilot Guclendirme
+## Faz 7: Pilot Guclendirme
 
 **Hedef:** Sistemi sinirli bir gercek saha pilotuna hazirlamak.
 
-- [ ] Production Docker/Nginx deployment plani uygulanmis olur.
-- [ ] Backup ve restore proseduru test edilir.
-- [ ] Auth, secrets, MQTT ve odeme akisi icin guvenlik kontrolu yapilir.
-- [ ] Eszamanli seans baslatma icin yuk testi yapilir.
-- [ ] Musteri, admin, API ve cihaz akislari icin smoke testler hazirlanir.
-- [ ] Yaygin arizalar icin operasyon runbook'u olusturulur.
+- [ ] Production Docker/Nginx deployment.
+- [ ] Yedekleme ve **test edilmis** restore proseduru.
+- [ ] Gozlemlenebilirlik: log toplama, health check, temel alarm (cihaz cevrimdisi, odeme hatasi, ACK zaman asimi orani).
+- [ ] Eszamanli seans baslatma icin yuk testi.
+- [ ] Musteri, admin, API ve cihaz akislari icin smoke testler.
+- [ ] Guvenlik gozden gecirmesi: auth, secret yonetimi, MQTT, odeme, rate limit.
+- [ ] Yaygin arizalar icin operasyon runbook'u.
+- [ ] Saha kurulum ve devreye alma kontrol listesi.
+- [ ] Faz 3'teki donanim spike'inin gercek cihazla dogrulandiginin kaydi.
 
 **Tamamlanma Kriterleri**
-
-- Pilot istasyon deploy edilebilir, izlenebilir ve restart sonrasi toparlanabilir.
-- Backup restore yalnizca dokumante edilmez, test edilir.
+- Pilot istasyon deploy edilebilir, izlenebilir, restart sonrasi toparlanabilir.
+- Restore gercekten denenmis ve dokumante edilmis.
 - Yuk ve ariza testlerinde double spending veya kayip odemeli seans olusmaz.
 
 ---
 
-## Sonraki Adaylar
+## Acik Sorular (Faz 0'da Kapatilmali)
 
-Bu ozellikler MVP disinda tutulur; saha kullanimi ihtiyac dogurursa degerlendirilir:
+| # | Soru | Durum |
+|---|---|---|
+| 1 | Tarife gercek mi ornek mi? | **Kapandi (2026-09-25):** Fiyatlari admin belirler; dokumandaki degerler seed/ornek. |
+| 2 | Musteri kimligi | **Kapandi (2026-09-25):** E-posta/sifre + Google, misafir yok, telefon opsiyonel (ADR-0009). |
+| 3 | Ekran davranisi | **Kapandi (2026-09-25):** Dokunmatik ekran yalnizca sure gosterir; girisler PWA'dan. |
+| 4 | Iade / para cikarma politikasi | **Ertelendi.** Faz 5'te kullanim sartlari metni yazilmadan once (en gec bakiye yukleme UI'i bitmeden) karara baglanmali. Iyzico komisyonu ve yasal gereksinimler nedeniyle pilot oncesine birakilamaz. |
+| 5 | Minimum bakiye yukleme tutari | **Acik.** Iyzico komisyonu kucuk tutarlarda orani buyutur; iade politikasiyla birlikte karara baglanacak. |
+| 6 | Elektrik/internet kesintisinde iade politikasi | **Acik.** Iade politikasiyla (4) birlikte; mutabakat kurallarinin is tarafi. |
+| 7 | Bir istasyonda kac peron, bir peronda kac program/role? | **Kismen:** Cihaz basina 4 role (Su/Kopuk/Cila/Hava). Istasyon basina peron sayisi acik; MVP tek peron. |
+| 8 | E-fatura/e-arsiv gerekiyor mu? | **Acik.** Muhasebeciyle teyit edilmeli; odeme akisina ek entegrasyon gerektirebilir. |
+| 9 | Pilotun yeri, kapsami ve zamani | **Acik.** Faz 7 oncesi belirlenecek. |
 
-- Native iOS ve Android uygulamalari.
-- Coklu ulke ve coklu para birimi.
+---
+
+## Sonraki Adaylar (MVP Disi)
+
+- Native iOS/Android uygulamasi (karar olcutleri ADR-0008'de).
 - Firmware OTA ve rollback.
-- Hassas admin islemleri icin step-up MFA.
+- Hassas admin islemleri icin step-up MFA (Faz 6'da temel MFA yapilmadiysa).
 - Hash-chain audit loglari.
-- Cok istasyonlu enterprise raporlama.
-- Gelismis dinamik fiyatlandirma veya makine ogrenimi.
+- Cok istasyonlu kurumsal raporlama.
+- Sadakat / kampanya / abonelik.
+- Coklu ulke ve para birimi.
