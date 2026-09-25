@@ -58,8 +58,10 @@ Ilk cihaz olcumu (2026-09-25, kuru calisma, ev Wi-Fi'i, RSSI -43): START→START
 - [x] Sure ortasinda Wi-Fi/broker kesilse de sure dolunca role kapanir. _(2026-09-25: 60 sn seansta erisim noktasi kapatildi; sayac durmadan bitti, `BITTI` goruldu, broker LWT ile `OFFLINE` yayinladi. Cevrimdisi biten seansin `SESSION_ENDED` olayi kaybolur; Faz 4 mutabakati kapatir.)_
 - [x] Sure ortasinda guc cekilip takilinca kalan sureyle devam eder, `SESSION_RECOVERED` olayi gelir. _(2026-09-25: gecti. Burak fisi bilerek 3 kez cekti; 90 sn seans duvar saatiyle 129 sn surdu (her kesintide kapali kalinan sure + son NVS kaydindan bu yana gecen sure sayilmaz). NVS kayit araligi 10→3 sn yapildi, reset sebebi olaylara eklendi.)_
 - [x] `durationSec` > 3600 veya 0, gecersiz `relayIndex` (0, 5), seans surerken ikinci START (`BUSY`) reddedilir; `commandId`siz ve JSON olmayan mesaj yok sayilir; STOP seansi kapatir, ikinci STOP `NOT_ACTIVE`. _(2026-09-25)_
-- [ ] Suresi dolmus (`expiresAt` gecmis) START reddedilir. _(2026-09-25: saat senkron olmadigi icin KABUL EDILDI. Cihaz saatsizken bu kontrol yapilamaz; asil koruma Faz 4 "gec ACK kurali", bkz. ROADMAP.)_
-- [ ] Bosta ekranda QR + peron kodu, seansta kalan sure + `CALISIYOR`/`BITTI`.
+- [x] Suresi dolmus (`expiresAt` gecmis) START reddedilir (`EXPIRED`). _(2026-09-25: saat senkronken dogrulandi. Saat senkron degilken kontrol yapilamaz; asil koruma Faz 4 "gec ACK kurali".)_
+- [x] Bosta ekranda QR + peron kodu, seansta kalan sure + `CALISIYOR`/`BITTI`. _(2026-09-25: QR telefonla okutuldu, yer tutucu adrese gitti.)_
+- [x] NTP modemde calisir (Windows mobil erisim noktasinda calismamisti); zaman damgalari gercek. _(2026-09-25)_
+- [x] Seans basinda `BUSY`, sonunda `ONLINE` durumu yayinlanir; `resetReason` durum mesajinda gorunur. _(2026-09-25, 4d605e8)_
 
 ## Bilinen sinirlar (spike)
 
