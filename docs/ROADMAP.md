@@ -157,7 +157,10 @@ Faz 2 ve Faz 3 birbirinden bagimsizdir; iki kisi veya iki paralel calisma akisi 
 - [ ] Iyzico sandbox checkout, 3D Secure akisi.
 - [ ] Webhook imza dogrulamasi, idempotent isleme, reconciliation worker (ADR-0003).
 - [ ] Basarisiz/tekrarlanan callback'in duplicate bakiye olusturmadigi testi.
-- [ ] Kimlik dogrulama (ADR-0009): e-posta/sifre + e-posta dogrulama, Google girisi, sifre sifirlama. Google OAuth client/consent ekrani hazirligi. Iyzico zorunlu alici alanlari sandbox'ta dogrulanir; telefon gerekirse profilden istenir.
+- [x] Kimlik dogrulama backend'i (ADR-0009, Faz 5a): e-posta/sifre + e-posta dogrulama, Google girisi, sifre sifirlama, refresh rotasyonu + reuse tespiti, rate limit, API yanit zarfi. 30 test (servis + HTTP).
+- [ ] Google OAuth client/consent ekrani (Google Cloud Console; Burak) ve `GOOGLE_CLIENT_ID`.
+- [ ] E-posta saglayicisi secimi ve `Mailer` uygulamasi (production icin zorunlu).
+- [ ] Iyzico zorunlu alici alanlari sandbox'ta dogrulanir; telefon gerekirse profilden istenir.
 - [ ] KVKK: aydinlatma metni, kullanim sartlari (iade politikasi metni dahil), hesap silme akisi.
 - [ ] QR sonrasi peron onay adimi ("Peron X'e baglaniyorsunuz"); QR adresi yalniz QWASH alan adina gider, bilinmeyen `bayCode` icin anlasilir hata.
 - [ ] Musteri PWA (Next.js): QR ile peron baglama, kayit/giris, bakiye yukleme, program secimi, canli seans ekrani (kalan sure/bakiye).

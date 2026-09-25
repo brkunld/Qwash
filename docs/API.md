@@ -76,9 +76,13 @@ Ağ kopması nedeniyle aynı istek tekrar gönderilirse backend işlemi yeniden 
 * `POST /api/v1/auth/google` — Google ID token ile giriş/kayıt. Token sunucuda doğrulanır; `email_verified` olmayan hesap kabul edilmez.
 * `POST /api/v1/auth/verify-email` — E-posta doğrulama token'ı ile hesabı doğrulama. Doğrulanmamış hesap bakiye yükleyemez.
 * `POST /api/v1/auth/forgot-password` / `POST /api/v1/auth/reset-password` — Tek kullanımlık token ile şifre sıfırlama.
-* `PATCH /api/v1/me/profile` — Ad ve opsiyonel telefon numarası güncelleme (telefon yalnızca gerekirse istenir).
-* `POST /api/v1/auth/refresh` — Refresh token ile yeni access token alma.
-* `POST /api/v1/auth/logout` — Oturumu sonlandırma ve token'ı kara listeye alma.
+* `POST /api/v1/auth/resend-verification` — (Giriş gerekli) Doğrulama e-postasını tekrar gönderir; 15 dakikada 3 istek.
+* `GET /api/v1/me` — Giriş yapmış kullanıcının profili (`emailVerified`, `hasPassword` dahil).
+* `PATCH /api/v1/me/profile` — Ad güncelleme. Telefon numarası Iyzico zorunlu alanları netleşince eklenecek.
+* `POST /api/v1/auth/refresh` — Cookie'deki refresh token ile yeni access token; refresh token döndürülür.
+* `POST /api/v1/auth/logout` — Refresh token'ı iptal eder ve cookie'yi siler.
+
+Sözleşmeler: `packages/contracts/src/auth.ts`. Uygulama: `apps/backend/src/auth/` (Faz 5a, 2026-09-26).
 
 ### 🚗 Peron & Program Yönetimi (`/api/v1/bays`)
 * `GET /api/v1/bays` — Tüm peronların genel durum listesi (IDLE, RUNNING, MAINTENANCE).

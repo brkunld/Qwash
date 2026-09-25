@@ -15,24 +15,29 @@ Kullanıcı Girişi
 POST /auth/login
       │
       ├── Access Token  (JWT, 15 dakika, Authorization Bearer header)
-      └── Refresh Token (JWT, 7 gün, HTTP-only Secure SameSite=Strict cookie)
+      └── Refresh Token (opak rastgele değer, 7 gün, HTTP-only Secure SameSite=Strict cookie)
 ```
 
 | Özellik | Access Token | Refresh Token |
 |---|---|---|
+| Biçim | JWT HS256 (`JWT_ACCESS_SECRET`), `iss=qwash`, `aud=qwash-api` | 32 bayt rastgele; DB'de yalnız SHA-256 özeti (`RefreshToken`) |
 | Ömür | 15 dakika | 7 gün |
-| Taşıma | `Authorization: Bearer <token>` header | HTTP-only cookie |
-| Yenileme | `POST /auth/refresh` | — |
-| İptal | Redis kara liste (JTI blacklist) | DB'de hash saklama |
+| Taşıma | `Authorization: Bearer <token>` header | HTTP-only cookie `qwash_rt`, `Path=/api/v1/auth` |
+| Yenileme | `POST /auth/refresh` | Her kullanımda döndürülür |
+| İptal | Yok (kısa ömür) | `revokedAt` |
 
 > [!IMPORTANT]
-> Access Token kara listeye alınamaz (stateless). Bu nedenle token ömrü kasıtlı olarak kısa (15 dk) tutulmuştur. Kritik işlemlerde (admin bakiye düzeltme) çıkış sonrası token geçerliliği 15 dakika devam edebilir — bu kabul edilebilir risk aralığındadır.
+> Access Token kara listeye alınamaz (stateless). Bu nedenle token ömrü kasıtlı olarak kısa (15 dk) tutulmuştur. Çıkış veya şifre değişikliği sonrası access token en fazla 15 dakika geçerli kalabilir; bu kabul edilebilir risk aralığındadır.
+
+> [!NOTE]
+> Refresh cookie `SameSite=Strict` olduğu için API ve PWA aynı site altında olmalıdır (ör. `app.qwash...` ve `api.qwash...`). Yerelde ikisi de `localhost` olduğundan sorun yoktur. Tarayıcıdan gelen istekler için `CORS_ORIGINS` listesi kullanılır (credentials açık).
 
 ### 1.2 Refresh Token Rotasyonu
-`POST /auth/refresh` çağrıldığında:
-1. Eski refresh token geçersiz kılınır (DB'den silinir veya `used = true`).
+`POST /auth/refresh` çağrıldığında (`apps/backend/src/auth/auth.service.ts`):
+1. Eski refresh token koşullu güncellemeyle iptal edilir (`revokedAt`); aynı token'la eşzamanlı iki istekten yalnız biri kazanır.
 2. Yeni bir refresh token verilir ve cookie güncellenir.
-3. Eğer eski token tekrar kullanılırsa → **Token Reuse Saldırısı** tespit edilir → o kullanıcının TÜM aktif oturumları sonlandırılır.
+3. Eğer iptal edilmiş token tekrar kullanılırsa → **Token Reuse Saldırısı** tespit edilir → o kullanıcının TÜM aktif oturumları sonlandırılır.
+4. Şifre sıfırlandığında da tüm oturumlar kapanır.
 
 ### 1.3 Rol Tabanlı Erişim Kontrolü (RBAC)
 
@@ -46,9 +51,13 @@ POST /auth/login
 
 ## 2. Şifre Güvenliği
 
-* **Algoritma:** `bcrypt` (work factor: `12`)
-* **Kural:** Kullanıcı şifresi asla loglanmaz, asla düz metin olarak DB'ye yazılmaz.
-* **Google girişi:** ID token sunucuda doğrulanır (imza, `aud`, `iss`, `exp`, `email_verified`). Hesap birleştirme yalnızca doğrulanmış e-postayla yapılır ([ADR-0009](adr/0009-customer-authentication.md)).
+* **Algoritma:** `scrypt` (Node yerleşik; N=2^15, r=8, p=1, 16 bayt tuz). Parametreler özetin içinde saklanır (`scrypt$N$r$p$tuz$özet`), ileride artırılabilir. Önceki plan `bcrypt` idi; native bağımlılık gerektirmediği ve 72 bayt kesme sorunu olmadığı için scrypt seçildi (2026-09-26).
+* **Şifre kuralı:** En az 8, en fazla 72 karakter; karmaşıklık kuralı yok (NIST 800-63B).
+* **Kural:** Kullanıcı şifresi asla loglanmaz, asla düz metin olarak DB'ye yazılmaz. Olmayan hesaba giriş denemesinde de scrypt çalıştırılır; yanıt süresi hesabın varlığını sızdırmaz.
+* **Brute-force:** Giriş/kayıt/sıfırlama uçları IP başına 15 dakikada 10 istekle sınırlı (`@nestjs/throttler`). Ters vekil arkasında gerçek istemci IP'si için `trust proxy` ayarı canlıya çıkmadan yapılmalıdır.
+* **Google girişi:** ID token sunucuda doğrulanır (imza, `aud`, `iss`, `exp`, `email_verified`). Aynı e-postada doğrulanmış yerel hesap varsa ona bağlanır. Doğrulanmamış yerel hesap varsa (şifreyi başkası koymuş olabilir) şifre silinir, açık oturumlar kapatılır ve hesap Google kimliğine bağlanır ([ADR-0009](adr/0009-customer-authentication.md) madde 5).
+* **E-posta/sıfırlama token'ları:** 32 bayt rastgele, DB'de yalnız SHA-256 özeti (`AuthToken`), tek kullanımlık. E-posta doğrulama 24 saat, şifre sıfırlama 1 saat geçerli; yeni sıfırlama sonrası kullanılmamış eski bağlantılar iptal olur. Şifremi unuttum ucu hesap olsun olmasın aynı yanıtı verir.
+* **E-posta gönderimi:** Sağlayıcı henüz seçilmedi. Geliştirmede bağlantı konsola yazılır; production'da sağlayıcı tanımlanmadan uygulama başlamaz (`auth/mailer.ts`).
 * **E-posta doğrulama:** Doğrulanmamış hesap bakiye yükleyemez ve seans başlatamaz.
 * **Admin Sıfırlama:** Admin şifre sıfırlama işlemi tek kullanımlık token (`crypto.randomBytes(32)`) + e-posta akışıyla yapılır. Token 1 saat geçerlidir.
 
