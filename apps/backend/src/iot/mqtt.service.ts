@@ -12,6 +12,17 @@ export type DeviceMessageHandler = (topic: string, payload: string) => Promise<u
  * dener. O sirada yayin hata verir, outbox kaydi PENDING kalir ve sonraki turda tekrar
  * denenir; ACK alinamayan seanslar zaman asimiyla iade edilir.
  */
+/** Loglarda MQTT_URL icindeki sifreyi gizler. */
+export function redactUrl(url: string): string {
+  try {
+    const u = new URL(url);
+    if (u.password) u.password = '***';
+    return u.toString();
+  } catch {
+    return '<gecersiz MQTT_URL>';
+  }
+}
+
 export class MqttService implements MessagePublisher {
   private readonly logger = new Logger(MqttService.name);
   private client: MqttClient | null = null;
@@ -33,7 +44,7 @@ export class MqttService implements MessagePublisher {
     client.on('connect', () => {
       client.subscribe(DEVICE_SUBSCRIPTIONS, { qos: 1 }, (err) => {
         if (err) this.logger.error(`MQTT abonelik hatasi: ${err.message}`);
-        else this.logger.log(`MQTT baglandi ve dinliyor: ${this.url}`);
+        else this.logger.log(`MQTT baglandi ve dinliyor: ${redactUrl(this.url)}`);
       });
     });
     client.on('reconnect', () => this.logger.warn('MQTT yeniden baglaniyor'));

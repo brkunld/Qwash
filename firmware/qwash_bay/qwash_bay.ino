@@ -9,6 +9,7 @@
 //  - WDT 15 sn; loop() takilirsa cihaz yeniden baslar.
 
 #include <WiFi.h>
+#include <WiFiClientSecure.h>
 #include <WiFiManager.h>  // tzapu/WiFiManager
 #include <PubSubClient.h>
 #include <ArduinoJson.h>  // v7
@@ -21,19 +22,26 @@
 #include <time.h>
 #include <functional>
 #include "config.h"
+#if __has_include("mqtt_ca.h")
+#include "mqtt_ca.h"  // pnpm mqtt:certs
+#else
+#error "mqtt_ca.h yok: depo kokunde pnpm mqtt:certs calistir"
+#endif
 #include "display.h"
 
 // ---------- Kimlik ve ayarlar ----------
 static char deviceId[13];  // MAC, ayiracsiz buyuk harf (docs/IOT.md)
 static char mqttHost[64] = DEFAULT_MQTT_HOST;
 static char mqttPortStr[8] = DEFAULT_MQTT_PORT;
+static char mqttPass[65] = "";  // Kullanici adi deviceId; sifre portaldan girilir (docker/mosquitto/acl).
 static char stationId[32] = DEFAULT_STATION_ID;
 static char bayId[32] = DEFAULT_BAY_ID;
 static char qrBase[96] = DEFAULT_QR_BASE;
 
 static Preferences prefs;
 static WiFiManager wm;
-static WiFiClient net;
+// Broker sertifikasi MQTT_CA_CERT ile dogrulanir; CA'sini bilmedigimiz sunucuya baglanilmaz.
+static WiFiClientSecure net;
 static PubSubClient mqtt(net);
 
 static char tCmd[96], tAck[96], tStatus[96], tHeartbeat[96], tEvents[96];
@@ -133,7 +141,8 @@ static uint32_t remainingSec() {
 // ---------- NVS ----------
 static void loadSettings() {
   strlcpy(mqttHost, prefs.getString("mqttHost", DEFAULT_MQTT_HOST).c_str(), sizeof(mqttHost));
-  strlcpy(mqttPortStr, prefs.getString("mqttPort", DEFAULT_MQTT_PORT).c_str(), sizeof(mqttPortStr));
+  strlcpy(mqttPortStr, prefs.getString("mqttTlsPort", DEFAULT_MQTT_PORT).c_str(), sizeof(mqttPortStr));
+  strlcpy(mqttPass, prefs.getString("mqttPass", DEFAULT_MQTT_PASS).c_str(), sizeof(mqttPass));
   strlcpy(stationId, prefs.getString("station", DEFAULT_STATION_ID).c_str(), sizeof(stationId));
   strlcpy(bayId, prefs.getString("bay", DEFAULT_BAY_ID).c_str(), sizeof(bayId));
   strlcpy(qrBase, prefs.getString("qrBase", DEFAULT_QR_BASE).c_str(), sizeof(qrBase));
@@ -390,13 +399,16 @@ static void onSaveParams() { paramsChanged = true; }
 
 static WiFiManagerParameter pHost("host", "MQTT sunucu (IP)", DEFAULT_MQTT_HOST, 63);
 static WiFiManagerParameter pPort("port", "MQTT port", DEFAULT_MQTT_PORT, 7);
+// Kayitli sifre portalda gosterilmez; bos birakilirsa mevcut sifre korunur.
+static WiFiManagerParameter pPass("pass", "MQTT sifre (bos = degistirme)", "", 64, "type='password'");
 static WiFiManagerParameter pStation("station", "Istasyon ID", DEFAULT_STATION_ID, 31);
 static WiFiManagerParameter pBay("bay", "Peron ID", DEFAULT_BAY_ID, 31);
 static WiFiManagerParameter pQr("qr", "QR taban adresi", DEFAULT_QR_BASE, 95);
 
 static void applyPortalParams() {
   prefs.putString("mqttHost", pHost.getValue());
-  prefs.putString("mqttPort", pPort.getValue());
+  prefs.putString("mqttTlsPort", pPort.getValue());
+  if (strlen(pPass.getValue()) > 0) prefs.putString("mqttPass", pPass.getValue());
   prefs.putString("station", pStation.getValue());
   prefs.putString("bay", pBay.getValue());
   prefs.putString("qrBase", pQr.getValue());
@@ -419,7 +431,8 @@ static void mqttTryConnect() {
   snprintf(lwt, sizeof(lwt),
            "{\"deviceId\":\"%s\",\"stationId\":\"%s\",\"bayId\":\"%s\",\"payload\":{\"type\":\"DEVICE_STATUS\",\"status\":\"OFFLINE\"}}",
            deviceId, stationId, bayId);
-  if (mqtt.connect(clientId, nullptr, nullptr, tStatus, 1, true, lwt)) {
+  // rc=4/5 donerse kullanici/sifre ya da yetki hatasi: sifreyi portaldan gir.
+  if (mqtt.connect(clientId, deviceId, mqttPass, tStatus, 1, true, lwt)) {
     Serial.printf("[mqtt] baglandi %s:%s\n", mqttHost, mqttPortStr);
     mqtt.subscribe(tCmd, 1);
     publishStatus(sess.active ? "BUSY" : "ONLINE");
@@ -530,6 +543,10 @@ void setup() {
   // Varsayilan 15 sn: broker TCP'yi kabul edip CONNACK vermezse (Docker'in port yonlendirmesi
   // boyle davranir) baglanma denemesi 15 sn'lik WDT'yi asip cihazi seans ortasinda resetliyordu.
   mqtt.setSocketTimeout(3);
+  net.setCACert(MQTT_CA_CERT);
+  // TCP (3 sn) + TLS el sikismasi (6 sn) toplami 15 sn WDT'nin altinda kalmali.
+  net.setTimeout(3);
+  net.setHandshakeTimeout(6);
   // Varsayilan 15 sn: broker 1,5x = 22,5 sn sessizlikte baglantiyi dusuruyordu. Zayif Wi-Fi'da
   // (RSSI -76) paket kaybi bunu asabiliyordu. 30 sn -> 45 sn tolerans; backend deviceStaleMs (90 sn) altinda.
   mqtt.setKeepAlive(30);
@@ -549,10 +566,11 @@ void setup() {
   pQr.setValue(qrBase, 95);
   wm.addParameter(&pHost);
   wm.addParameter(&pPort);
+  wm.addParameter(&pPass);
   wm.addParameter(&pStation);
   wm.addParameter(&pBay);
   wm.addParameter(&pQr);
-  bool ok = wm.autoConnect(apName);  // Baglanamazsa AP acik kalir; wm.process() loop'ta.
+  bool ok = wm.autoConnect(apName, DEFAULT_AP_PASS);  // Baglanamazsa AP acik kalir; wm.process() loop'ta.
   if (ok) configTime(0, 0, "pool.ntp.org", "time.google.com");
 
   startWatchdog();

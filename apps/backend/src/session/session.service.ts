@@ -38,6 +38,15 @@ export interface SessionTimings {
    * kullanim tahsil edilir, kalani iade edilir (Burak'in karari, 2026-09-25).
    */
   reconcileTimeoutMs: number;
+  /**
+   * Musteri durdurunca tahsilat tavani = durdurma ani - baslama + bu pay (STOP'un cihaza
+   * ulasma suresi). STOP kaybolup cihaz calismaya devam etse bile musteri fazlasini odemez.
+   */
+  stopGraceSec: number;
+  /** Cihazdan STOPPED_ACK/bitis gelmezse STOP bu aralikla yeniden gonderilir. */
+  stopRetryMs: number;
+  /** En fazla bu kadar STOP gonderilir (ilk gonderim dahil). */
+  stopMaxAttempts: number;
 }
 
 export const DEFAULT_TIMINGS: SessionTimings = {
@@ -45,6 +54,9 @@ export const DEFAULT_TIMINGS: SessionTimings = {
   endGraceSec: 30,
   deviceStaleMs: 90_000,
   reconcileTimeoutMs: 30 * 60_000,
+  stopGraceSec: 5,
+  stopRetryMs: 5_000,
+  stopMaxAttempts: 24, // ~2 dk
 };
 
 export interface StartSessionInput {
@@ -78,10 +90,13 @@ export interface SweepResult {
   ackTimeouts: number;
   reconciling: number;
   autoClosed: number;
+  stopRetries: number;
 }
 
 /** Cihazi kaybolan seans otomatik kapatildiginda kullanilan bitis nedeni. */
 export const DEVICE_LOST_REASON = 'DEVICE_LOST';
+
+type StopReason = StopCommandPayload['reason'];
 
 type SessionWithBay = WashSession & { bay: Bay & { station: { code: string } } };
 
@@ -101,6 +116,8 @@ const ACTIVE: SessionStatus[] = [
  *   SESSION_ENDED         -> COMPLETED, kullanilan sure tahsil, kalan iade
  *   bitis bildirilmedi    -> RECONCILING (bloke durur, cihaz donunce kapanir)
  *   FAILED iken STARTED_ACK (gec ACK) -> STOP gonderilir
+ *   STOP onaylanmadi      -> STOPPED_ACK/bitis gelene kadar yeniden gonderilir
+ *   musteri durdurdu      -> tahsilat durdurma anina (+ pay) kadar; fazlasi incelemeye
  *
  * Her durum degisikligi seans satiri FOR UPDATE kilitliyken yapilir; ACK isleyicisi ile
  * zaman asimi taramasi ayni seansi ayni anda degistiremez.
@@ -231,6 +248,7 @@ export class SessionService {
       if (session.status === SessionStatus.STARTING || session.status === SessionStatus.RUNNING) {
         await this.enqueueStop(tx, session, 'USER_STOP');
         await this.transition(tx, session.id, session.status, session.status, 'STOP_REQUESTED');
+        return tx.washSession.findUniqueOrThrow({ where: { id: session.id } });
       }
       return session;
     });
@@ -274,6 +292,8 @@ export class SessionService {
         case 'SESSION_ENDED':
           return this.settle(tx, parsed, p.sessionId, p.remainingSec, `DEVICE_${p.reason}`);
         case 'STOPPED_ACK':
+          // Hangi durumla gelirse gelsin STOP cihaza ulasmistir: yeniden gonderim durur.
+          await this.confirmStop(tx, parsed, p.sessionId);
           // Normalde SESSION_ENDED'den hemen sonra gelir; o kaybolduysa bu kapatir.
           if (p.status === 'SUCCESS' && p.remainingSec !== undefined) {
             return this.settle(tx, parsed, p.sessionId, p.remainingSec, 'DEVICE_STOPPED');
@@ -293,7 +313,7 @@ export class SessionService {
 
   async sweep(): Promise<SweepResult> {
     const now = this.clock();
-    const result: SweepResult = { ackTimeouts: 0, reconciling: 0, autoClosed: 0 };
+    const result: SweepResult = { ackTimeouts: 0, reconciling: 0, autoClosed: 0, stopRetries: 0 };
 
     const timedOut = await this.prisma.$queryRaw<{ id: string }[]>`
       SELECT "id" FROM "WashSession"
@@ -348,13 +368,14 @@ export class SessionService {
       const done = await this.prisma.$transaction(async (tx) => {
         const s = await this.lockSession(tx, { id }, true);
         if (!s || s.status !== SessionStatus.RECONCILING) return false; // Cihaz yetisti
-        const chargedKurus = s.provenUsedSec * s.pricePerSecondKurus;
+        const billed = this.billableSeconds(s, s.provenUsedSec);
+        const chargedKurus = billed * s.pricePerSecondKurus;
         await this.wallets.captureTx(tx, s.holdId, chargedKurus);
         await tx.washSession.update({
           where: { id },
           data: {
             status: SessionStatus.COMPLETED,
-            usedSeconds: s.provenUsedSec,
+            usedSeconds: billed,
             chargedKurus: BigInt(chargedKurus),
             endedAt: now,
             endReason: DEVICE_LOST_REASON,
@@ -370,6 +391,31 @@ export class SessionService {
         return true;
       });
       if (done) result.autoClosed += 1;
+    }
+
+    // Onaylanmayan STOP'lari yeniden gonder. Onceki STOP hala outbox'ta bekliyorsa
+    // (broker yok) yenisi eklenmez; kuyruk sisirilmez.
+    const retryBefore = new Date(now.getTime() - this.timings.stopRetryMs);
+    const unconfirmed = await this.prisma.$queryRaw<{ id: string }[]>`
+      SELECT s."id" FROM "WashSession" s
+      WHERE s."stopRequestedAt" IS NOT NULL AND s."stopConfirmedAt" IS NULL
+        AND s."lastStopSentAt" <= ${retryBefore}
+        AND s."stopAttempts" < ${this.timings.stopMaxAttempts}
+        AND NOT EXISTS (
+          SELECT 1 FROM "OutboxEvent" o
+          WHERE o."sessionId" = s."id" AND o."status" = 'PENDING'
+            AND o."payload"->'payload'->>'type' = 'STOP')
+      ORDER BY s."lastStopSentAt" LIMIT 100`;
+    for (const { id } of unconfirmed) {
+      const done = await this.prisma.$transaction(async (tx) => {
+        const s = await this.lockSession(tx, { id }, true);
+        if (!s || !s.stopRequestedAt || s.stopConfirmedAt) return false;
+        if (s.stopAttempts >= this.timings.stopMaxAttempts) return false;
+        if (s.lastStopSentAt && s.lastStopSentAt > retryBefore) return false;
+        await this.enqueueStop(tx, s, (s.stopReason ?? 'USER_STOP') as StopReason, true);
+        return true;
+      });
+      if (done) result.stopRetries += 1;
     }
     return result;
   }
@@ -439,6 +485,10 @@ export class SessionService {
       s.plannedDurationSec,
       Math.max(0, s.plannedDurationSec - remainingSec),
     );
+    // Cihaz bitti bildirdiyse STOP'a gerek kalmadi.
+    if (s.stopRequestedAt && !s.stopConfirmedAt) {
+      await tx.washSession.update({ where: { id: s.id }, data: { stopConfirmedAt: this.clock() } });
+    }
 
     // Firmware son bitisi her baglantida yeniden gonderir; asagidaki isaretler bir kez yazilir.
     if (s.status === SessionStatus.COMPLETED) {
@@ -465,24 +515,33 @@ export class SessionService {
       return 'UNPAID_RUN';
     }
 
-    const chargedKurus = usedSeconds * s.pricePerSecondKurus;
+    const billed = this.billableSeconds(s, usedSeconds);
+    const chargedKurus = billed * s.pricePerSecondKurus;
     await this.wallets.captureTx(tx, s.holdId, chargedKurus);
     await tx.washSession.update({
       where: { id: s.id },
       data: {
         status: SessionStatus.COMPLETED,
-        usedSeconds,
+        usedSeconds: billed,
         chargedKurus: BigInt(chargedKurus),
         endedAt: this.clock(),
         endReason: reason,
+        ...(billed < usedSeconds ? { needsReview: true } : {}),
       },
     });
     await tx.bay.update({ where: { id: s.bayId }, data: { status: BayStatus.IDLE } });
     await this.transition(tx, s.id, s.status, SessionStatus.COMPLETED, reason, {
-      usedSeconds,
+      usedSeconds: billed,
       remainingSec,
       chargedKurus,
+      ...(billed < usedSeconds ? { reportedUsedSeconds: usedSeconds, stopCapApplied: true } : {}),
     });
+    if (billed < usedSeconds) {
+      this.logger.warn(
+        { sessionId: s.id, reportedUsedSeconds: usedSeconds, billed },
+        'STOP sonrasi cihaz calismaya devam etti; fazlasi tahsil edilmedi',
+      );
+    }
     return 'SESSION_COMPLETED';
   }
 
@@ -531,6 +590,24 @@ export class SessionService {
         AND "status" IN ('RUNNING', 'RECONCILING')`;
   }
 
+  /**
+   * Musteri durdurduysa tahsil edilebilecek en uzun sure: durdurma anina kadar gecen sure
+   * + stopGraceSec. Baslamadan once durdurulduysa yalnizca pay.
+   */
+  private billableSeconds(s: WashSession, usedSeconds: number): number {
+    if (!s.stopRequestedAt || s.stopReason !== 'USER_STOP') return usedSeconds;
+    const startMs = s.startedAt?.getTime() ?? s.stopRequestedAt.getTime();
+    const beforeStop = Math.max(0, Math.ceil((s.stopRequestedAt.getTime() - startMs) / 1000));
+    return Math.min(usedSeconds, beforeStop + this.timings.stopGraceSec);
+  }
+
+  /** STOPPED_ACK geldi: STOP cihaza ulasti, yeniden gonderim durur. */
+  private async confirmStop(tx: Tx, topic: ParsedTopic, sessionId: string): Promise<void> {
+    const s = await this.lockSession(tx, { id: sessionId });
+    if (!s || !sameBay(s, topic) || !s.stopRequestedAt || s.stopConfirmedAt) return;
+    await tx.washSession.update({ where: { id: s.id }, data: { stopConfirmedAt: this.clock() } });
+  }
+
   private async hasTransition(tx: Tx, sessionId: string, reason: string): Promise<boolean> {
     return (await tx.sessionTransition.count({ where: { sessionId, reason } })) > 0;
   }
@@ -551,11 +628,27 @@ export class SessionService {
     await this.transition(tx, s.id, s.status, SessionStatus.FAILED, reason);
   }
 
+  /**
+   * STOP'u outbox'a yazar ve takibini baslatir. Ilk durdurma ani korunur (tahsilat tavani).
+   * Yeni bir STOP nedeni onceki onayi gecersiz kilar ve deneme sayacini sifirlar; tarama
+   * yeniden gonderimi (retry) sayaci artirir.
+   */
   private async enqueueStop(
     tx: Tx,
     s: SessionWithBay,
-    reason: StopCommandPayload['reason'],
+    reason: StopReason,
+    retry = false,
   ): Promise<void> {
+    const now = this.clock();
+    await tx.washSession.update({
+      where: { id: s.id },
+      data: {
+        stopRequestedAt: s.stopRequestedAt ?? now,
+        stopReason: reason,
+        lastStopSentAt: now,
+        ...(retry ? { stopAttempts: { increment: 1 } } : { stopAttempts: 1, stopConfirmedAt: null }),
+      },
+    });
     const payload: StopCommandPayload = { type: 'STOP', reason };
     await this.outbox.enqueue(tx, {
       topic: commandTopic(s.bay.station.code, s.bay.bayCode),

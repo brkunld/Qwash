@@ -226,6 +226,7 @@ describe('SessionService (gercek PostgreSQL)', () => {
     const user = await userWith(10_000);
     const s = await start(user, 60);
     await ack(s);
+    advance(20_000);
 
     await sessions.requestStop(s.id, user);
     await outbox.publishPending(publisher);
@@ -683,6 +684,325 @@ describe('SessionService (gercek PostgreSQL)', () => {
     const p2 = new FakePublisher();
     await Promise.all([outbox.publishPending(publisher), outbox.publishPending(p2)]);
     expect(publisher.sent.length + p2.sent.length).toBe(1);
+  });
+
+  // ---------------------------------------------------------------- ariza enjeksiyonu
+
+  it('STARTED_ACK kaybolur ama cihaz calisip biterse: gercek sureyle kapanir, sonra gelen ACK etkisiz', async () => {
+    const user = await userWith(10_000);
+    const s = await start(user, 60);
+    // ACK hic gelmedi; zaman asimi taramasindan once cihazin bitis bildirimi ulasti.
+    expect(await ended(s, 20)).toBe('SESSION_COMPLETED');
+    expect(await reload(s)).toMatchObject({
+      status: SessionStatus.COMPLETED,
+      usedSeconds: 40,
+      chargedKurus: 2000n,
+    });
+    expect(await balance(user)).toBe(8_000);
+    expect(await available(user)).toBe(8_000);
+    expect(await bayStatus()).toBe(BayStatus.IDLE);
+
+    // Kaybolan ACK gec gelir, tarama da calisir: hicbiri seansi ya da parayi degistirmez.
+    expect(await ack(s)).toBe('NO_OP');
+    advance(DEFAULT_TIMINGS.ackTimeoutMs);
+    expect((await sessions.sweep()).ackTimeouts).toBe(0);
+    expect((await reload(s)).status).toBe(SessionStatus.COMPLETED);
+    expect(await balance(user)).toBe(8_000);
+    await outbox.publishPending(publisher);
+    expect(publisher.ofType('STOP')).toHaveLength(0);
+  });
+
+  it('ayni ACK farkli eventId ile eszamanli gelirse seans bir kez RUNNING olur', async () => {
+    const user = await userWith(10_000);
+    const s = await start(user, 60);
+    const outcomes = await Promise.all(Array.from({ length: 5 }, () => ack(s)));
+    expect(outcomes.filter((o) => o === 'SESSION_RUNNING')).toHaveLength(1);
+    expect(outcomes.filter((o) => o !== 'SESSION_RUNNING').every((o) => o === 'NO_OP')).toBe(true);
+    expect(
+      await prisma.sessionTransition.count({
+        where: { sessionId: s.id, toState: SessionStatus.RUNNING },
+      }),
+    ).toBe(1);
+    expect((await holdOf(s)).status).toBe(HoldStatus.ACTIVE);
+  });
+
+  it('ayni ACK ayni eventId ile eszamanli gelirse yalnizca biri islenir', async () => {
+    const user = await userWith(10_000);
+    const s = await start(user, 60);
+    const id = randomUUID();
+    const outcomes = await Promise.all(Array.from({ length: 5 }, () => ack(s, 'SUCCESS', {}, id)));
+    expect(outcomes.filter((o) => o === 'SESSION_RUNNING')).toHaveLength(1);
+    expect(outcomes.filter((o) => o === 'DUPLICATE_EVENT')).toHaveLength(4);
+  });
+
+  it('eszamanli bitis bildirimleri (SESSION_ENDED x3 + STOPPED_ACK) tek tahsilat yapar', async () => {
+    const user = await userWith(10_000);
+    const s = await start(user, 60);
+    await ack(s);
+    const outcomes = await Promise.all([
+      ended(s, 30),
+      ended(s, 30),
+      ended(s, 30),
+      deviceSays(BAY, {
+        type: 'STOPPED_ACK',
+        commandId: randomUUID(),
+        sessionId: s.id,
+        status: 'SUCCESS',
+        remainingSec: 30,
+      }),
+    ]);
+    expect(outcomes.filter((o) => o === 'SESSION_COMPLETED')).toHaveLength(1);
+    expect(
+      await prisma.ledgerEntry.count({ where: { holdId: s.holdId, type: LedgerType.CAPTURE } }),
+    ).toBe(1);
+    expect(await reload(s)).toMatchObject({ usedSeconds: 30, chargedKurus: 1500n });
+    expect(await balance(user)).toBe(8_500);
+    expect(await available(user)).toBe(8_500);
+  });
+
+  it('backend yeniden baslarsa: bekleyen START yeni sureÃ§te gider, ACK ve tekrarlari dogru islenir', async () => {
+    const user = await userWith(10_000);
+    const s = await start(user, 60);
+    const ackId = randomUUID();
+
+    // Eski surec START'i yayinlayamadan oldu; durum yalnizca veritabaninda.
+    const outbox2 = new OutboxService(prisma, clock);
+    const sessions2 = new SessionService(prisma, wallets, outbox2, clock);
+    advance(2_000);
+    await outbox2.publishPending(publisher);
+    expect(publisher.ofType('START')).toHaveLength(1);
+    expect(publisher.ofType('START')[0]!.envelope.commandId).toBe(s.startCommandId);
+
+    const envelope = (payload: object) =>
+      JSON.stringify({ eventId: ackId, deviceId: DEVICE, stationId: STATION, bayId: BAY, payload });
+    const ackMsg = envelope({
+      type: 'STARTED_ACK',
+      commandId: s.startCommandId,
+      sessionId: s.id,
+      status: 'SUCCESS',
+    });
+    expect(await sessions2.handleDeviceMessage(T(BAY, 'ack'), ackMsg)).toBe('SESSION_RUNNING');
+    // Broker (clean: false) ayni mesaji yeniden baslayan diger surece de teslim eder.
+    expect(await sessions.handleDeviceMessage(T(BAY, 'ack'), ackMsg)).toBe('DUPLICATE_EVENT');
+
+    await sessions2.handleDeviceMessage(
+      T(BAY, 'events'),
+      JSON.stringify({
+        eventId: randomUUID(),
+        deviceId: DEVICE,
+        stationId: STATION,
+        bayId: BAY,
+        payload: { type: 'SESSION_ENDED', sessionId: s.id, reason: 'COMPLETED', remainingSec: 0 },
+      }),
+    );
+    expect(await reload(s)).toMatchObject({ status: SessionStatus.COMPLETED, chargedKurus: 3000n });
+    expect(await balance(user)).toBe(7_000);
+  });
+
+  it('yayindan sonra "gonderildi" yazilamadan cokerse: komut ayni commandId ile tekrar gider', async () => {
+    const user = await userWith(10_000);
+    const s = await start(user, 60);
+    await outbox.publishPending(publisher);
+    // Cokme benzetimi: broker mesaji aldi ama kayit PENDING kaldi.
+    await prisma.outboxEvent.updateMany({
+      data: { status: OutboxStatus.PENDING, publishedAt: null },
+    });
+    await outbox.publishPending(publisher);
+
+    const starts = publisher.ofType('START');
+    expect(starts).toHaveLength(2);
+    // Cihaz tekrari commandId ile ayirt eder (firmware idempotency); ikisi birebir ayni olmali.
+    expect(starts[1]!.envelope).toEqual(starts[0]!.envelope);
+    expect(starts[0]!.envelope.commandId).toBe(s.startCommandId);
+
+    // Cihaz iki komut icin de ACK gonderse bile tek seans, tek bloke.
+    expect(await ack(s)).toBe('SESSION_RUNNING');
+    expect(await ack(s)).toBe('NO_OP');
+    expect(await available(user)).toBe(10_000 - 60 * PRICE);
+  });
+
+  // ---------------------------------------------------------------- STOP takibi ve tahsilat tavani
+
+  const stoppedAck = (s: WashSession, status = 'SUCCESS', remainingSec?: number) =>
+    deviceSays(BAY, {
+      type: 'STOPPED_ACK',
+      commandId: randomUUID(),
+      sessionId: s.id,
+      status,
+      ...(remainingSec === undefined ? {} : { remainingSec }),
+    });
+
+  const G = DEFAULT_TIMINGS.stopGraceSec;
+
+  it('STOP kaybolur, cihaz tam sure calisir: musteri yalnizca durdurma anina (+pay) kadar oder', async () => {
+    const user = await userWith(10_000);
+    const s = await start(user, 60);
+    await ack(s);
+    advance(20_000);
+    await sessions.requestStop(s.id, user);
+    // STOP cihaza hic ulasmadi; cihaz sureyi doldurup bitti.
+    expect(await ended(s, 0)).toBe('SESSION_COMPLETED');
+
+    expect(await reload(s)).toMatchObject({
+      usedSeconds: 20 + G,
+      chargedKurus: BigInt((20 + G) * PRICE),
+      needsReview: true,
+    });
+    expect(await balance(user)).toBe(10_000 - (20 + G) * PRICE);
+    expect(await available(user)).toBe(10_000 - (20 + G) * PRICE);
+    const done = await prisma.sessionTransition.findFirstOrThrow({
+      where: { sessionId: s.id, toState: SessionStatus.COMPLETED },
+    });
+    expect(done.detail).toMatchObject({ reportedUsedSeconds: 60, stopCapApplied: true });
+  });
+
+  it('STOP zamaninda ulasirsa tavan devreye girmez, inceleme isareti olmaz', async () => {
+    const user = await userWith(10_000);
+    const s = await start(user, 60);
+    await ack(s);
+    advance(20_000);
+    await sessions.requestStop(s.id, user);
+    expect(await ended(s, 39)).toBe('SESSION_COMPLETED');
+    expect(await reload(s)).toMatchObject({ usedSeconds: 21, chargedKurus: 1050n, needsReview: false });
+  });
+
+  it('ACK gelmeden durdurulursa: sonradan baslasa bile yalnizca pay kadar tahsil', async () => {
+    const user = await userWith(10_000);
+    const s = await start(user, 60);
+    await sessions.requestStop(s.id, user);
+    advance(1_000);
+    await ack(s);
+    expect(await ended(s, 0)).toBe('SESSION_COMPLETED');
+    expect(await reload(s)).toMatchObject({ usedSeconds: G, needsReview: true });
+  });
+
+  it('cihaz kaybolursa otomatik kapatmada da tavan uygulanir', async () => {
+    const user = await userWith(10_000);
+    const s = await start(user, 60);
+    await ack(s);
+    advance(10_000);
+    await sessions.requestStop(s.id, user);
+    await heartbeat(s, 10); // STOP ulasmadi, cihaz 50 sn calistigini kanitladi
+    await loseDevice(s);
+    advance(DEFAULT_TIMINGS.reconcileTimeoutMs);
+    expect((await sessions.sweep()).autoClosed).toBe(1);
+    expect(await reload(s)).toMatchObject({ usedSeconds: 10 + G, needsReview: true });
+    expect(await balance(user)).toBe(10_000 - (10 + G) * PRICE);
+  });
+
+  it('STOP onaylanana kadar yeniden gonderilir, STOPPED_ACK gelince durur', async () => {
+    const user = await userWith(10_000);
+    const s = await start(user, 60);
+    await ack(s);
+    await outbox.publishPending(publisher);
+    await sessions.requestStop(s.id, user);
+    await outbox.publishPending(publisher);
+    expect(publisher.ofType('STOP')).toHaveLength(1);
+
+    advance(DEFAULT_TIMINGS.stopRetryMs - 1);
+    expect((await sessions.sweep()).stopRetries).toBe(0);
+    advance(1);
+    expect((await sessions.sweep()).stopRetries).toBe(1);
+    await outbox.publishPending(publisher);
+    const stops = publisher.ofType('STOP');
+    expect(stops).toHaveLength(2);
+    expect(stops[1]!.envelope).toMatchObject({ sessionId: s.id, payload: { reason: 'USER_STOP' } });
+    expect(stops[1]!.envelope.commandId).not.toBe(stops[0]!.envelope.commandId);
+
+    // Ikinci STOP ulasti; cihaz durdu ve kalan sureyi bildirdi.
+    expect(await stoppedAck(s, 'SUCCESS', 55)).toBe('SESSION_COMPLETED');
+    expect((await reload(s)).stopConfirmedAt).not.toBeNull();
+    advance(DEFAULT_TIMINGS.stopRetryMs * 3);
+    expect((await sessions.sweep()).stopRetries).toBe(0);
+  });
+
+  it('SESSION_ENDED da STOP onayi sayilir', async () => {
+    const user = await userWith(10_000);
+    const s = await start(user, 60);
+    await ack(s);
+    await sessions.requestStop(s.id, user);
+    await outbox.publishPending(publisher);
+    await ended(s, 50);
+    advance(DEFAULT_TIMINGS.stopRetryMs);
+    expect((await sessions.sweep()).stopRetries).toBe(0);
+  });
+
+  it('cihaza ulasmayan STOP en fazla stopMaxAttempts kez gonderilir', async () => {
+    const user = await userWith(10_000);
+    const s = await start(user, 180); // 24 x 5 sn deneme sure icinde kalir
+    await ack(s);
+    await sessions.requestStop(s.id, user);
+    await outbox.publishPending(publisher);
+    for (let i = 0; i < DEFAULT_TIMINGS.stopMaxAttempts + 5; i += 1) {
+      advance(DEFAULT_TIMINGS.stopRetryMs);
+      await sessions.sweep();
+      await outbox.publishPending(publisher);
+    }
+    expect(publisher.ofType('STOP')).toHaveLength(DEFAULT_TIMINGS.stopMaxAttempts);
+  });
+
+  it('broker yokken STOP kuyrukta birikmez', async () => {
+    const user = await userWith(10_000);
+    const s = await start(user, 60);
+    await ack(s);
+    await sessions.requestStop(s.id, user);
+    publisher.failing = true;
+    for (let i = 0; i < 5; i += 1) {
+      advance(DEFAULT_TIMINGS.stopRetryMs);
+      await sessions.sweep();
+      await outbox.publishPending(publisher);
+    }
+    const pendingStops = await prisma.outboxEvent.count({
+      where: { sessionId: s.id, status: OutboxStatus.PENDING },
+    });
+    expect(pendingStops).toBe(1);
+  });
+
+  it('ACK zaman asimindaki tedbiren STOP da onay (NOT_ACTIVE dahil) gelene kadar tekrarlanir', async () => {
+    const user = await userWith(10_000);
+    const s = await start(user, 60);
+    advance(DEFAULT_TIMINGS.ackTimeoutMs);
+    await sessions.sweep();
+    await outbox.publishPending(publisher);
+    advance(DEFAULT_TIMINGS.stopRetryMs);
+    expect((await sessions.sweep()).stopRetries).toBe(1);
+    await outbox.publishPending(publisher);
+    expect(publisher.ofType('STOP').every((m) => m.envelope.payload.reason === 'ACK_TIMEOUT')).toBe(
+      true,
+    );
+    // Cihaz START'i hic almamisti: NOT_ACTIVE da "STOP ulasti" demektir.
+    expect(await stoppedAck(s, 'NOT_ACTIVE')).toBe('NO_OP');
+    advance(DEFAULT_TIMINGS.stopRetryMs);
+    expect((await sessions.sweep()).stopRetries).toBe(0);
+    expect(await balance(user)).toBe(10_000);
+  });
+
+  it('gec ACK sonrasi STOP, onceki onaydan bagimsiz yeniden takip edilir', async () => {
+    const user = await userWith(10_000);
+    const s = await start(user, 60);
+    advance(DEFAULT_TIMINGS.ackTimeoutMs);
+    await sessions.sweep();
+    await stoppedAck(s, 'NOT_ACTIVE'); // tedbiren STOP onaylandi
+    expect(await ack(s)).toBe('LATE_ACK_STOP_SENT');
+    expect((await reload(s)).stopConfirmedAt).toBeNull();
+    await outbox.publishPending(publisher);
+    advance(DEFAULT_TIMINGS.stopRetryMs);
+    expect((await sessions.sweep()).stopRetries).toBe(1);
+  });
+
+  it('baska perondan gelen STOPPED_ACK STOP onayi sayilmaz', async () => {
+    await seedStation('BAY-002');
+    const user = await userWith(10_000);
+    const s = await start(user, 60);
+    await ack(s);
+    await sessions.requestStop(s.id, user);
+    await deviceSays(
+      'BAY-002',
+      { type: 'STOPPED_ACK', commandId: randomUUID(), sessionId: s.id, status: 'NOT_ACTIVE' },
+      undefined,
+      'OTHERDEVICE1',
+    );
+    expect((await reload(s)).stopConfirmedAt).toBeNull();
   });
 
   it('gecersiz cihaz mesajlari sistemi bozmaz', async () => {
