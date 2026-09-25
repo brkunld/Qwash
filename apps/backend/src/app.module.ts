@@ -4,6 +4,7 @@ import { LoggerModule } from 'nestjs-pino';
 import { Env, validateEnv } from './config/env';
 import { HealthController } from './health/health.controller';
 import { PrismaModule } from './prisma/prisma.module';
+import { SessionModule } from './session/session.module';
 import { WalletModule } from './wallet/wallet.module';
 
 @Module({
@@ -29,6 +30,7 @@ import { WalletModule } from './wallet/wallet.module';
     }),
     PrismaModule,
     WalletModule,
+    SessionModule,
   ],
   controllers: [HealthController],
 })

@@ -304,14 +304,18 @@ static void handleStop(JsonObject pl, const char* commandId, const char* session
   }
   rememberCommand(commandId);
   uint32_t rem = remainingSec();
-  bool was = sess.active;
+  // STOP yalnizca kendi seansini durdurur. Backend zaman asiminda tedbiren STOP gonderir;
+  // bu komut gec ulasirsa ayni perondaki yeni musterinin seansini kesmemeli.
+  // sessionId bos ise (servis/admin) aktif seans ne olursa olsun durdurulur.
+  bool matches = !sessionId[0] || strcmp(sess.sessionId, sessionId) == 0;
+  bool was = sess.active && matches;
   if (was) endSession(pl["reason"] | "USER_STOP");
   publishEvent(tAck, false, [&](JsonObject p) {
     p["type"] = "STOPPED_ACK";
     p["commandId"] = commandId;
     p["sessionId"] = sessionId;
     p["status"] = was ? "SUCCESS" : "NOT_ACTIVE";
-    p["remainingSec"] = rem;
+    p["remainingSec"] = was ? rem : 0;
     p["relayState"] = "OFF";
   });
 }

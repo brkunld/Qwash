@@ -9,7 +9,15 @@ describe('validateEnv', () => {
       BACKEND_PORT: 3001,
       LOG_LEVEL: 'info',
       DATABASE_URL,
+      MQTT_URL: 'mqtt://localhost:11883',
     });
+  });
+
+  it('MQTT_URL yalnizca mqtt/mqtts olabilir', () => {
+    expect(() => validateEnv({ DATABASE_URL, MQTT_URL: 'http://h:1883' })).toThrow(/MQTT_URL/);
+    expect(validateEnv({ DATABASE_URL, MQTT_URL: 'mqtts://h:8883' }).MQTT_URL).toBe(
+      'mqtts://h:8883',
+    );
   });
 
   it('gecersiz degerde hata firlatir', () => {
