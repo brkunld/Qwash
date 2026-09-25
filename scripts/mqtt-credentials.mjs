@@ -18,7 +18,8 @@ const fail = (msg) => {
 };
 
 const url = new URL(env.MQTT_URL ?? fail('MQTT_URL yok'));
-if (!url.username || !url.password) fail('MQTT_URL kullanici:sifre icermeli (mqtt://qwash-backend:...@host)');
+if (!url.username || !url.password)
+  fail('MQTT_URL kullanici:sifre icermeli (mqtt://qwash-backend:...@host)');
 
 const users = [
   [decodeURIComponent(url.username), decodeURIComponent(url.password)],
@@ -33,13 +34,20 @@ const users = [
     }),
 ];
 for (const [user, pass] of users) {
-  if (/[:\s]/.test(user) || pass.length < 12) fail(`${user}: kullanici adi ':' iceremez, sifre en az 12 karakter`);
+  if (/[:\s]/.test(user) || pass.length < 12)
+    fail(`${user}: kullanici adi ':' iceremez, sifre en az 12 karakter`);
 }
 
 const dir = resolve('docker/mosquitto');
 writeFileSync(resolve(dir, 'passwd'), users.map(([u, p]) => `${u}:${p}`).join('\n') + '\n');
 // Duz metni yerinde hash'le; sifreler diskte acik kalmaz.
-execFileSync('docker', ['run', '--rm', '-v', `${dir}:/m`, 'eclipse-mosquitto:2', 'mosquitto_passwd', '-U', '/m/passwd'], {
-  stdio: 'inherit',
-});
-console.log(`mqtt:credentials: ${users.length} kullanici yazildi (${users.map(([u]) => u).join(', ')})`);
+execFileSync(
+  'docker',
+  ['run', '--rm', '-v', `${dir}:/m`, 'eclipse-mosquitto:2', 'mosquitto_passwd', '-U', '/m/passwd'],
+  {
+    stdio: 'inherit',
+  },
+);
+console.log(
+  `mqtt:credentials: ${users.length} kullanici yazildi (${users.map(([u]) => u).join(', ')})`,
+);

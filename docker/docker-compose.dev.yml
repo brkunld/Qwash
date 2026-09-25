@@ -52,7 +52,11 @@ services:
     environment:
       MQTT_HEALTH_PASSWORD: ${MQTT_HEALTH_PASSWORD:?pnpm mqtt:credentials oncesi .env'de tanimla}
     healthcheck:
-      test: ['CMD-SHELL', 'mosquitto_sub -u qwash-health -P "$$MQTT_HEALTH_PASSWORD" -t \$$SYS/broker/uptime -C 1 -W 3']
+      test:
+        [
+          'CMD-SHELL',
+          'mosquitto_sub -u qwash-health -P "$$MQTT_HEALTH_PASSWORD" -t \$$SYS/broker/uptime -C 1 -W 3',
+        ]
       interval: 5s
       timeout: 5s
       retries: 10

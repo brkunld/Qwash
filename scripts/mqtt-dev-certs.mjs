@@ -14,7 +14,14 @@ const env = Object.fromEntries(
     .filter((l) => /^[A-Z0-9_]+=/.test(l))
     .map((l) => [l.slice(0, l.indexOf('=')), l.slice(l.indexOf('=') + 1).trim()]),
 );
-const sans = ['localhost', '127.0.0.1', ...(env.MQTT_TLS_SANS ?? '').split(',').map((s) => s.trim()).filter(Boolean)];
+const sans = [
+  'localhost',
+  '127.0.0.1',
+  ...(env.MQTT_TLS_SANS ?? '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean),
+];
 
 const openssl = ['openssl', 'C:/Program Files/Git/usr/bin/openssl.exe'].find((bin) => {
   try {
@@ -35,8 +42,23 @@ mkdirSync(dir, { recursive: true });
 const f = (n) => resolve(dir, n);
 
 if (process.argv.includes('--new-ca') || !existsSync(f('ca.crt'))) {
-  run('req', '-x509', '-newkey', 'ec', '-pkeyopt', 'ec_paramgen_curve:prime256v1', '-nodes',
-    '-keyout', f('ca.key'), '-out', f('ca.crt'), '-days', '3650', '-subj', '/CN=Qwash Dev MQTT CA');
+  run(
+    'req',
+    '-x509',
+    '-newkey',
+    'ec',
+    '-pkeyopt',
+    'ec_paramgen_curve:prime256v1',
+    '-nodes',
+    '-keyout',
+    f('ca.key'),
+    '-out',
+    f('ca.crt'),
+    '-days',
+    '3650',
+    '-subj',
+    '/CN=Qwash Dev MQTT CA',
+  );
   console.log('mqtt:certs: yeni CA uretildi (cihaza yeni firmware yuklenmeli)');
 }
 
@@ -47,10 +69,37 @@ const ext = [
   `subjectAltName=${sans.map((s) => (isIP(s) ? `IP:${s}` : `DNS:${s}`)).join(',')}`,
 ].join('\n');
 writeFileSync(f('server.ext'), ext);
-run('req', '-newkey', 'ec', '-pkeyopt', 'ec_paramgen_curve:prime256v1', '-nodes',
-  '-keyout', f('server.key'), '-out', f('server.csr'), '-subj', '/CN=qwash-dev-broker');
-run('x509', '-req', '-in', f('server.csr'), '-CA', f('ca.crt'), '-CAkey', f('ca.key'), '-CAcreateserial',
-  '-out', f('server.crt'), '-days', '825', '-extfile', f('server.ext'));
+run(
+  'req',
+  '-newkey',
+  'ec',
+  '-pkeyopt',
+  'ec_paramgen_curve:prime256v1',
+  '-nodes',
+  '-keyout',
+  f('server.key'),
+  '-out',
+  f('server.csr'),
+  '-subj',
+  '/CN=qwash-dev-broker',
+);
+run(
+  'x509',
+  '-req',
+  '-in',
+  f('server.csr'),
+  '-CA',
+  f('ca.crt'),
+  '-CAkey',
+  f('ca.key'),
+  '-CAcreateserial',
+  '-out',
+  f('server.crt'),
+  '-days',
+  '825',
+  '-extfile',
+  f('server.ext'),
+);
 rmSync(f('server.csr'));
 rmSync(f('server.ext'));
 

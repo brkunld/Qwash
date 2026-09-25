@@ -111,7 +111,8 @@ type StopReason = StopCommandPayload['reason'];
  * - NOT_RUNNING: seans RUNNING ama cihaz bosta (bitis bildirimi kaybolmus / cihaz sifirlanmis).
  * - RELAY_MISMATCH: cihaz seansin rolesinden farkli bir role cekiyor.
  */
-export type DriftKind = 'UNEXPECTED_RUNNING' | 'SESSION_MISMATCH' | 'NOT_RUNNING' | 'RELAY_MISMATCH';
+export type DriftKind =
+  'UNEXPECTED_RUNNING' | 'SESSION_MISMATCH' | 'NOT_RUNNING' | 'RELAY_MISMATCH';
 
 type HeartbeatPayload = Extract<DeviceMessage['payload'], { type: 'HEARTBEAT' }>;
 
@@ -659,7 +660,12 @@ export class SessionService {
           }
           await tx.device.update({
             where: { deviceId },
-            data: { driftKind: null, driftSessionId: null, driftSince: null, driftConfirmedAt: null },
+            data: {
+              driftKind: null,
+              driftSessionId: null,
+              driftSince: null,
+              driftConfirmedAt: null,
+            },
           });
         }
         return;
@@ -703,7 +709,10 @@ export class SessionService {
 
   /** Cihazin calistirdigi (aktif olmayan) seansi durdurur. Firmware sessionId eslesirse uygular. */
   private async enqueueStrayStop(tx: Tx, bayId: string, sessionId: string): Promise<void> {
-    const bay = await tx.bay.findUniqueOrThrow({ where: { id: bayId }, include: { station: true } });
+    const bay = await tx.bay.findUniqueOrThrow({
+      where: { id: bayId },
+      include: { station: true },
+    });
     const payload: StopCommandPayload = { type: 'STOP', reason: 'DRIFT' };
     await this.outbox.enqueue(tx, {
       topic: commandTopic(bay.station.code, bay.bayCode),
@@ -762,7 +771,9 @@ export class SessionService {
         stopRequestedAt: s.stopRequestedAt ?? now,
         stopReason: reason,
         lastStopSentAt: now,
-        ...(retry ? { stopAttempts: { increment: 1 } } : { stopAttempts: 1, stopConfirmedAt: null }),
+        ...(retry
+          ? { stopAttempts: { increment: 1 } }
+          : { stopAttempts: 1, stopConfirmedAt: null }),
       },
     });
     const payload: StopCommandPayload = { type: 'STOP', reason };

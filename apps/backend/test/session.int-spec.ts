@@ -863,7 +863,11 @@ describe('SessionService (gercek PostgreSQL)', () => {
     advance(20_000);
     await sessions.requestStop(s.id, user);
     expect(await ended(s, 39)).toBe('SESSION_COMPLETED');
-    expect(await reload(s)).toMatchObject({ usedSeconds: 21, chargedKurus: 1050n, needsReview: false });
+    expect(await reload(s)).toMatchObject({
+      usedSeconds: 21,
+      chargedKurus: 1050n,
+      needsReview: false,
+    });
   });
 
   it('ACK gelmeden durdurulursa: sonradan baslasa bile yalnizca pay kadar tahsil', async () => {
@@ -967,9 +971,11 @@ describe('SessionService (gercek PostgreSQL)', () => {
     advance(DEFAULT_TIMINGS.stopRetryMs);
     expect((await sessions.sweep()).stopRetries).toBe(1);
     await outbox.publishPending(publisher);
-    expect(publisher.ofType('STOP').every((m) => (m.envelope.payload as { reason?: string }).reason === 'ACK_TIMEOUT')).toBe(
-      true,
-    );
+    expect(
+      publisher
+        .ofType('STOP')
+        .every((m) => (m.envelope.payload as { reason?: string }).reason === 'ACK_TIMEOUT'),
+    ).toBe(true);
     // Cihaz START'i hic almamisti: NOT_ACTIVE da "STOP ulasti" demektir.
     expect(await stoppedAck(s, 'NOT_ACTIVE')).toBe('NO_OP');
     advance(DEFAULT_TIMINGS.stopRetryMs);
@@ -1126,7 +1132,12 @@ describe('SessionService (gercek PostgreSQL)', () => {
 
   it('twin: baska perona bagli cihazin heartbeat i drift/STOP uretmez', async () => {
     await seedStation('BAY-002');
-    await deviceSays('BAY-002', { type: 'DEVICE_STATUS', status: 'ONLINE' }, undefined, 'OTHERDEVICE1');
+    await deviceSays(
+      'BAY-002',
+      { type: 'DEVICE_STATUS', status: 'ONLINE' },
+      undefined,
+      'OTHERDEVICE1',
+    );
     // OTHERDEVICE1, BAY-001 adina heartbeat gonderir (BAY-001 zaten DEVICE'a bagli).
     await deviceSays(
       BAY,
