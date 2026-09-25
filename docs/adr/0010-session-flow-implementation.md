@@ -78,6 +78,15 @@ Reddedilen secenekler: tam tahsil (elektrik kesintisinde role kapanir, musteri f
 
 Firmware tarafi: son biten seans NVS'te tutulur ve **her MQTT baglantisinda yeniden gonderilir** (PubSubClient QoS 0 yayinlar; cevrimdisiyken biten seansin bildirimi aksi halde kaybolurdu). Backend tekrarlari yok sayar; inceleme isaretleri bir kez yazilir.
 
+### 9. STOP takibi ve durdurma tavani (is kurali, 2026-09-26)
+
+Sorun: musteri durdurdugunda STOP cihaza ulasmazsa (cihaz o an kopuk; cihaz clean session ile baglandigi icin broker saklamaz) cihaz tam sure calisiyor ve musteriden tam sure tahsil ediliyordu. Burak iki onlemi de onayladi:
+
+1. **Tahsilat tavani:** Musteri durdurdugunda tahsil edilebilecek en uzun sure = durdurma ani - baslama (`startedAt`) + `stopGraceSec` (5 sn). ACK'ten once durdurulduysa yalnizca pay. Cihaz daha uzun calistigini bildirirse fazlasi tahsil edilmez, seans `needsReview` ile isaretlenir ve gecis kaydina `reportedUsedSeconds` yazilir. Tavan cihaz bitisinde de otomatik kapatmada da (kanitlanmis kullanim) uygulanir. Sistem hatasinin maliyeti isletmede kalir.
+2. **STOP yeniden gonderimi:** STOP (musteri, ACK zaman asimi, gec ACK) cihazdan herhangi bir `STOPPED_ACK` (`NOT_ACTIVE` dahil) ya da seans bitisi gelene kadar `stopRetryMs` (5 sn) arayla, en fazla `stopMaxAttempts` (24, ~2 dk) kez gonderilir. Her gonderim yeni `commandId` tasir; firmware STOP'u yalnizca `sessionId` eslesirse uyguladigi icin ayni perondaki yeni seansi kesmez. Onceki STOP outbox'ta bekliyorsa (broker yok) yenisi eklenmez. Baska perondan gelen onay sayilmaz.
+
+Alanlar: `stopRequestedAt` (ilk durdurma ani), `stopReason`, `lastStopSentAt`, `stopAttempts`, `stopConfirmedAt`.
+
 ## Acik kalanlar
 
 - MQTT TLS ve cihaz basina ACL (su an yalniz gelistirme broker'i, anonim).

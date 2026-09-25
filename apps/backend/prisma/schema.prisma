@@ -192,6 +192,13 @@ model WashSession {
   provenUsedSec       Int                 @default(0)
   reconcilingAt       DateTime?
   needsReview         Boolean             @default(false) // Admin incelemesi (Faz 6)
+  // STOP takibi: musteri durdurma ani (tahsilat tavani) ve STOP'un cihaza ulastigi an.
+  // Onay gelene kadar STOP yeniden gonderilir (ADR-0010 #9).
+  stopRequestedAt     DateTime?
+  stopConfirmedAt     DateTime?
+  lastStopSentAt      DateTime?
+  stopAttempts        Int                 @default(0)
+  stopReason          String?
   chargedKurus        BigInt?
   endReason           String?
   transitions         SessionTransition[]
