@@ -128,13 +128,16 @@ Faz 2 ve Faz 3 birbirinden bagimsizdir; iki kisi veya iki paralel calisma akisi 
 
 **Hedef:** Faz 2 (para) ve Faz 3 (donanim) sonuclarini, dayanikli bir seans akisinda birlestirmek.
 
-- [ ] NestJS backend: health endpoint, structured logging (Pino).
-- [ ] Deterministik seans state machine (ADR-0007): `WAITING → STARTING → RUNNING → COMPLETED/FAILED`.
-- [ ] Two-phase ACK: HOLD → MQTT START → STARTED_ACK → CAPTURE. ACK gelmezse RELEASE (5 sn timeout).
-- [ ] **Gec ACK kurali:** RELEASE edilmis/iptal edilmis bir seans icin sonradan `STARTED_ACK` gelirse backend derhal STOP gonderir ve olayi kaydeder. Gerekce: saati senkron olmayan cihaz `expiresAt` kontrolunu yapamaz ve suresi dolmus START'i kabul eder (Faz 3'te cihazda goruldu, 2026-09-25).
-- [ ] Komutlar icin transactional outbox, ACK/telemetri icin idempotent inbox (ADR-0005).
-- [ ] **Seans sonu mutabakati:** Cihazin bildirdigi gercek calisma suresi ile tahsil edilen tutar karsilastirilir; fark iade veya duzeltme entry'si olarak islenir. Seans ortasinda cihaz kaybolursa (guc/ag) seans `RECONCILING` durumuna alinir ve cihaz geri geldiginde kapatilir.
-- [ ] Device twin: desired/reported state, drift tespiti (ADR-0006).
+> Durum (2026-09-25): cekirdek tamam (`feat/faz-4-session`), gercek cihazla uctan uca denendi (`pnpm --filter @qwash/backend demo:session`). Kararlar: [ADR-0010](adr/0010-session-flow-implementation.md).
+
+- [x] NestJS backend: health endpoint, structured logging (Pino). _(Faz 1'de)_
+- [x] Deterministik seans state machine (ADR-0007, ADR-0010): `STARTING → RUNNING → COMPLETED`, hata: `FAILED`, belirsizlik: `RECONCILING`. Her gecis `SessionTransition`'a yazilir.
+- [x] Two-phase ACK: HOLD → MQTT START → STARTED_ACK → RUNNING; tahsilat seans sonunda kullanilan sure kadar (ADR-0010). ACK gelmezse RELEASE (5 sn) + tedbiren STOP.
+- [x] **Gec ACK kurali:** RELEASE edilmis/iptal edilmis bir seans icin sonradan `STARTED_ACK` gelirse backend derhal STOP gonderir ve olayi kaydeder. Gerekce: saati senkron olmayan cihaz `expiresAt` kontrolunu yapamaz ve suresi dolmus START'i kabul eder (Faz 3'te cihazda goruldu, 2026-09-25).
+- [x] Komutlar icin transactional outbox, ACK/olaylar icin idempotent inbox (ADR-0005; BullMQ yerine DB yoklamasi, ADR-0010).
+- [x] **Seans sonu mutabakati:** Cihazin bildirdigi kalan sureden kullanilan sure hesaplanir; o kadar tahsil, kalani iade. Bitis bildirilmezse `RECONCILING` (bloke durur), cihaz donup bitisi bildirince kapanir. Iade edilmis seansta cihaz calistigini bildirirse `UNPAID_RUN_REPORTED` olarak isaretlenir.
+- [x] **RECONCILING'de kalan seans icin is kurali (2026-09-25):** 30 dk cihaz beklenir; donmezse yalnizca kanitlanmis kullanim tahsil, kalan iade, admin incelemesine isaret (ADR-0010 #8). Firmware son bitisi her baglantida yeniden gonderir.
+- [ ] Device twin: desired/reported state, drift tespiti (ADR-0006). _(Kismen: `Device` tablosu cihazin bildirdigi durumu, firmware surumunu ve son gorulme zamanini tutuyor; desired/drift yok.)_
 - [ ] MQTT guvenligi: TLS, cihaz basina kimlik/ACL (cihaz yalniz kendi topic'lerine yazar/okur).
 - [ ] Gercek zamanli seans durumu (Socket.IO) + `GET /sessions/active` ile durum geri yukleme.
 

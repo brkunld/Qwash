@@ -98,7 +98,7 @@ Tüm komut ve olaylar kurumsal standartlarda ortak bir zarf (envelope) yapısın
 
 ### C. Diğer Kritik Payload Tipleri
 
-- **`StopCommandPayload`:** `reason` (`USER_STOP`, `EMERGENCY`, `ADMIN_OVERRIDE`).
+- **`StopCommandPayload`:** `reason` (`USER_STOP`, `ACK_TIMEOUT`, `LATE_ACK`, `ADMIN_OVERRIDE`). Cihaz STOP'u yalnizca zarftaki `sessionId` aktif seansla eslesirse uygular; bos `sessionId` (servis/admin) aktif seansi her durumda durdurur (ADR-0010).
 - **`StopAckPayload`:** `commandId`, `sessionId`, `stoppedAt`, `remainingSec`.
 - **`HeartbeatPayload`:** `rssi`, `supplyVoltage`, `uptimeSec`, `firmwareVersion`, `heapFree`.
 - **`TelemetryPayload`:** `flowRateLpm`, `waterPressureBar`, `currentAmps`.

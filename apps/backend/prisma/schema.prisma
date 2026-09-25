@@ -57,16 +57,17 @@ enum BayStatus {
 }
 
 model User {
-  id              String     @id @default(uuid())
-  email           String     @unique
+  id              String        @id @default(uuid())
+  email           String        @unique
   passwordHash    String? // Yalnizca Google ile acilan hesapta null (ADR-0009)
   emailVerifiedAt DateTime?
-  phoneNumber     String?    @unique
-  role            UserRole   @default(USER)
-  status          UserStatus @default(ACTIVE)
+  phoneNumber     String?       @unique
+  role            UserRole      @default(USER)
+  status          UserStatus    @default(ACTIVE)
   wallet          Wallet?
-  createdAt       DateTime   @default(now())
-  updatedAt       DateTime   @updatedAt
+  sessions        WashSession[]
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
 }
 
 // balanceKurus: cuzdandaki toplam para (bloke dahil).
@@ -118,6 +119,7 @@ model WalletHold {
   referenceId    String?
   idempotencyKey String        @unique
   ledgerEntries  LedgerEntry[]
+  session        WashSession?
   createdAt      DateTime      @default(now())
   settledAt      DateTime?
 
@@ -134,30 +136,136 @@ model Station {
 }
 
 model Bay {
-  id        String       @id @default(uuid())
-  bayCode   String       @unique // QR icerigi (Orn: "BAY-001")
+  id        String        @id @default(uuid())
+  bayCode   String        @unique // QR icerigi (Orn: "BAY-001")
   name      String
-  status    BayStatus    @default(IDLE)
+  status    BayStatus     @default(IDLE)
   stationId String
-  station   Station      @relation(fields: [stationId], references: [id], onDelete: Restrict)
+  station   Station       @relation(fields: [stationId], references: [id], onDelete: Restrict)
   programs  BayProgram[]
-  createdAt DateTime     @default(now())
+  sessions  WashSession[]
+  device    Device?
+  createdAt DateTime      @default(now())
+}
+
+// ---------------------------------------------------------------------------
+// Faz 4: seans, cihaz, outbox/inbox (ADR-0005, ADR-0007, ADR-0010)
+// ---------------------------------------------------------------------------
+
+enum SessionStatus {
+  STARTING // Bloke alindi, START outbox'ta; cihaz ACK'i bekleniyor
+  RUNNING // Cihaz STARTED_ACK verdi, role acik
+  COMPLETED // Cihaz bitisi bildirdi, kullanilan sure tahsil edildi
+  FAILED // ACK gelmedi veya cihaz reddetti; bloke tamamen iade edildi
+  RECONCILING // Planlanan sure + tolerans gecti, cihazdan bitis gelmedi; bloke duruyor
+}
+
+enum OutboxStatus {
+  PENDING
+  PUBLISHED
+  EXPIRED // Yayinlanamadan gecerlilik suresi doldu (START icin anlamsizlasti)
+}
+
+model WashSession {
+  id                  String              @id @default(uuid())
+  userId              String
+  user                User                @relation(fields: [userId], references: [id], onDelete: Restrict)
+  walletId            String
+  bayId               String
+  bay                 Bay                 @relation(fields: [bayId], references: [id], onDelete: Restrict)
+  programId           String
+  program             WashProgram         @relation(fields: [programId], references: [id], onDelete: Restrict)
+  relayIndex          Int
+  pricePerSecondKurus Int // Baslangictaki fiyatin kopyasi (sonradan fiyat degisse de seans etkilenmez)
+  plannedDurationSec  Int
+  holdId              String              @unique
+  hold                WalletHold          @relation(fields: [holdId], references: [id], onDelete: Restrict)
+  status              SessionStatus       @default(STARTING)
+  idempotencyKey      String              @unique // Istemcinin "baslat" istegi anahtari
+  startCommandId      String              @unique
+  ackDeadlineAt       DateTime
+  startedAt           DateTime?
+  endedAt             DateTime?
+  usedSeconds         Int?
+  // Cihazin seans sirasinda bildirdigi kalan sureden hesaplanan, kesin calisilmis sure.
+  // Yalnizca artar. Cihaz kaybolursa tahsilat buna gore yapilir (ADR-0010 #8).
+  provenUsedSec       Int                 @default(0)
+  reconcilingAt       DateTime?
+  needsReview         Boolean             @default(false) // Admin incelemesi (Faz 6)
+  chargedKurus        BigInt?
+  endReason           String?
+  transitions         SessionTransition[]
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+
+  @@index([status, ackDeadlineAt])
+  @@index([userId, createdAt])
+}
+
+// Seansin her durum degisikligi: denetim izi.
+model SessionTransition {
+  id        String         @id @default(uuid())
+  sessionId String
+  session   WashSession    @relation(fields: [sessionId], references: [id], onDelete: Restrict)
+  fromState SessionStatus?
+  toState   SessionStatus
+  reason    String
+  detail    Json?
+  createdAt DateTime       @default(now())
+
+  @@index([sessionId, createdAt])
+}
+
+// Cihazin bildirdigi son durum (device twin'in "reported" tarafi, ADR-0006).
+model Device {
+  deviceId        String   @id // MAC, ayiracsiz buyuk harf
+  bayId           String?  @unique
+  bay             Bay?     @relation(fields: [bayId], references: [id], onDelete: SetNull)
+  reportedStatus  String // ONLINE, BUSY, OFFLINE, ERROR...
+  firmwareVersion String?
+  resetReason     Int?
+  lastSeenAt      DateTime
+  updatedAt       DateTime @updatedAt
+}
+
+// MQTT'ye gidecek komutlar; is kaydiyla ayni transaction'da yazilir (ADR-0005).
+model OutboxEvent {
+  id          String       @id @default(uuid())
+  topic       String
+  payload     Json
+  status      OutboxStatus @default(PENDING)
+  attempts    Int          @default(0)
+  lastError   String?
+  expiresAt   DateTime? // Bu andan sonra yayinlanmaz (START komutlari)
+  sessionId   String?
+  createdAt   DateTime     @default(now())
+  publishedAt DateTime?
+
+  @@index([status, createdAt])
+}
+
+// Cihazdan gelen mesajlarin tekrarini engeller (eventId ile).
+model InboxMessage {
+  messageId  String   @id
+  topic      String
+  receivedAt DateTime @default(now())
 }
 
 // Fiyatlari admin belirler; seed degerleri yalnizca ornektir.
 model WashProgram {
-  id                  String       @id @default(uuid())
+  id                  String        @id @default(uuid())
   stationId           String
-  station             Station      @relation(fields: [stationId], references: [id], onDelete: Restrict)
+  station             Station       @relation(fields: [stationId], references: [id], onDelete: Restrict)
   code                String // "WATER", "FOAM", "WAX", "AIR" veya admin'in ekledigi kod
   name                String
   description         String?
   icon                String?
   pricePerSecondKurus Int // Orn: 50 = 0,50 TL/sn
-  isActive            Boolean      @default(true)
+  isActive            Boolean       @default(true)
   bayPrograms         BayProgram[]
-  createdAt           DateTime     @default(now())
-  updatedAt           DateTime     @updatedAt
+  sessions            WashSession[]
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
   deletedAt           DateTime? // Soft-delete: gecmis kayitlar korunur
 
   @@unique([stationId, code])

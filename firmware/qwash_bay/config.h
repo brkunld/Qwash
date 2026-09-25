@@ -2,7 +2,7 @@
 // QWASH peron firmware'i (Faz 3 SPIKE). Kontrat: docs/IOT.md
 // Donanim: ESP32-32E 3.2" ST7789 240x320 (SKU E32R32P).
 
-#define FW_VERSION "0.1.0-spike"
+#define FW_VERSION "0.2.1-spike"
 
 // ---- Ekran pinleri (E32R32P uretici semasi; kartinla dogrula) ----
 constexpr int PIN_TFT_SCLK = 14;
@@ -28,6 +28,9 @@ constexpr uint32_t NVS_SAVE_EVERY_MS = 3000;  // Seans kalan suresi kayit aralig
 
 // ---- Zamanlamalar ----
 constexpr uint32_t HEARTBEAT_EVERY_MS = 30000;
+// Seans surerken daha sik: cihaz kaybolursa tahsil edilen kanitlanmis sure en fazla
+// bu kadar geride kalir (ADR-0010 #8).
+constexpr uint32_t SESSION_HEARTBEAT_EVERY_MS = 10000;
 constexpr uint32_t MQTT_RETRY_MS = 5000;
 constexpr uint32_t WIFI_RETRY_MS = 15000;  // Wi-Fi kopunca kendi yeniden deneme araligi.
 
