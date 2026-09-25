@@ -13,7 +13,7 @@ import {
   WalletNotFoundError,
 } from './wallet.errors';
 
-type Tx = Prisma.TransactionClient;
+export type Tx = Prisma.TransactionClient;
 
 export interface WalletBalance {
   walletId: string;
@@ -128,38 +128,7 @@ export class WalletService {
     if (existing) return this.replayHold(existing, input, amount);
 
     try {
-      return await this.prisma.$transaction(async (tx) => {
-        const [row] = await tx.$queryRaw<WalletRow[]>`
-          UPDATE "Wallet"
-          SET "holdKurus" = "holdKurus" + ${amount}, "updatedAt" = now()
-          WHERE "id" = ${input.walletId}
-            AND "balanceKurus" - "holdKurus" >= ${amount}
-          RETURNING "balanceKurus", "holdKurus"`;
-        if (!row) await this.throwHoldRejected(tx, input.walletId, amount);
-
-        const hold = await tx.walletHold.create({
-          data: {
-            walletId: input.walletId,
-            amountKurus: amount,
-            source: input.source,
-            referenceId: input.referenceId ?? null,
-            idempotencyKey: input.idempotencyKey,
-          },
-        });
-        await tx.ledgerEntry.create({
-          data: {
-            walletId: input.walletId,
-            type: LedgerType.HOLD,
-            source: input.source,
-            amountKurus: amount,
-            balanceAfterKurus: row!.balanceKurus,
-            holdAfterKurus: row!.holdKurus,
-            holdId: hold.id,
-            referenceId: input.referenceId ?? null,
-          },
-        });
-        return { hold, balance: toBalance(input.walletId, row!) };
-      });
+      return await this.prisma.$transaction((tx) => this.holdTx(tx, input));
     } catch (error) {
       if (isUniqueViolation(error)) {
         const winner = await this.findHoldByKey(input.idempotencyKey);
@@ -175,112 +144,156 @@ export class WalletService {
    * Ayni tutarla tekrar cagrilirsa idempotent olarak mevcut sonucu dondurur.
    */
   async capture(holdId: string, captureKurus: number): Promise<HoldResult> {
-    if (!Number.isSafeInteger(captureKurus) || captureKurus < 0) {
-      throw new InvalidAmountError(captureKurus);
-    }
-    const capture = BigInt(captureKurus);
-
-    return this.prisma.$transaction(async (tx) => {
-      const hold = await lockHold(tx, holdId);
-      if (hold.status !== HoldStatus.ACTIVE) {
-        // capture(0) blokeyi RELEASED olarak kapatir; ayni cagrinin tekrari da idempotenttir.
-        const sameResult =
-          hold.capturedKurus === capture && (hold.status === HoldStatus.CAPTURED || capture === 0n);
-        if (sameResult) {
-          return { hold, balance: await this.balanceIn(tx, hold.walletId) };
-        }
-        throw new HoldAlreadySettledError(holdId, hold.status);
-      }
-      if (capture > hold.amountKurus) {
-        throw new CaptureExceedsHoldError(captureKurus, Number(hold.amountKurus));
-      }
-
-      const remainder = hold.amountKurus - capture;
-      const [row] = await tx.$queryRaw<WalletRow[]>`
-        UPDATE "Wallet"
-        SET "balanceKurus" = "balanceKurus" - ${capture},
-            "holdKurus" = "holdKurus" - ${hold.amountKurus},
-            "updatedAt" = now()
-        WHERE "id" = ${hold.walletId}
-        RETURNING "balanceKurus", "holdKurus"`;
-
-      if (capture > 0n) {
-        await tx.ledgerEntry.create({
-          data: {
-            walletId: hold.walletId,
-            type: LedgerType.CAPTURE,
-            source: hold.source,
-            amountKurus: capture,
-            balanceAfterKurus: row!.balanceKurus,
-            holdAfterKurus: row!.holdKurus + remainder,
-            holdId,
-            referenceId: hold.referenceId,
-          },
-        });
-      }
-      if (remainder > 0n) {
-        await tx.ledgerEntry.create({
-          data: {
-            walletId: hold.walletId,
-            type: LedgerType.RELEASE,
-            source: hold.source,
-            amountKurus: remainder,
-            balanceAfterKurus: row!.balanceKurus,
-            holdAfterKurus: row!.holdKurus,
-            holdId,
-            referenceId: hold.referenceId,
-          },
-        });
-      }
-
-      const settled = await tx.walletHold.update({
-        where: { id: holdId },
-        data: {
-          status: capture > 0n ? HoldStatus.CAPTURED : HoldStatus.RELEASED,
-          capturedKurus: capture,
-          settledAt: new Date(),
-        },
-      });
-      return { hold: settled, balance: toBalance(hold.walletId, row!) };
-    });
+    return this.prisma.$transaction((tx) => this.captureTx(tx, holdId, captureKurus));
   }
 
   /** Blokeyi tamamen serbest birakir (ornegin cihaz START ACK vermedi). Idempotenttir. */
   async release(holdId: string): Promise<HoldResult> {
-    return this.prisma.$transaction(async (tx) => {
-      const hold = await lockHold(tx, holdId);
-      if (hold.status === HoldStatus.RELEASED) {
+    return this.prisma.$transaction((tx) => this.releaseTx(tx, holdId));
+  }
+
+  /**
+   * `hold`'un transaction icinde calisan hali: cagiran kendi kayitlarini (seans, outbox)
+   * ayni transaction'da yazar. Idempotency tekrari cagiranin sorumlulugundadir; ayni
+   * anahtarla ikinci cagri unique ihlaliyle tum transaction'i geri alir.
+   */
+  async holdTx(tx: Tx, input: HoldInput): Promise<HoldResult> {
+    const amount = toAmount(input.amountKurus);
+    const [row] = await tx.$queryRaw<WalletRow[]>`
+      UPDATE "Wallet"
+      SET "holdKurus" = "holdKurus" + ${amount}, "updatedAt" = now()
+      WHERE "id" = ${input.walletId}
+        AND "balanceKurus" - "holdKurus" >= ${amount}
+      RETURNING "balanceKurus", "holdKurus"`;
+    if (!row) await this.throwHoldRejected(tx, input.walletId, amount);
+
+    const hold = await tx.walletHold.create({
+      data: {
+        walletId: input.walletId,
+        amountKurus: amount,
+        source: input.source,
+        referenceId: input.referenceId ?? null,
+        idempotencyKey: input.idempotencyKey,
+      },
+    });
+    await tx.ledgerEntry.create({
+      data: {
+        walletId: input.walletId,
+        type: LedgerType.HOLD,
+        source: input.source,
+        amountKurus: amount,
+        balanceAfterKurus: row!.balanceKurus,
+        holdAfterKurus: row!.holdKurus,
+        holdId: hold.id,
+        referenceId: input.referenceId ?? null,
+      },
+    });
+    return { hold, balance: toBalance(input.walletId, row!) };
+  }
+
+  /** `capture`'in transaction icinde calisan hali. */
+  async captureTx(tx: Tx, holdId: string, captureKurus: number): Promise<HoldResult> {
+    if (!Number.isSafeInteger(captureKurus) || captureKurus < 0) {
+      throw new InvalidAmountError(captureKurus);
+    }
+    const capture = BigInt(captureKurus);
+    const hold = await lockHold(tx, holdId);
+    if (hold.status !== HoldStatus.ACTIVE) {
+      // capture(0) blokeyi RELEASED olarak kapatir; ayni cagrinin tekrari da idempotenttir.
+      const sameResult =
+        hold.capturedKurus === capture && (hold.status === HoldStatus.CAPTURED || capture === 0n);
+      if (sameResult) {
         return { hold, balance: await this.balanceIn(tx, hold.walletId) };
       }
-      if (hold.status !== HoldStatus.ACTIVE) {
-        throw new HoldAlreadySettledError(holdId, hold.status);
-      }
+      throw new HoldAlreadySettledError(holdId, hold.status);
+    }
+    if (capture > hold.amountKurus) {
+      throw new CaptureExceedsHoldError(captureKurus, Number(hold.amountKurus));
+    }
 
-      const [row] = await tx.$queryRaw<WalletRow[]>`
-        UPDATE "Wallet"
-        SET "holdKurus" = "holdKurus" - ${hold.amountKurus}, "updatedAt" = now()
-        WHERE "id" = ${hold.walletId}
-        RETURNING "balanceKurus", "holdKurus"`;
+    const remainder = hold.amountKurus - capture;
+    const [row] = await tx.$queryRaw<WalletRow[]>`
+      UPDATE "Wallet"
+      SET "balanceKurus" = "balanceKurus" - ${capture},
+          "holdKurus" = "holdKurus" - ${hold.amountKurus},
+          "updatedAt" = now()
+      WHERE "id" = ${hold.walletId}
+      RETURNING "balanceKurus", "holdKurus"`;
 
+    if (capture > 0n) {
+      await tx.ledgerEntry.create({
+        data: {
+          walletId: hold.walletId,
+          type: LedgerType.CAPTURE,
+          source: hold.source,
+          amountKurus: capture,
+          balanceAfterKurus: row!.balanceKurus,
+          holdAfterKurus: row!.holdKurus + remainder,
+          holdId,
+          referenceId: hold.referenceId,
+        },
+      });
+    }
+    if (remainder > 0n) {
       await tx.ledgerEntry.create({
         data: {
           walletId: hold.walletId,
           type: LedgerType.RELEASE,
           source: hold.source,
-          amountKurus: hold.amountKurus,
+          amountKurus: remainder,
           balanceAfterKurus: row!.balanceKurus,
           holdAfterKurus: row!.holdKurus,
           holdId,
           referenceId: hold.referenceId,
         },
       });
+    }
 
-      const settled = await tx.walletHold.update({
-        where: { id: holdId },
-        data: { status: HoldStatus.RELEASED, settledAt: new Date() },
-      });
-      return { hold: settled, balance: toBalance(hold.walletId, row!) };
+    const settled = await tx.walletHold.update({
+      where: { id: holdId },
+      data: {
+        status: capture > 0n ? HoldStatus.CAPTURED : HoldStatus.RELEASED,
+        capturedKurus: capture,
+        settledAt: new Date(),
+      },
     });
+    return { hold: settled, balance: toBalance(hold.walletId, row!) };
+  }
+
+  /** `release`'in transaction icinde calisan hali. */
+  async releaseTx(tx: Tx, holdId: string): Promise<HoldResult> {
+    const hold = await lockHold(tx, holdId);
+    if (hold.status === HoldStatus.RELEASED) {
+      return { hold, balance: await this.balanceIn(tx, hold.walletId) };
+    }
+    if (hold.status !== HoldStatus.ACTIVE) {
+      throw new HoldAlreadySettledError(holdId, hold.status);
+    }
+
+    const [row] = await tx.$queryRaw<WalletRow[]>`
+      UPDATE "Wallet"
+      SET "holdKurus" = "holdKurus" - ${hold.amountKurus}, "updatedAt" = now()
+      WHERE "id" = ${hold.walletId}
+      RETURNING "balanceKurus", "holdKurus"`;
+
+    await tx.ledgerEntry.create({
+      data: {
+        walletId: hold.walletId,
+        type: LedgerType.RELEASE,
+        source: hold.source,
+        amountKurus: hold.amountKurus,
+        balanceAfterKurus: row!.balanceKurus,
+        holdAfterKurus: row!.holdKurus,
+        holdId,
+        referenceId: hold.referenceId,
+      },
+    });
+
+    const settled = await tx.walletHold.update({
+      where: { id: holdId },
+      data: { status: HoldStatus.RELEASED, settledAt: new Date() },
+    });
+    return { hold: settled, balance: toBalance(hold.walletId, row!) };
   }
 
   private findLedgerByKey(idempotencyKey: string): Promise<LedgerEntry | null> {
