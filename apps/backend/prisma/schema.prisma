@@ -38,7 +38,9 @@ enum LedgerSource {
   CASH_TOPUP
   SESSION
   ADJUSTMENT
-  REFUND
+  REFUND // Iade talebi blokesi ve iade cikisi
+  FORFEIT // Hesap silmede musterinin feragat ettigi bakiye
+  CASH_REFUND // Istasyonda kasadan nakit iade (Faz 6)
 }
 
 enum HoldStatus {
@@ -57,22 +59,27 @@ enum BayStatus {
 }
 
 model User {
-  id              String         @id @default(uuid())
-  email           String         @unique
+  id              String          @id @default(uuid())
+  email           String          @unique
   passwordHash    String? // Yalnizca Google ile acilan hesapta null (ADR-0009)
   emailVerifiedAt DateTime?
-  phoneNumber     String?        @unique
-  role            UserRole       @default(USER)
-  status          UserStatus     @default(ACTIVE)
+  phoneNumber     String?         @unique
+  role            UserRole        @default(USER)
+  status          UserStatus      @default(ACTIVE)
   fullName        String? // Odeme saglayicisi alici adi ister (Iyzico); Google'dan gelir
+  // Ilk basarili kart yuklemesinde muhurlenir; sonra ad yalniz destekle degisir.
+  // IBAN iadesinde alici adi bununla karsilastirilir (ROADMAP acik soru 4).
+  nameLockedAt    DateTime?
+  deletedAt       DateTime?
+  refundRequests  RefundRequest[]
   wallet          Wallet?
   sessions        WashSession[]
   identities      AuthIdentity[]
   refreshTokens   RefreshToken[]
   authTokens      AuthToken[]
   cardTopUps      CardTopUp[]
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
 }
 
 enum AuthProvider {
@@ -171,6 +178,41 @@ model CardTopUp {
   completedAt          DateTime?
 
   @@unique([userId, idempotencyKey])
+  @@index([status, createdAt])
+}
+
+enum RefundReason {
+  ACCOUNT_DELETION
+  SERVICE_FAILURE
+}
+
+enum RefundRequestStatus {
+  REQUESTED // Tutar blokede, admin islemi bekleniyor (Faz 6)
+  COMPLETED
+  REJECTED
+}
+
+// Musterinin iade talebi. Tutar talep aninda WalletHold ile ayrilir, harcanamaz.
+// Kullanici anonimlestirilse bile admin EFT'de karsilastirabilsin diye muhurlu ad,
+// iletisim e-postasi, IBAN ve FIFO dagilimi talep aninda buraya kopyalanir.
+// `allocation`: [{ method: CARD|IBAN|CASH_AT_STATION, source, amountKurus,
+//                 cardTopUpId?, paymentTransactionId?, creditedAt }]
+model RefundRequest {
+  id           String              @id @default(uuid())
+  userId       String
+  user         User                @relation(fields: [userId], references: [id], onDelete: Restrict)
+  walletId     String
+  holdId       String              @unique
+  reason       RefundReason
+  status       RefundRequestStatus @default(REQUESTED)
+  amountKurus  Int
+  holderName   String
+  contactEmail String? // Iade sonucunu bildirmek icin; talep kapaninca temizlenir (Faz 6)
+  iban         String?
+  allocation   Json
+  createdAt    DateTime            @default(now())
+  resolvedAt   DateTime?
+
   @@index([status, createdAt])
 }
 

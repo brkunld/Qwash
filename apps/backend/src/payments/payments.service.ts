@@ -9,6 +9,7 @@ import { WalletService } from '../wallet/wallet.service';
 import { CheckoutOutcome, PaymentGateway } from './payment-gateway';
 import {
   EmailNotVerifiedError,
+  FullNameRequiredError,
   PaymentProviderUnavailableError,
   PaymentsDisabledError,
   TopUpAmountOutOfRangeError,
@@ -77,6 +78,8 @@ export class PaymentsService {
     const user = await this.prisma.user.findUnique({ where: { id: input.userId } });
     if (!user || user.status !== UserStatus.ACTIVE) throw new UnauthenticatedError();
     if (!user.emailVerifiedAt) throw new EmailNotVerifiedError();
+    // Muhurlenecek ad bos olamaz (Google'dan ad gelmeyebilir).
+    if (!user.fullName?.trim()) throw new FullNameRequiredError();
 
     const { minTopUpKurus, maxTopUpKurus } = await this.settings();
     if (
@@ -277,6 +280,11 @@ export class PaymentsService {
         },
       });
       if (count === 1) {
+        // Ilk basarili yuklemede ad muhurlenir (IBAN iadesinde alici adi karsilastirmasi).
+        await tx.user.updateMany({
+          where: { id: topUp.userId, nameLockedAt: null },
+          data: { nameLockedAt: this.now() },
+        });
         await this.wallets.creditTx(tx, {
           walletId: topUp.walletId,
           amountKurus: topUp.amountKurus,

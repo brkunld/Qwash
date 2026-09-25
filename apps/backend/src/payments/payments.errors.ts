@@ -23,6 +23,12 @@ export class EmailNotVerifiedError extends PaymentError {
   }
 }
 
+export class FullNameRequiredError extends PaymentError {
+  constructor() {
+    super('FULL_NAME_REQUIRED', 'Bakiye yuklemeden once profilinize ad soyad ekleyin.');
+  }
+}
+
 export class TopUpAmountOutOfRangeError extends PaymentError {
   constructor(minKurus: number, maxKurus: number) {
     super('TOPUP_AMOUNT_OUT_OF_RANGE', 'Yukleme tutari izin verilen aralikta degil.', {

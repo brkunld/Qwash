@@ -77,8 +77,10 @@ Ağ kopması nedeniyle aynı istek tekrar gönderilirse backend işlemi yeniden 
 * `POST /api/v1/auth/verify-email` — E-posta doğrulama token'ı ile hesabı doğrulama. Doğrulanmamış hesap bakiye yükleyemez.
 * `POST /api/v1/auth/forgot-password` / `POST /api/v1/auth/reset-password` — Tek kullanımlık token ile şifre sıfırlama.
 * `POST /api/v1/auth/resend-verification` — (Giriş gerekli) Doğrulama e-postasını tekrar gönderir; 15 dakikada 3 istek.
-* `GET /api/v1/me` — Giriş yapmış kullanıcının profili (`emailVerified`, `hasPassword` dahil).
-* `PATCH /api/v1/me/profile` — Ad güncelleme. Telefon numarası Iyzico zorunlu alanları netleşince eklenecek.
+* `GET /api/v1/me` — Giriş yapmış kullanıcının profili (`emailVerified`, `hasPassword`, `nameLocked` dahil).
+* `PATCH /api/v1/me/profile` — Ad güncelleme. İlk başarılı kart yüklemesinden sonra ad mühürlüdür: `409 NAME_LOCKED` (yalnız destek değiştirir). Telefon numarası Iyzico zorunlu alanları netleşince eklenecek.
+* `GET /api/v1/me/deletion-preview` — Hesap silme ekranı: kullanılabilir bakiye, FIFO iade dağılımı (`CARD` / `IBAN` / `CASH_AT_STATION`), `ibanRequired`, `hasCashPart`, engeller (`ACTIVE_HOLD`, `TOPUP_IN_PROGRESS`).
+* `POST /api/v1/me/delete` — Body `{ balanceChoice?: "FORFEIT" | "REFUND", confirmForfeit?: true, iban?: "TR..", password? }`. Hesabı KVKK m.7'ye göre anonimleştirir (mali kayıtlar kalır). Bakiye varsa seçim zorunlu: `FORFEIT` bakiyeyi `FORFEIT` ledger kaydıyla sıfırlar; `REFUND` tutarı bloke edip `RefundRequest` açar (admin Faz 6'da işler). 365 günü aşan kart kısmı için `IBAN_REQUIRED`. Şifreli hesapta şifre zorunlu. "Bakiyemi kullanmak istiyorum" istemcide silmeyi iptal etmektir.
 * `POST /api/v1/auth/refresh` — Cookie'deki refresh token ile yeni access token; refresh token döndürülür.
 * `POST /api/v1/auth/logout` — Refresh token'ı iptal eder ve cookie'yi siler.
 

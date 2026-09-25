@@ -127,6 +127,35 @@ export class WalletService {
     });
   }
 
+  /**
+   * Kullanilabilir bakiyeden dogrudan dusus (feragat, duzeltme). Bloke edilmis tutara
+   * dokunulmaz; yetersizse InsufficientFundsError. Transaction icinde calisir.
+   */
+  async debitTx(tx: Tx, input: CreditInput): Promise<LedgerEntry> {
+    const amount = toAmount(input.amountKurus);
+    const [row] = await tx.$queryRaw<WalletRow[]>`
+      UPDATE "Wallet"
+      SET "balanceKurus" = "balanceKurus" - ${amount}, "updatedAt" = now()
+      WHERE "id" = ${input.walletId}
+        AND "balanceKurus" - "holdKurus" >= ${amount}
+      RETURNING "balanceKurus", "holdKurus"`;
+    if (!row) await this.throwHoldRejected(tx, input.walletId, amount);
+
+    return tx.ledgerEntry.create({
+      data: {
+        walletId: input.walletId,
+        type: LedgerType.DEBIT,
+        source: input.source,
+        amountKurus: amount,
+        balanceAfterKurus: row!.balanceKurus,
+        holdAfterKurus: row!.holdKurus,
+        referenceId: input.referenceId ?? null,
+        idempotencyKey: input.idempotencyKey,
+        note: input.note ?? null,
+      },
+    });
+  }
+
   /** Kullanilabilir bakiyeden tutar bloke eder (seans baslangici). */
   async hold(input: HoldInput): Promise<HoldResult> {
     const amount = toAmount(input.amountKurus);
