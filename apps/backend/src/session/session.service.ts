@@ -47,6 +47,11 @@ export interface SessionTimings {
   stopRetryMs: number;
   /** En fazla bu kadar STOP gonderilir (ilk gonderim dahil). */
   stopMaxAttempts: number;
+  /**
+   * Device twin: cihazin bildirdigi durum bu sureden uzun sure seansla uyusmazsa kalici
+   * drift sayilir (heartbeat seansta 10, bosta 30 sn; mesaj yarislarini elemek icin).
+   */
+  driftToleranceMs: number;
 }
 
 export const DEFAULT_TIMINGS: SessionTimings = {
@@ -57,6 +62,7 @@ export const DEFAULT_TIMINGS: SessionTimings = {
   stopGraceSec: 5,
   stopRetryMs: 5_000,
   stopMaxAttempts: 24, // ~2 dk
+  driftToleranceMs: 15_000,
 };
 
 export interface StartSessionInput {
@@ -97,6 +103,17 @@ export interface SweepResult {
 export const DEVICE_LOST_REASON = 'DEVICE_LOST';
 
 type StopReason = StopCommandPayload['reason'];
+
+/**
+ * Device twin uyusmazliklari (ADR-0006):
+ * - UNEXPECTED_RUNNING: cihaz calisiyor, peronda aktif seans yok (para alinmayan su).
+ * - SESSION_MISMATCH: cihaz aktif seanstan baska bir seansi calistiriyor.
+ * - NOT_RUNNING: seans RUNNING ama cihaz bosta (bitis bildirimi kaybolmus / cihaz sifirlanmis).
+ * - RELAY_MISMATCH: cihaz seansin rolesinden farkli bir role cekiyor.
+ */
+export type DriftKind = 'UNEXPECTED_RUNNING' | 'SESSION_MISMATCH' | 'NOT_RUNNING' | 'RELAY_MISMATCH';
+
+type HeartbeatPayload = Extract<DeviceMessage['payload'], { type: 'HEARTBEAT' }>;
 
 type SessionWithBay = WashSession & { bay: Bay & { station: { code: string } } };
 
@@ -601,6 +618,105 @@ export class SessionService {
     return Math.min(usedSeconds, beforeStop + this.timings.stopGraceSec);
   }
 
+  /**
+   * Device twin: heartbeat'teki bildirilen durumu, seans tablosundan turetilen istenen
+   * durumla karsilastirir. Aktif seansi olmayan calisma icin tolerans beklenmeden STOP
+   * gonderilir (su bedava akiyor olabilir); digerleri tolerans asilinca kalici isaretlenir.
+   */
+  private async evaluateTwin(bayId: string, deviceId: string, p: HeartbeatPayload): Promise<void> {
+    const now = this.clock();
+    await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT 1 FROM "Device" WHERE "deviceId" = ${deviceId} FOR UPDATE`;
+      const device = await tx.device.findUniqueOrThrow({ where: { deviceId } });
+      const desired = await tx.washSession.findFirst({
+        where: { bayId, status: { in: ACTIVE } },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      let kind: DriftKind | null = null;
+      let driftSessionId: string | null = null;
+      if (p.sessionActive && p.sessionId) {
+        if (!desired || desired.id !== p.sessionId) {
+          kind = desired ? 'SESSION_MISMATCH' : 'UNEXPECTED_RUNNING';
+          driftSessionId = p.sessionId;
+        } else if (
+          desired.status === SessionStatus.RUNNING &&
+          p.relayIndex !== undefined &&
+          p.relayIndex !== desired.relayIndex
+        ) {
+          kind = 'RELAY_MISMATCH';
+          driftSessionId = desired.id;
+        }
+      } else if (p.sessionActive === false && desired?.status === SessionStatus.RUNNING) {
+        kind = 'NOT_RUNNING';
+        driftSessionId = desired.id;
+      }
+
+      if (!kind) {
+        if (device.driftKind) {
+          if (device.driftConfirmedAt) {
+            this.logger.log({ deviceId, kind: device.driftKind }, 'Cihaz drift duzeldi');
+          }
+          await tx.device.update({
+            where: { deviceId },
+            data: { driftKind: null, driftSessionId: null, driftSince: null, driftConfirmedAt: null },
+          });
+        }
+        return;
+      }
+
+      const same = device.driftKind === kind && device.driftSessionId === driftSessionId;
+      const since = same && device.driftSince ? device.driftSince : now;
+      const confirmed = now.getTime() - since.getTime() >= this.timings.driftToleranceMs;
+      const newlyConfirmed = confirmed && !(same && device.driftConfirmedAt);
+      await tx.device.update({
+        where: { deviceId },
+        data: {
+          driftKind: kind,
+          driftSessionId,
+          driftSince: since,
+          driftConfirmedAt: confirmed ? (same && device.driftConfirmedAt) || now : null,
+        },
+      });
+
+      if (newlyConfirmed) {
+        this.logger.warn({ deviceId, kind, sessionId: driftSessionId }, 'DEVICE_DRIFT');
+        const s = await tx.washSession.findFirst({ where: { id: driftSessionId!, bayId } });
+        if (s) {
+          await this.transition(tx, s.id, s.status, s.status, 'DEVICE_DRIFT', {
+            kind,
+            deviceId,
+            reportedRelayIndex: p.relayIndex ?? null,
+          });
+        }
+      }
+
+      if ((kind === 'UNEXPECTED_RUNNING' || kind === 'SESSION_MISMATCH') && p.sessionId) {
+        const last = device.lastDriftStopAt?.getTime() ?? 0;
+        if (now.getTime() - last >= this.timings.stopRetryMs) {
+          await this.enqueueStrayStop(tx, bayId, p.sessionId);
+          await tx.device.update({ where: { deviceId }, data: { lastDriftStopAt: now } });
+        }
+      }
+    });
+  }
+
+  /** Cihazin calistirdigi (aktif olmayan) seansi durdurur. Firmware sessionId eslesirse uygular. */
+  private async enqueueStrayStop(tx: Tx, bayId: string, sessionId: string): Promise<void> {
+    const bay = await tx.bay.findUniqueOrThrow({ where: { id: bayId }, include: { station: true } });
+    const payload: StopCommandPayload = { type: 'STOP', reason: 'DRIFT' };
+    await this.outbox.enqueue(tx, {
+      topic: commandTopic(bay.station.code, bay.bayCode),
+      envelope: {
+        commandId: randomUUID(),
+        sessionId,
+        timestamp: this.clock().toISOString(),
+        payload,
+      },
+      sessionId,
+    });
+  }
+
   /** STOPPED_ACK geldi: STOP cihaza ulasti, yeniden gonderim durur. */
   private async confirmStop(tx: Tx, topic: ParsedTopic, sessionId: string): Promise<void> {
     const s = await this.lockSession(tx, { id: sessionId });
@@ -711,6 +827,8 @@ export class SessionService {
     if (bayId && p.type === 'HEARTBEAT' && p.sessionId && p.remainingSec !== undefined) {
       await this.recordProvenUsage(this.prisma, bayId, p.sessionId, p.remainingSec);
     }
+
+    if (bayId && p.type === 'HEARTBEAT') await this.evaluateTwin(bayId, msg.deviceId, p);
 
     // Peron durumu yalnizca bilgi amaclidir; seans karari seans tablosundan verilir.
     if (bayId && p.type === 'DEVICE_STATUS') {

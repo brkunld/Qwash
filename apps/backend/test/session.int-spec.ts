@@ -967,7 +967,7 @@ describe('SessionService (gercek PostgreSQL)', () => {
     advance(DEFAULT_TIMINGS.stopRetryMs);
     expect((await sessions.sweep()).stopRetries).toBe(1);
     await outbox.publishPending(publisher);
-    expect(publisher.ofType('STOP').every((m) => m.envelope.payload.reason === 'ACK_TIMEOUT')).toBe(
+    expect(publisher.ofType('STOP').every((m) => (m.envelope.payload as { reason?: string }).reason === 'ACK_TIMEOUT')).toBe(
       true,
     );
     // Cihaz START'i hic almamisti: NOT_ACTIVE da "STOP ulasti" demektir.
@@ -1003,6 +1003,139 @@ describe('SessionService (gercek PostgreSQL)', () => {
       'OTHERDEVICE1',
     );
     expect((await reload(s)).stopConfirmedAt).toBeNull();
+  });
+
+  // ---------------------------------------------------------------- device twin (ADR-0006)
+
+  const hb = (extra: object) => deviceSays(BAY, { type: 'HEARTBEAT', ...extra });
+  const running = (sessionId: string, relayIndex = 1) =>
+    hb({ sessionActive: true, sessionId, remainingSec: 30, relayIndex });
+  const idle = () => hb({ sessionActive: false });
+  const device = () => prisma.device.findUniqueOrThrow({ where: { deviceId: DEVICE } });
+  const driftStops = () =>
+    publisher
+      .ofType('STOP')
+      .filter((m) => (m.envelope.payload as { reason?: string }).reason === 'DRIFT');
+  const TOL = DEFAULT_TIMINGS.driftToleranceMs;
+
+  it('twin: cihazin bildirdigi seansla istenen uyusursa drift yok', async () => {
+    const user = await userWith(10_000);
+    const s = await start(user, 60);
+    await ack(s);
+    await running(s.id);
+    advance(TOL);
+    await running(s.id);
+    expect(await device()).toMatchObject({ driftKind: null, driftConfirmedAt: null });
+  });
+
+  it('twin: aktif seans yokken calisan cihaza hemen STOP (DRIFT), tolerans sonrasi kalici isaret', async () => {
+    const user = await userWith(10_000);
+    const s = await start(user, 60);
+    advance(DEFAULT_TIMINGS.ackTimeoutMs);
+    await sessions.sweep(); // FAILED, para iade
+    await stoppedAck(s, 'NOT_ACTIVE'); // tedbiren STOP cihaz baslamadan ulasti
+    publisher.sent = [];
+
+    await running(s.id); // ama cihaz yine de calisiyor
+    await outbox.publishPending(publisher);
+    expect(driftStops()).toHaveLength(1);
+    expect(driftStops()[0]!.envelope.sessionId).toBe(s.id);
+    expect(await device()).toMatchObject({
+      driftKind: 'UNEXPECTED_RUNNING',
+      driftSessionId: s.id,
+      driftConfirmedAt: null,
+    });
+
+    // STOP sikligi sinirli: hemen gelen ikinci heartbeat yeni STOP uretmez.
+    await running(s.id);
+    await outbox.publishPending(publisher);
+    expect(driftStops()).toHaveLength(1);
+
+    advance(TOL);
+    await running(s.id);
+    await outbox.publishPending(publisher);
+    expect(driftStops()).toHaveLength(2);
+    expect((await device()).driftConfirmedAt).not.toBeNull();
+    expect(
+      await prisma.sessionTransition.count({ where: { sessionId: s.id, reason: 'DEVICE_DRIFT' } }),
+    ).toBe(1);
+    expect(await balance(user)).toBe(10_000);
+
+    // Cihaz durdu: drift temizlenir.
+    await idle();
+    expect(await device()).toMatchObject({ driftKind: null, driftConfirmedAt: null });
+  });
+
+  it('twin: bilinmeyen seansi calistiran cihaza STOP gider', async () => {
+    const ghost = randomUUID();
+    await running(ghost);
+    await outbox.publishPending(publisher);
+    expect(driftStops()[0]!.envelope.sessionId).toBe(ghost);
+    expect(driftStops()[0]!.topic).toBe(T(BAY, 'cmd'));
+  });
+
+  it('twin: cihaz eski seansi calistirirken yenisi bekliyorsa eskisi durdurulur', async () => {
+    const user = await userWith(10_000);
+    const old = await start(user, 60);
+    await ack(old);
+    await ended(old, 0);
+    const s = await start(user, 60);
+    await running(old.id);
+    await outbox.publishPending(publisher);
+    expect((await device()).driftKind).toBe('SESSION_MISMATCH');
+    expect(driftStops().map((m) => m.envelope.sessionId)).toEqual([old.id]);
+    expect((await reload(s)).status).toBe(SessionStatus.STARTING);
+  });
+
+  it('twin: seans RUNNING ama cihaz bosta; kisa yaris drift sayilmaz, kalicisi isaretlenir', async () => {
+    const user = await userWith(10_000);
+    const s = await start(user, 60);
+    await ack(s);
+    await idle(); // ACK'ten hemen once gonderilmis heartbeat gibi
+    expect((await device()).driftKind).toBe('NOT_RUNNING');
+    await running(s.id);
+    expect((await device()).driftKind).toBeNull();
+
+    await idle();
+    advance(TOL - 1);
+    await idle();
+    expect((await device()).driftConfirmedAt).toBeNull();
+    advance(1);
+    await idle();
+    expect(await device()).toMatchObject({ driftKind: 'NOT_RUNNING', driftSessionId: s.id });
+    expect((await device()).driftConfirmedAt).not.toBeNull();
+    // Bosta cihaza STOP gonderilmez; para karari seans akisina kalir.
+    await outbox.publishPending(publisher);
+    expect(driftStops()).toHaveLength(0);
+
+    await ended(s, 20);
+    await idle();
+    expect((await device()).driftKind).toBeNull();
+  });
+
+  it('twin: yanlis role cekilirse RELAY_MISMATCH', async () => {
+    const user = await userWith(10_000);
+    const s = await start(user, 60);
+    await ack(s);
+    await running(s.id, 3);
+    advance(TOL);
+    await running(s.id, 3);
+    expect(await device()).toMatchObject({ driftKind: 'RELAY_MISMATCH', driftSessionId: s.id });
+    expect((await device()).driftConfirmedAt).not.toBeNull();
+  });
+
+  it('twin: baska perona bagli cihazin heartbeat i drift/STOP uretmez', async () => {
+    await seedStation('BAY-002');
+    await deviceSays('BAY-002', { type: 'DEVICE_STATUS', status: 'ONLINE' }, undefined, 'OTHERDEVICE1');
+    // OTHERDEVICE1, BAY-001 adina heartbeat gonderir (BAY-001 zaten DEVICE'a bagli).
+    await deviceSays(
+      BAY,
+      { type: 'HEARTBEAT', sessionActive: true, sessionId: randomUUID(), remainingSec: 10 },
+      undefined,
+      'OTHERDEVICE1',
+    );
+    await outbox.publishPending(publisher);
+    expect(driftStops()).toHaveLength(0);
   });
 
   it('gecersiz cihaz mesajlari sistemi bozmaz', async () => {

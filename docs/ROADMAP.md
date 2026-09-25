@@ -137,7 +137,7 @@ Faz 2 ve Faz 3 birbirinden bagimsizdir; iki kisi veya iki paralel calisma akisi 
 - [x] Komutlar icin transactional outbox, ACK/olaylar icin idempotent inbox (ADR-0005; BullMQ yerine DB yoklamasi, ADR-0010).
 - [x] **Seans sonu mutabakati:** Cihazin bildirdigi kalan sureden kullanilan sure hesaplanir; o kadar tahsil, kalani iade. Bitis bildirilmezse `RECONCILING` (bloke durur), cihaz donup bitisi bildirince kapanir. Iade edilmis seansta cihaz calistigini bildirirse `UNPAID_RUN_REPORTED` olarak isaretlenir.
 - [x] **RECONCILING'de kalan seans icin is kurali (2026-09-25):** 30 dk cihaz beklenir; donmezse yalnizca kanitlanmis kullanim tahsil, kalan iade, admin incelemesine isaret (ADR-0010 #8). Firmware son bitisi her baglantida yeniden gonderir.
-- [ ] Device twin: desired/reported state, drift tespiti (ADR-0006). _(Kismen: `Device` tablosu cihazin bildirdigi durumu, firmware surumunu ve son gorulme zamanini tutuyor; desired/drift yok.)_
+- [x] Device twin: desired/reported state, drift tespiti (ADR-0006). Desired seans tablosundan turetilir; heartbeat ile karsilastirilir. Aktif seansi olmayan calismaya aninda STOP (`DRIFT`), diger uyusmazliklar 15 sn tolerans sonrasi `Device.driftConfirmedAt`. Admin bildirimi Faz 6.
 - [ ] MQTT guvenligi: TLS, cihaz basina kimlik/ACL (cihaz yalniz kendi topic'lerine yazar/okur).
 - [ ] Gercek zamanli seans durumu (Socket.IO) + `GET /sessions/active` ile durum geri yukleme.
 

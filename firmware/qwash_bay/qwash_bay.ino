@@ -230,6 +230,7 @@ static void publishHeartbeat() {
     if (sess.active) {
       p["sessionId"] = sess.sessionId;
       p["remainingSec"] = remainingSec();
+      p["relayIndex"] = sess.relay;  // Device twin: backend istenen roleyle karsilastirir.
     }
   });
 }
