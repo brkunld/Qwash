@@ -530,6 +530,9 @@ void setup() {
   // Varsayilan 15 sn: broker TCP'yi kabul edip CONNACK vermezse (Docker'in port yonlendirmesi
   // boyle davranir) baglanma denemesi 15 sn'lik WDT'yi asip cihazi seans ortasinda resetliyordu.
   mqtt.setSocketTimeout(3);
+  // Varsayilan 15 sn: broker 1,5x = 22,5 sn sessizlikte baglantiyi dusuruyordu. Zayif Wi-Fi'da
+  // (RSSI -76) paket kaybi bunu asabiliyordu. 30 sn -> 45 sn tolerans; backend deviceStaleMs (90 sn) altinda.
+  mqtt.setKeepAlive(30);
   mqtt.setCallback(onMessage);
 
   // Bloklamayan portal: seans sirasinda Wi-Fi yoksa bile loop() (sayac, WDT) calismaya devam eder.

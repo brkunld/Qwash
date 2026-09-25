@@ -110,17 +110,17 @@ Tüm komut ve olaylar kurumsal standartlarda ortak bir zarf (envelope) yapısın
 ## 5. Two-Phase ACK Protokolü (İki Aşamalı Başlatma)
 
 > [!NOTE]
-> **Timeout Katmanları — WDT (15 sn) ile ACK Timeout (5 sn) Farkı:**
+> **Timeout Katmanları — WDT (15 sn) ile ACK Timeout (10 sn) Farkı:**
 >
-> - **5 saniyelik ACK Timeout (Backend):** Backend, `START` komutu gönderdikten sonra ESP32'den `STARTED_ACK` bekler. Bu süre içinde yanıt gelmezse backend işlemi iptal eder ve parayı iade eder. Bu, _ağ veya cihaz başlatma arızasına_ karşı finansal güvencedir.
+> - **10 saniyelik ACK Timeout (Backend):** Backend, `START` komutu gönderdikten sonra ESP32'den `STARTED_ACK` bekler. Bu süre içinde yanıt gelmezse backend işlemi iptal eder ve parayı iade eder. Bu, _ağ veya cihaz başlatma arızasına_ karşı finansal güvencedir.
 > - **15 saniyelik WDT (ESP32 Donanım):** Bu, ESP32'nin kendi işlemcisinin donup donmadığını denetleyen bir donanım mekanizmasıdır. Eğer ESP32 yazılımı 15 saniye boyunca WDT'yi beslemezse (watchdog kick), işlemci sıfırlanır ve NVS'deki seans verisi üzerinden kurtarma başlar. Bu, _donanım kilenmelerine_ karşı son güvencedir. İki timeout farklı katmanlarda çalışır ve birbirini tamamlar.
 
 1. Backend, cüzdandan parayı henüz kalıcı düşmeden `HOLD` eder.
-2. Backend MQTT üzerinden `START` komutunu publish eder ve 5 saniyelik bir bekleme başlatır.
+2. Backend MQTT üzerinden `START` komutunu publish eder ve 10 saniyelik bir bekleme başlatır.
 3. ESP32 komutu alır, `commandId`'yi daha önce çalıştırıp çalıştırmadığını NVS/RAM'den kontrol eder (idempotency).
 4. ESP32 röleyi fiziksel olarak çeker ve derhal `STARTED_ACK` yayınlar.
 5. Backend `STARTED_ACK` mesajını aldığı anda seansı `RUNNING` yapar ve bakiyeyi `CAPTURED` eder.
-6. **Arıza Senaryosu:** Eğer 5 saniye içinde ACK gelmezse (cihaz kapalı, Wi-Fi kopuk vb.), backend işlemi iptal eder, `HOLD` edilen bakiyeyi derhal kullanıcıya iade eder (`RELEASED`) ve peronu `ERROR` moduna alır.
+6. **Arıza Senaryosu:** Eğer 10 saniye içinde ACK gelmezse (cihaz kapalı, Wi-Fi kopuk vb.), backend işlemi iptal eder, `HOLD` edilen bakiyeyi derhal kullanıcıya iade eder (`RELEASED`) ve peronu `ERROR` moduna alır.
 
 ---
 

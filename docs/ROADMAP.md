@@ -132,7 +132,7 @@ Faz 2 ve Faz 3 birbirinden bagimsizdir; iki kisi veya iki paralel calisma akisi 
 
 - [x] NestJS backend: health endpoint, structured logging (Pino). _(Faz 1'de)_
 - [x] Deterministik seans state machine (ADR-0007, ADR-0010): `STARTING → RUNNING → COMPLETED`, hata: `FAILED`, belirsizlik: `RECONCILING`. Her gecis `SessionTransition`'a yazilir.
-- [x] Two-phase ACK: HOLD → MQTT START → STARTED_ACK → RUNNING; tahsilat seans sonunda kullanilan sure kadar (ADR-0010). ACK gelmezse RELEASE (5 sn) + tedbiren STOP.
+- [x] Two-phase ACK: HOLD → MQTT START → STARTED_ACK → RUNNING; tahsilat seans sonunda kullanilan sure kadar (ADR-0010). ACK gelmezse RELEASE (10 sn) + tedbiren STOP.
 - [x] **Gec ACK kurali:** RELEASE edilmis/iptal edilmis bir seans icin sonradan `STARTED_ACK` gelirse backend derhal STOP gonderir ve olayi kaydeder. Gerekce: saati senkron olmayan cihaz `expiresAt` kontrolunu yapamaz ve suresi dolmus START'i kabul eder (Faz 3'te cihazda goruldu, 2026-09-25).
 - [x] Komutlar icin transactional outbox, ACK/olaylar icin idempotent inbox (ADR-0005; BullMQ yerine DB yoklamasi, ADR-0010).
 - [x] **Seans sonu mutabakati:** Cihazin bildirdigi kalan sureden kullanilan sure hesaplanir; o kadar tahsil, kalani iade. Bitis bildirilmezse `RECONCILING` (bloke durur), cihaz donup bitisi bildirince kapanir. Iade edilmis seansta cihaz calistigini bildirirse `UNPAID_RUN_REPORTED` olarak isaretlenir.

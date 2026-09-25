@@ -27,7 +27,7 @@ import {
 } from './session.errors';
 
 export interface SessionTimings {
-  /** START'tan sonra STARTED_ACK icin beklenen en uzun sure (IOT.md: 5 sn). */
+  /** START'tan sonra STARTED_ACK icin beklenen en uzun sure (IOT.md: 10 sn). */
   ackTimeoutMs: number;
   /** Planlanan sure dolduktan sonra cihazdan bitis bildirimi icin tolerans. */
   endGraceSec: number;
@@ -41,7 +41,7 @@ export interface SessionTimings {
 }
 
 export const DEFAULT_TIMINGS: SessionTimings = {
-  ackTimeoutMs: 5_000,
+  ackTimeoutMs: 10_000,
   endGraceSec: 30,
   deviceStaleMs: 90_000,
   reconcileTimeoutMs: 30 * 60_000,

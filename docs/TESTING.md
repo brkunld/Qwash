@@ -38,7 +38,7 @@ Sistemin gerçek saha arızalarına karşı davranışını garanti eden test se
 | **MQTT Bağlantısı Koptu** | Outbox worker komutları bekletir, broker gelince sırayla aktarır. Seans `START_TIMEOUT` ile bakiyeyi iade eder. | Docker MQTT konteyneri durdurularak test edilir. |
 | **ESP32 Yıkama Ortasında Yeniden Başladı** | Cihaz NVS belleğinden seansı okur, süreyi kaldığı yerden devam ettirir. | ESP32'ye hardware reset atılarak doğrulanır. |
 | **Eşzamanlı Çift START İsteği** | Redlock ve Pessimistic lock ilk isteği işler, ikinci isteği "Peron Meşgul" olarak reddeder. | Eşzamanlı 10 HTTP POST isteği gönderilerek test edilir. |
-| **ACK Mesajı 5 Saniye Gecikti** | Backend seansı `FAILED` yapar, bloke edilen parayı kullanıcıya iade eder (`RELEASED`). | Mock MQTT istemcisinde ACK geciktirilerek test edilir. |
+| **ACK Mesajı 10 Saniye Gecikti** | Backend seansı `FAILED` yapar, bloke edilen parayı kullanıcıya iade eder (`RELEASED`). | Mock MQTT istemcisinde ACK geciktirilerek test edilir. |
 | **İyzico Webhook'u İletilmedi** | Reconciliation worker İyzico API'sini sorgular ve bakiyeyi kullanıcı hesabına geçirir. | Webhook endpoint'i engellenerek cron worker test edilir. |
 
 ---

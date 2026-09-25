@@ -20,7 +20,7 @@ ADR-0005 ve ADR-0007 seans akisinin ilkelerini koyar. Faz 4'te bu ilkeler koda d
 STARTING ──STARTED_ACK SUCCESS──▶ RUNNING ──SESSION_ENDED──▶ COMPLETED
    │                                 │
    ├─ REJECTED ────────▶ FAILED      └─ sure + 30 sn, bitis yok ─▶ RECONCILING ──SESSION_ENDED──▶ COMPLETED
-   └─ 5 sn ACK yok ────▶ FAILED (+ tedbiren STOP)
+   └─ 10 sn ACK yok ────▶ FAILED (+ tedbiren STOP)
 ```
 
 Her gecis `SessionTransition` tablosuna neden ve ayrintiyla yazilir (denetim izi).
