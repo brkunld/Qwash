@@ -529,6 +529,139 @@ describe('SessionService (gercek PostgreSQL)', () => {
     expect(await reload(s)).toMatchObject({ status: SessionStatus.COMPLETED, usedSeconds: 60 });
   });
 
+  // ---------------------------------------------------------------- cihazi kaybolan seans
+
+  const heartbeat = (s: WashSession, remainingSec: number, bayCode = BAY, deviceId = DEVICE) =>
+    deviceSays(
+      bayCode,
+      { type: 'HEARTBEAT', sessionActive: true, sessionId: s.id, remainingSec },
+      undefined,
+      deviceId,
+    );
+
+  /** RUNNING seansi RECONCILING'e, sonra otomatik kapanma esigine getirir. */
+  async function loseDevice(s: WashSession, planned = 60) {
+    advance((planned + DEFAULT_TIMINGS.endGraceSec) * 1000);
+    expect((await sessions.sweep()).reconciling).toBe(1);
+  }
+
+  it('cihaz 30 dk donmezse: yalnizca kanitlanmis sure tahsil, kalan iade, incelemeye isaretli', async () => {
+    const user = await userWith(10_000);
+    const s = await start(user, 60);
+    await ack(s);
+    await heartbeat(s, 50); // 10 sn kullanildi
+    await heartbeat(s, 38); // 22 sn kullanildi
+    await heartbeat(s, 45); // Sirasi karismis eski heartbeat: kanit geri gitmez
+    expect((await reload(s)).provenUsedSec).toBe(22);
+
+    await loseDevice(s);
+    advance(DEFAULT_TIMINGS.reconcileTimeoutMs - 1);
+    expect((await sessions.sweep()).autoClosed).toBe(0);
+    advance(1);
+    expect((await sessions.sweep()).autoClosed).toBe(1);
+
+    expect(await reload(s)).toMatchObject({
+      status: SessionStatus.COMPLETED,
+      usedSeconds: 22,
+      chargedKurus: 1100n,
+      endReason: 'DEVICE_LOST',
+      needsReview: true,
+    });
+    expect(await balance(user)).toBe(10_000 - 1100);
+    expect(await available(user)).toBe(10_000 - 1100);
+    expect(await bayStatus()).toBe(BayStatus.ERROR);
+    expect((await sessions.sweep()).autoClosed).toBe(0);
+  });
+
+  it('hic kanit yoksa (heartbeat gelmeden kayboldu): tamami iade', async () => {
+    const user = await userWith(10_000);
+    const s = await start(user, 60);
+    await ack(s);
+    await loseDevice(s);
+    advance(DEFAULT_TIMINGS.reconcileTimeoutMs);
+    await sessions.sweep();
+    expect(await reload(s)).toMatchObject({ usedSeconds: 0, chargedKurus: 0n, needsReview: true });
+    expect((await holdOf(s)).status).toBe(HoldStatus.RELEASED);
+    expect(await balance(user)).toBe(10_000);
+  });
+
+  it('cihaz 30 dk icinde donerse gercek sureyle kapanir, otomatik kapatma olmaz', async () => {
+    const user = await userWith(10_000);
+    const s = await start(user, 60);
+    await ack(s);
+    await heartbeat(s, 50);
+    await loseDevice(s);
+    advance(DEFAULT_TIMINGS.reconcileTimeoutMs / 2);
+    expect(await ended(s, 0)).toBe('SESSION_COMPLETED');
+    advance(DEFAULT_TIMINGS.reconcileTimeoutMs);
+    expect((await sessions.sweep()).autoClosed).toBe(0);
+    expect(await reload(s)).toMatchObject({
+      usedSeconds: 60,
+      chargedKurus: 3000n,
+      needsReview: false,
+    });
+  });
+
+  it('otomatik kapatmadan sonra cihaz donerse: gercek sure kaydedilir, para hareket etmez, bir kez', async () => {
+    const user = await userWith(10_000);
+    const s = await start(user, 60);
+    await ack(s);
+    await heartbeat(s, 40);
+    await loseDevice(s);
+    advance(DEFAULT_TIMINGS.reconcileTimeoutMs);
+    await sessions.sweep();
+    const charged = await balance(user);
+
+    expect(await ended(s, 0)).toBe('LATE_END_RECORDED');
+    expect(await ended(s, 0)).toBe('NO_OP'); // Firmware her baglantida tekrar gonderir
+    expect(await balance(user)).toBe(charged);
+    const late = await prisma.sessionTransition.findMany({
+      where: { sessionId: s.id, reason: 'LATE_END_AFTER_AUTO_CLOSE' },
+    });
+    expect(late).toHaveLength(1);
+    expect(late[0]!.detail).toMatchObject({ reportedUsedSeconds: 60, chargedUsedSeconds: 20 });
+  });
+
+  it('iade edilmis seansa tekrar tekrar gelen bitis yalnizca bir kez isaretlenir', async () => {
+    const user = await userWith(10_000);
+    const s = await start(user, 60);
+    advance(DEFAULT_TIMINGS.ackTimeoutMs);
+    await sessions.sweep();
+    expect(await ended(s, 30)).toBe('UNPAID_RUN');
+    expect(await ended(s, 30)).toBe('NO_OP');
+    expect(
+      await prisma.sessionTransition.count({
+        where: { sessionId: s.id, reason: 'UNPAID_RUN_REPORTED' },
+      }),
+    ).toBe(1);
+    expect((await reload(s)).needsReview).toBe(true);
+  });
+
+  it('baska perona bagli cihazin heartbeat i kanit sayilmaz', async () => {
+    await seedStation('BAY-002');
+    await deviceSays(
+      'BAY-002',
+      { type: 'DEVICE_STATUS', status: 'ONLINE' },
+      undefined,
+      'AABBCCDDEEFF',
+    );
+    const user = await userWith(10_000);
+    const s = await start(user, 60);
+    await ack(s);
+    await heartbeat(s, 0, 'BAY-002', 'AABBCCDDEEFF');
+    expect((await reload(s)).provenUsedSec).toBe(0);
+    await heartbeat(s, 30);
+    expect((await reload(s)).provenUsedSec).toBe(30);
+  });
+
+  it('SESSION_RECOVERED kalan sureyi kanit olarak isler', async () => {
+    const user = await userWith(10_000);
+    const s = await start(user, 60);
+    await ack(s);
+    await deviceSays(BAY, { type: 'SESSION_RECOVERED', sessionId: s.id, remainingSec: 15 });
+    expect((await reload(s)).provenUsedSec).toBe(45);
+  });
+
   // ---------------------------------------------------------------- outbox
 
   it('broker yoksa komut bekler, broker gelince yayinlanir', async () => {

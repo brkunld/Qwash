@@ -187,6 +187,11 @@ model WashSession {
   startedAt           DateTime?
   endedAt             DateTime?
   usedSeconds         Int?
+  // Cihazin seans sirasinda bildirdigi kalan sureden hesaplanan, kesin calisilmis sure.
+  // Yalnizca artar. Cihaz kaybolursa tahsilat buna gore yapilir (ADR-0010 #8).
+  provenUsedSec       Int                 @default(0)
+  reconcilingAt       DateTime?
+  needsReview         Boolean             @default(false) // Admin incelemesi (Faz 6)
   chargedKurus        BigInt?
   endReason           String?
   transitions         SessionTransition[]

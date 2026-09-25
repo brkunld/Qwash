@@ -33,12 +33,18 @@ export interface SessionTimings {
   endGraceSec: number;
   /** Bu kadar suredir haber alinamayan cihaz kullanilamaz sayilir (heartbeat 30 sn). */
   deviceStaleMs: number;
+  /**
+   * RECONCILING'de cihazin donmesi icin beklenen sure. Dolunca yalnizca kanitlanmis
+   * kullanim tahsil edilir, kalani iade edilir (Burak'in karari, 2026-09-25).
+   */
+  reconcileTimeoutMs: number;
 }
 
 export const DEFAULT_TIMINGS: SessionTimings = {
   ackTimeoutMs: 5_000,
   endGraceSec: 30,
   deviceStaleMs: 90_000,
+  reconcileTimeoutMs: 30 * 60_000,
 };
 
 export interface StartSessionInput {
@@ -65,12 +71,17 @@ export type DeviceMessageOutcome =
   | 'SESSION_COMPLETED'
   | 'LATE_ACK_STOP_SENT'
   | 'UNPAID_RUN'
+  | 'LATE_END_RECORDED'
   | 'RECOVERY_RECORDED';
 
 export interface SweepResult {
   ackTimeouts: number;
   reconciling: number;
+  autoClosed: number;
 }
+
+/** Cihazi kaybolan seans otomatik kapatildiginda kullanilan bitis nedeni. */
+export const DEVICE_LOST_REASON = 'DEVICE_LOST';
 
 type SessionWithBay = WashSession & { bay: Bay & { station: { code: string } } };
 
@@ -282,7 +293,7 @@ export class SessionService {
 
   async sweep(): Promise<SweepResult> {
     const now = this.clock();
-    const result: SweepResult = { ackTimeouts: 0, reconciling: 0 };
+    const result: SweepResult = { ackTimeouts: 0, reconciling: 0, autoClosed: 0 };
 
     const timedOut = await this.prisma.$queryRaw<{ id: string }[]>`
       SELECT "id" FROM "WashSession"
@@ -312,7 +323,7 @@ export class SessionService {
         if (!s || s.status !== SessionStatus.RUNNING) return false;
         await tx.washSession.update({
           where: { id },
-          data: { status: SessionStatus.RECONCILING },
+          data: { status: SessionStatus.RECONCILING, reconcilingAt: now },
         });
         await this.transition(
           tx,
@@ -324,6 +335,41 @@ export class SessionService {
         return true;
       });
       if (done) result.reconciling += 1;
+    }
+
+    // Cihaz beklenen surede donmedi: yalnizca kanitlanmis kullanim tahsil, kalan iade,
+    // admin incelemesine isaretle (Burak'in karari, 2026-09-25; ADR-0010 #8).
+    const reconcileDeadline = new Date(now.getTime() - this.timings.reconcileTimeoutMs);
+    const lost = await this.prisma.$queryRaw<{ id: string }[]>`
+      SELECT "id" FROM "WashSession"
+      WHERE "status" = 'RECONCILING' AND "reconcilingAt" <= ${reconcileDeadline}
+      LIMIT 100`;
+    for (const { id } of lost) {
+      const done = await this.prisma.$transaction(async (tx) => {
+        const s = await this.lockSession(tx, { id }, true);
+        if (!s || s.status !== SessionStatus.RECONCILING) return false; // Cihaz yetisti
+        const chargedKurus = s.provenUsedSec * s.pricePerSecondKurus;
+        await this.wallets.captureTx(tx, s.holdId, chargedKurus);
+        await tx.washSession.update({
+          where: { id },
+          data: {
+            status: SessionStatus.COMPLETED,
+            usedSeconds: s.provenUsedSec,
+            chargedKurus: BigInt(chargedKurus),
+            endedAt: now,
+            endReason: DEVICE_LOST_REASON,
+            needsReview: true,
+          },
+        });
+        await tx.bay.update({ where: { id: s.bayId }, data: { status: BayStatus.ERROR } });
+        await this.transition(tx, id, s.status, SessionStatus.COMPLETED, DEVICE_LOST_REASON, {
+          provenUsedSec: s.provenUsedSec,
+          plannedDurationSec: s.plannedDurationSec,
+          chargedKurus,
+        });
+        return true;
+      });
+      if (done) result.autoClosed += 1;
     }
     return result;
   }
@@ -394,13 +440,27 @@ export class SessionService {
       Math.max(0, s.plannedDurationSec - remainingSec),
     );
 
-    if (s.status === SessionStatus.COMPLETED) return 'NO_OP';
+    // Firmware son bitisi her baglantida yeniden gonderir; asagidaki isaretler bir kez yazilir.
+    if (s.status === SessionStatus.COMPLETED) {
+      if (s.endReason !== DEVICE_LOST_REASON) return 'NO_OP';
+      // Otomatik kapatildiktan sonra cihaz dondu: gercek kullanim admin incelemesi icin
+      // kaydedilir. Para hareket etmez (tahsil edilen sure kesin alt sinirdi).
+      if (await this.hasTransition(tx, s.id, 'LATE_END_AFTER_AUTO_CLOSE')) return 'NO_OP';
+      await this.transition(tx, s.id, s.status, s.status, 'LATE_END_AFTER_AUTO_CLOSE', {
+        reportedUsedSeconds: usedSeconds,
+        chargedUsedSeconds: s.usedSeconds,
+        reason,
+      });
+      return 'LATE_END_RECORDED';
+    }
     if (s.status === SessionStatus.FAILED) {
       // Bloke iade edilmisken cihaz calistigini bildiriyor: tahsil edilemez, isaretle.
+      if (await this.hasTransition(tx, s.id, 'UNPAID_RUN_REPORTED')) return 'NO_OP';
       await this.transition(tx, s.id, s.status, s.status, 'UNPAID_RUN_REPORTED', {
         usedSeconds,
         reason,
       });
+      await tx.washSession.update({ where: { id: s.id }, data: { needsReview: true } });
       this.logger.error({ sessionId: s.id, usedSeconds }, 'Iade edilmis seansta cihaz calisti');
       return 'UNPAID_RUN';
     }
@@ -437,11 +497,42 @@ export class SessionService {
     const s = await this.lockSession(tx, { id: sessionId });
     if (!s) return 'UNKNOWN_SESSION';
     if (!sameBay(s, topic)) return this.bayMismatch(s, topic);
+    if (remainingSec !== undefined) {
+      await this.recordProvenUsage(tx, s.bayId, s.id, remainingSec);
+    }
     await this.transition(tx, s.id, s.status, s.status, 'DEVICE_RECOVERED', {
       detail: detail ?? null,
       remainingSec: remainingSec ?? null,
     });
     return 'RECOVERY_RECORDED';
+  }
+
+  /**
+   * Cihazin seans sirasinda bildirdigi kalan sureden kesin calisilmis sureyi gunceller.
+   * Deger yalnizca artar (eski/sirasi karismis heartbeat geri alamaz) ve yalnizca o
+   * perondaki aktif seans icin yazilir. Tek kosullu UPDATE; otomatik kapatma satiri
+   * kilitliyse bekler ve durum degismisse hicbir sey yazmaz.
+   */
+  private async recordProvenUsage(
+    db: Tx | PrismaClient,
+    bayId: string,
+    sessionId: string,
+    remainingSec: number,
+  ): Promise<void> {
+    await db.$executeRaw`
+      UPDATE "WashSession"
+      SET "provenUsedSec" = GREATEST(
+            "provenUsedSec",
+            LEAST("plannedDurationSec", GREATEST(0, "plannedDurationSec" - ${remainingSec}))
+          ),
+          "updatedAt" = now()
+      WHERE "id" = ${sessionId}
+        AND "bayId" = ${bayId}
+        AND "status" IN ('RUNNING', 'RECONCILING')`;
+  }
+
+  private async hasTransition(tx: Tx, sessionId: string, reason: string): Promise<boolean> {
+    return (await tx.sessionTransition.count({ where: { sessionId, reason } })) > 0;
   }
 
   private async fail(tx: Tx, s: WashSession, reason: string, bayStatus: BayStatus): Promise<void> {
@@ -522,6 +613,11 @@ export class SessionService {
         lastSeenAt: now,
       },
     });
+
+    // Yalnizca perona bagli cihazin heartbeat'i kullanim kaniti sayilir.
+    if (bayId && p.type === 'HEARTBEAT' && p.sessionId && p.remainingSec !== undefined) {
+      await this.recordProvenUsage(this.prisma, bayId, p.sessionId, p.remainingSec);
+    }
 
     // Peron durumu yalnizca bilgi amaclidir; seans karari seans tablosundan verilir.
     if (bayId && p.type === 'DEVICE_STATUS') {

@@ -108,6 +108,9 @@ export const HeartbeatSchema = z.object({
   type: z.literal('HEARTBEAT'),
   firmwareVersion: z.string().optional(),
   sessionActive: z.boolean().optional(),
+  // Seans surerken: kanitlanmis kullanim bunlardan hesaplanir (ADR-0010 #8).
+  sessionId: z.string().optional(),
+  remainingSec: z.number().int().nonnegative().optional(),
 });
 
 export const DeviceMessageSchema = z.object({

@@ -212,6 +212,41 @@ static void publishHeartbeat() {
     p["firmwareVersion"] = FW_VERSION;
     p["heapFree"] = ESP.getFreeHeap();
     p["sessionActive"] = sess.active;
+    // Seans surerken kalan sure backend'e "kanitlanmis kullanim" olarak gider: cihaz
+    // kaybolursa yalnizca buna kadarki sure tahsil edilir (ADR-0010 #8).
+    if (sess.active) {
+      p["sessionId"] = sess.sessionId;
+      p["remainingSec"] = remainingSec();
+    }
+  });
+}
+
+// Son biten seans NVS'te tutulur ve her MQTT baglantisinda yeniden gonderilir.
+// PubSubClient QoS 0 yayinlar ve cihaz cevrimdisiyken biten seansin bildirimi
+// kaybolur; tekrar gondermek zararsizdir (backend ayni seansi ikinci kez kapatmaz).
+struct LastEnd {
+  char sessionId[40] = "";
+  char commandId[40] = "";
+  char reason[16] = "";
+  uint32_t remainingSec = 0;
+};
+static LastEnd lastEnd;
+
+static void loadLastEnd() {
+  strlcpy(lastEnd.sessionId, prefs.getString("eSid", "").c_str(), sizeof(lastEnd.sessionId));
+  strlcpy(lastEnd.commandId, prefs.getString("eCid", "").c_str(), sizeof(lastEnd.commandId));
+  strlcpy(lastEnd.reason, prefs.getString("eRsn", "").c_str(), sizeof(lastEnd.reason));
+  lastEnd.remainingSec = prefs.getUInt("eRem", 0);
+}
+
+static void publishLastEnd() {
+  if (!lastEnd.sessionId[0]) return;
+  publishEvent(tEvents, false, [&](JsonObject p) {
+    p["type"] = "SESSION_ENDED";
+    p["sessionId"] = lastEnd.sessionId;
+    p["commandId"] = lastEnd.commandId;
+    p["reason"] = lastEnd.reason;
+    p["remainingSec"] = lastEnd.remainingSec;
   });
 }
 
@@ -231,19 +266,20 @@ static void endSession(const char* reason) {
   if (!sess.active) return;
   relaysAllOff();  // Once fiziksel kapat, sonra bildir.
   uint32_t rem = remainingSec();
-  char sid[40], cid[40];
-  strlcpy(sid, sess.sessionId, sizeof(sid));
-  strlcpy(cid, sess.commandId, sizeof(cid));
+  // Once bitis kaydini kalici yaz, sonra seansi kapat: arada guc kesilirse ya seans
+  // kurtarilir ya da bitis bildirimi bir sonraki baglantida gider.
+  strlcpy(lastEnd.sessionId, sess.sessionId, sizeof(lastEnd.sessionId));
+  strlcpy(lastEnd.commandId, sess.commandId, sizeof(lastEnd.commandId));
+  strlcpy(lastEnd.reason, reason, sizeof(lastEnd.reason));
+  lastEnd.remainingSec = rem;
+  prefs.putString("eSid", lastEnd.sessionId);
+  prefs.putString("eCid", lastEnd.commandId);
+  prefs.putString("eRsn", lastEnd.reason);
+  prefs.putUInt("eRem", rem);
   sess.active = false;
   prefs.putBool("sActive", false);
   Serial.printf("[session] bitti: %s (kalan %us)\n", reason, rem);
-  publishEvent(tEvents, false, [&](JsonObject p) {
-    p["type"] = "SESSION_ENDED";
-    p["sessionId"] = sid;
-    p["commandId"] = cid;
-    p["reason"] = reason;
-    p["remainingSec"] = rem;
-  });
+  publishLastEnd();
   publishStatus("ONLINE");  // Retained BUSY'yi temizle.
   uiMode = UiMode::DONE;
   doneUntilMs = millis() + 5000;
@@ -383,6 +419,7 @@ static void mqttTryConnect() {
     Serial.printf("[mqtt] baglandi %s:%s\n", mqttHost, mqttPortStr);
     mqtt.subscribe(tCmd, 1);
     publishStatus(sess.active ? "BUSY" : "ONLINE");
+    publishLastEnd();  // Cevrimdisiyken biten seans varsa bildirimi simdi gider.
     if (recoveredPending) {
       char detail[32];
       snprintf(detail, sizeof(detail), "RESET_REASON_%d", (int)esp_reset_reason());
@@ -452,6 +489,7 @@ void setup() {
 
   prefs.begin("qwash", false);
   loadSettings();
+  loadLastEnd();
   buildTopics();
   uiBegin();
   uiMessage("QWASH", TFT_WHITE);
@@ -548,7 +586,8 @@ void loop() {
     }
   }
 
-  if (mqtt.connected() && millis() - lastHeartbeat >= HEARTBEAT_EVERY_MS) {
+  uint32_t hbEvery = sess.active ? SESSION_HEARTBEAT_EVERY_MS : HEARTBEAT_EVERY_MS;
+  if (mqtt.connected() && millis() - lastHeartbeat >= hbEvery) {
     lastHeartbeat = millis();
     publishHeartbeat();
   }

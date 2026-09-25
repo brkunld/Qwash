@@ -65,8 +65,20 @@ START komutu `expiresAt` (= ACK son tarihi) tasir. Outbox yayincisi suresi dolmu
 
 Yeni seans icin cihazin son bildirdigi durum `ONLINE` olmali ve son 90 sn icinde haber vermis olmali (heartbeat 30 sn). `Bay.status` bilgi amaclidir; yalnizca `MAINTENANCE` yeni seansi engeller. `ERROR` engellemez, cunku cihaz saglikliyken takili kalmis bir `ERROR` peronu kalici olarak kapatirdi.
 
+### 8. Cihazi kaybolan seans (is kurali, 2026-09-25)
+
+Proje sahibinin onayladigi kural:
+
+1. Bitis bildirilmeyen seans `RECONCILING`'e gecer, bloke durur, **30 dakika** cihaz beklenir. Cihaz donup bitisi bildirirse seans gercek sureyle kapanir.
+2. Donmezse **yalnizca kanitlanmis kullanim** tahsil edilir, kalani iade edilir, seans `needsReview` ile admin incelemesine isaretlenir, peron `ERROR` olur.
+3. **Kanitlanmis kullanim:** cihazin seans sirasinda heartbeat (seansta 10 sn'de bir) ve `SESSION_RECOVERED` ile bildirdigi kalan sureden hesaplanir. Deger yalnizca artar; yalnizca perona bagli cihazin mesaji sayilir.
+4. Otomatik kapatmadan sonra cihaz donerse gercek sure `LATE_END_AFTER_AUTO_CLOSE` olarak kaydedilir; para hareket etmez (tahsil edilen sure kesin bir alt sinirdi, fark admin kararina kalir).
+
+Reddedilen secenekler: tam tahsil (elektrik kesintisinde role kapanir, musteri fazla oder), tam iade (fisi cekerek bedava yikama), yalnizca admin karari (para gunlerce askida kalir).
+
+Firmware tarafi: son biten seans NVS'te tutulur ve **her MQTT baglantisinda yeniden gonderilir** (PubSubClient QoS 0 yayinlar; cevrimdisiyken biten seansin bildirimi aksi halde kaybolurdu). Backend tekrarlari yok sayar; inceleme isaretleri bir kez yazilir.
+
 ## Acik kalanlar
 
-- `RECONCILING`'de kalan ve cihazi hic donmeyen seansin blokesi icin is kurali (iade politikasina bagli).
 - MQTT TLS ve cihaz basina ACL (su an yalniz gelistirme broker'i, anonim).
-- Cevrimdisiyken cihazda uretilen olaylarin (ornegin `SESSION_ENDED`) saklanip sonra gonderilmesi; su an kaybolur ve seans `RECONCILING`'de kalir.
+- Admin paneli: `needsReview` seanslarin listesi ve elle ek iade (Faz 6).

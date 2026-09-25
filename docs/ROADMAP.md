@@ -136,7 +136,7 @@ Faz 2 ve Faz 3 birbirinden bagimsizdir; iki kisi veya iki paralel calisma akisi 
 - [x] **Gec ACK kurali:** RELEASE edilmis/iptal edilmis bir seans icin sonradan `STARTED_ACK` gelirse backend derhal STOP gonderir ve olayi kaydeder. Gerekce: saati senkron olmayan cihaz `expiresAt` kontrolunu yapamaz ve suresi dolmus START'i kabul eder (Faz 3'te cihazda goruldu, 2026-09-25).
 - [x] Komutlar icin transactional outbox, ACK/olaylar icin idempotent inbox (ADR-0005; BullMQ yerine DB yoklamasi, ADR-0010).
 - [x] **Seans sonu mutabakati:** Cihazin bildirdigi kalan sureden kullanilan sure hesaplanir; o kadar tahsil, kalani iade. Bitis bildirilmezse `RECONCILING` (bloke durur), cihaz donup bitisi bildirince kapanir. Iade edilmis seansta cihaz calistigini bildirirse `UNPAID_RUN_REPORTED` olarak isaretlenir.
-- [ ] **RECONCILING'de kalan seans icin is kurali:** cihaz hic donmezse bloke ne zaman ve nasil kapatilacak (tam tahsil / iade / admin karari)? Iade politikasina (Acik Soru 4, 6) bagli.
+- [x] **RECONCILING'de kalan seans icin is kurali (2026-09-25):** 30 dk cihaz beklenir; donmezse yalnizca kanitlanmis kullanim tahsil, kalan iade, admin incelemesine isaret (ADR-0010 #8). Firmware son bitisi her baglantida yeniden gonderir.
 - [ ] Device twin: desired/reported state, drift tespiti (ADR-0006). _(Kismen: `Device` tablosu cihazin bildirdigi durumu, firmware surumunu ve son gorulme zamanini tutuyor; desired/drift yok.)_
 - [ ] MQTT guvenligi: TLS, cihaz basina kimlik/ACL (cihaz yalniz kendi topic'lerine yazar/okur).
 - [ ] Gercek zamanli seans durumu (Socket.IO) + `GET /sessions/active` ile durum geri yukleme.
