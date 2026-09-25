@@ -353,6 +353,87 @@ describe('Hesap silme ve iade talebi (gercek PostgreSQL)', () => {
     });
   });
 
+  describe('sahipsiz bakiye onlemi (silme + yukleme yarisi)', () => {
+    let gateway: FakePaymentGateway;
+    let payments: PaymentsService;
+
+    beforeEach(() => {
+      gateway = new FakePaymentGateway();
+      payments = new PaymentsService(prisma, wallets, { gateway, apiPublicUrl: 'http://api.test' });
+    });
+
+    const startTopUp = (userId: string, key = 'k') =>
+      payments.startTopUp({ userId, amountKurus: 10000, idempotencyKey: key, ip: null });
+
+    it('silinmis hesap yukleme baslatamaz', async () => {
+      const c = await customer();
+      await accounts.deleteAccount(c.userId, {});
+      await expect(startTopUp(c.userId)).rejects.toMatchObject({ code: 'ACCOUNT_NOT_ACTIVE' });
+      expect(gateway.initialized).toHaveLength(0);
+    });
+
+    it('silme ve yukleme ayni anda gelse de silinmis hesaba yukleme kaydi olusmaz', async () => {
+      for (let i = 0; i < 15; i += 1) {
+        const c = await customer();
+        await Promise.allSettled([
+          accounts.deleteAccount(c.userId, {}),
+          startTopUp(c.userId, `yaris-${i}`),
+        ]);
+
+        const user = await prisma.user.findUniqueOrThrow({ where: { id: c.userId } });
+        const topUps = await prisma.cardTopUp.count({ where: { userId: c.userId } });
+        // Ya silme kazandi (yukleme yok) ya yukleme kazandi (hesap duruyor, silme reddedildi).
+        if (user.status === UserStatus.DELETED) expect(topUps).toBe(0);
+        else expect(topUps).toBe(1);
+      }
+    });
+
+    it('kapanmis hesaba gelen basarili odeme bakiyeye yazilmaz, Iyzico da geri verilir', async () => {
+      const c = await customer();
+      const { topUpId } = await startTopUp(c.userId);
+      // Normal akista engelli; savunma katmanini sinamak icin hesap dogrudan kapatilir.
+      await prisma.user.update({ where: { id: c.userId }, data: { status: UserStatus.DELETED } });
+
+      const token = gateway.succeed(topUpId, 10000);
+      await expect(payments.completeByToken(token)).resolves.toMatchObject({
+        status: CardTopUpStatus.REVERSED,
+        iyzicoPaymentId: `pay-${topUpId}`,
+      });
+      expect(gateway.reversed).toEqual([
+        expect.objectContaining({ topUpId, paymentId: `pay-${topUpId}`, amountKurus: 10000 }),
+      ]);
+      expect((await wallets.getBalance(c.walletId)).balanceKurus).toBe(0);
+      expect(await prisma.ledgerEntry.count({ where: { walletId: c.walletId } })).toBe(0);
+
+      // Webhook/mutabakat tekrar gelirse ikinci iade yapilmaz.
+      await payments.completeByToken(token);
+      await payments.reconcile();
+      expect(gateway.reversed).toHaveLength(1);
+    });
+
+    it('Iyzico iadesi basarisizsa REVERSAL_PENDING kalir, mutabakat tamamlar; bakiye hic yazilmaz', async () => {
+      const c = await customer();
+      const { topUpId } = await startTopUp(c.userId);
+      await prisma.user.update({ where: { id: c.userId }, data: { status: UserStatus.DELETED } });
+      gateway.failReverse = true;
+
+      const token = gateway.succeed(topUpId, 10000);
+      await expect(payments.completeByToken(token)).resolves.toMatchObject({
+        status: CardTopUpStatus.REVERSAL_PENDING,
+      });
+      await expect(payments.completeByToken(token)).resolves.toMatchObject({
+        status: CardTopUpStatus.REVERSAL_PENDING,
+      });
+
+      gateway.failReverse = false;
+      await expect(payments.reconcile()).resolves.toMatchObject({ reversalsRetried: 1 });
+      expect((await prisma.cardTopUp.findUniqueOrThrow({ where: { id: topUpId } })).status).toBe(
+        CardTopUpStatus.REVERSED,
+      );
+      expect((await wallets.getBalance(c.walletId)).balanceKurus).toBe(0);
+    });
+  });
+
   describe('ad muhru', () => {
     it('ilk basarili kart yuklemesi adi muhurler; sonra profilden degismez', async () => {
       const c = await customer();

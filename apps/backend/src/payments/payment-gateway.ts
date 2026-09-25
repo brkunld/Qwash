@@ -43,6 +43,18 @@ export abstract class PaymentGateway {
   abstract retrieveCheckout(token: string): Promise<CheckoutOutcome>;
   /** Webhook imzasini dogrular. */
   abstract verifyWebhook(body: unknown, signature: string | undefined): boolean;
+  /**
+   * Alinmis odemeyi geri verir: once ayni gun iptal, olmazsa tam iade.
+   * Basarisizsa PaymentProviderError firlatir (cagiran daha sonra yeniden dener).
+   */
+  abstract reversePayment(input: ReversePaymentInput): Promise<'CANCELLED' | 'REFUNDED'>;
+}
+
+export interface ReversePaymentInput {
+  topUpId: string;
+  paymentId: string;
+  paymentTransactionId: string | null;
+  amountKurus: number;
 }
 
 export class PaymentProviderError extends Error {

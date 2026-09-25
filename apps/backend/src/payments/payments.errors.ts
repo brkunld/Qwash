@@ -17,6 +17,12 @@ export class PaymentsDisabledError extends PaymentError {
   }
 }
 
+export class AccountNotActiveError extends PaymentError {
+  constructor() {
+    super('ACCOUNT_NOT_ACTIVE', 'Hesap aktif degil; bakiye yuklenemez.');
+  }
+}
+
 export class EmailNotVerifiedError extends PaymentError {
   constructor() {
     super('EMAIL_NOT_VERIFIED', 'Bakiye yuklemek icin once e-posta adresinizi dogrulayin.');

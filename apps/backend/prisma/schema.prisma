@@ -154,6 +154,8 @@ enum CardTopUpStatus {
   SUCCEEDED // Iyzico odemeyi onayladi, bakiye yuklendi
   FAILED // Iyzico reddetti / musteri vazgecti
   EXPIRED // Form suresi doldu, sonuc gelmedi (mutabakat isaretler)
+  REVERSAL_PENDING // Odeme alindi ama hesap aktif degil; bakiye yazilmadi, Iyzico iptal/iade bekleniyor
+  REVERSED // Hesap kapali oldugu icin odeme Iyzico'da iptal/iade edildi
 }
 
 // Iyzico Checkout Form ile kart yuklemesi (ADR-0003, Faz 5b).

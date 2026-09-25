@@ -6,6 +6,7 @@ import {
   InitializedCheckout,
   PaymentGateway,
   PaymentProviderError,
+  ReversePaymentInput,
 } from './payment-gateway';
 
 // Iyzico REST istemcisi (Checkout Form). Resmi SDK yerine dogrudan REST: bagimlilik yok,
@@ -17,6 +18,9 @@ import {
 
 const INITIALIZE_PATH = '/payment/iyzipos/checkoutform/initialize/auth/ecom';
 const RETRIEVE_PATH = '/payment/iyzipos/checkoutform/auth/ecom/detail';
+// https://docs.iyzico.com/en/advanced/refund-and-cancel
+const CANCEL_PATH = '/payment/cancel';
+const REFUND_PATH = '/payment/refund';
 const REQUEST_TIMEOUT_MS = 15_000;
 
 // Iyzico alici icin TC kimlik no, adres ve sehir ister. Bakiye yuklemesinde fatura/kargo
@@ -139,6 +143,33 @@ export class IyzicoGateway extends PaymentGateway {
       basketId: str(res.basketId) ?? '',
       conversationId: str(res.conversationId) ?? '',
     };
+  }
+
+  async reversePayment(input: ReversePaymentInput): Promise<'CANCELLED' | 'REFUNDED'> {
+    // Iptal yalniz odeme gunu mumkun ve ekstrede iz birakmaz; olmazsa iade.
+    const cancel = await this.post(CANCEL_PATH, {
+      locale: 'tr',
+      conversationId: input.topUpId,
+      paymentId: input.paymentId,
+    });
+    if (cancel.status === 'success') return 'CANCELLED';
+
+    if (!input.paymentTransactionId) {
+      throw new PaymentProviderError(
+        `Iyzico iptal edilemedi, iade kimligi yok: ${describeError(cancel)}`,
+      );
+    }
+    const refund = await this.post(REFUND_PATH, {
+      locale: 'tr',
+      conversationId: input.topUpId,
+      paymentTransactionId: input.paymentTransactionId,
+      price: kurusToPrice(input.amountKurus),
+      currency: 'TRY',
+    });
+    if (refund.status === 'success') return 'REFUNDED';
+    throw new PaymentProviderError(
+      `Iyzico iptal/iade basarisiz: iptal=${describeError(cancel)}; iade=${describeError(refund)}`,
+    );
   }
 
   /** V3: HMAC-SHA256(secretKey, secretKey + iyziEventType + iyziPaymentId + token + paymentConversationId + status), hex. */

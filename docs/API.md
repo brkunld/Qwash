@@ -106,7 +106,9 @@ Sözleşmeler: `packages/contracts/src/auth.ts`. Uygulama: `apps/backend/src/aut
 * `GET /api/v1/wallet/transactions` — Cüzdan hareket geçmişi (Ledger dökümü: hangi program için ne kadar harcandı).
 * `GET /api/v1/payments/topup-options` — (Giriş gerekli) `{ minKurus, maxKurus, presetsKurus }`. Minimumu admin belirler; hazır tutarlar minimumun katlarıdır (min, 2×min, 4×min; max'ı aşanlar çıkarılır).
 * `POST /api/v1/payments/topup` — (Giriş + doğrulanmış e-posta + `Idempotency-Key` zorunlu) Body `{ "amountKurus": 10000 }`. İyzico Checkout Form'u açar, `{ topUpId, status: "PENDING", paymentPageUrl }` döner; istemci `paymentPageUrl`'e yönlendirir. Aynı anahtar aynı yüklemeyi döndürür, farklı tutarla `409 IDEMPOTENCY_CONFLICT`. Kullanıcı başına dakikada 5 istek.
-* `GET /api/v1/payments/topups/:id` — Yükleme durumu (`PENDING` / `SUCCEEDED` / `FAILED` / `EXPIRED`); sonuç sayfası bunu okur.
+* `GET /api/v1/payments/topups/:id` — Yükleme durumu (`PENDING` / `SUCCEEDED` / `FAILED` / `EXPIRED` / `REVERSAL_PENDING` / `REVERSED`); sonuç sayfası bunu okur.
+
+**Sahipsiz bakiye önlemi (Burak, 2026-09-26):** Yükleme başlatma ve hesap silme aynı cüzdan satır kilidini alır; aktif olmayan hesap yükleme başlatamaz (`403 ACCOUNT_NOT_ACTIVE`). Yine de kapanmış hesaba başarılı ödeme gelirse bakiye yazılmaz: kayıt `REVERSAL_PENDING` olur, ödeme İyzico'da önce iptal (aynı gün), olmazsa tam iade ile geri verilir (`REVERSED`); İyzico'ya ulaşılamazsa mutabakat her dakika yeniden dener.
 * `POST /api/v1/payments/iyzico/callback` — İyzico ödeme sayfası müşterinin tarayıcısını buraya form POST (`token`) ile döndürür. Gövdeye güvenilmez: sonuç İyzico'dan sorulur (imzalı yanıt), sonra `303` ile `CUSTOMER_APP_URL/wallet/topup-result?id=<topUpId>`'e yönlendirilir.
 * `POST /api/v1/payments/webhook` — İyzico bildirimi (bkz. §7). Geçerli imzada sonuç yine İyzico'dan sorulur.
 
