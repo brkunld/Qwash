@@ -130,7 +130,7 @@ describe('AuthService (gercek PostgreSQL)', () => {
     it('baska anahtarla imzalanmis access token reddedilir', async () => {
       const { accessToken } = await register();
       const other = new AuthService(prisma, {
-        accessSecret: 'baska-bir-anahtar-en-az-32-karakter-uzun',
+        accessSecret: 'b'.repeat(40),
         customerAppUrl: 'http://app.test',
         mailer,
         google: null,
