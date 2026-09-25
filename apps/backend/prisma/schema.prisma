@@ -57,21 +57,22 @@ enum BayStatus {
 }
 
 model User {
-  id              String        @id @default(uuid())
-  email           String        @unique
+  id              String         @id @default(uuid())
+  email           String         @unique
   passwordHash    String? // Yalnizca Google ile acilan hesapta null (ADR-0009)
   emailVerifiedAt DateTime?
-  phoneNumber     String?       @unique
-  role            UserRole      @default(USER)
-  status          UserStatus    @default(ACTIVE)
+  phoneNumber     String?        @unique
+  role            UserRole       @default(USER)
+  status          UserStatus     @default(ACTIVE)
   fullName        String? // Odeme saglayicisi alici adi ister (Iyzico); Google'dan gelir
   wallet          Wallet?
   sessions        WashSession[]
   identities      AuthIdentity[]
   refreshTokens   RefreshToken[]
   authTokens      AuthToken[]
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
+  cardTopUps      CardTopUp[]
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
 }
 
 enum AuthProvider {
@@ -95,13 +96,13 @@ model AuthIdentity {
 // Donusumde eski kayit revokedAt alir; iptal edilmis token tekrar gelirse
 // kullanicinin tum oturumlari kapatilir (token reuse).
 model RefreshToken {
-  id         String    @id @default(uuid())
-  userId     String
-  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  tokenHash  String    @unique
-  expiresAt  DateTime
-  revokedAt  DateTime?
-  createdAt  DateTime  @default(now())
+  id        String    @id @default(uuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
 
   @@index([userId])
 }
@@ -139,6 +140,47 @@ model Wallet {
   holds         WalletHold[]
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
+}
+
+enum CardTopUpStatus {
+  PENDING // Odeme formu acildi, sonuc bekleniyor
+  SUCCEEDED // Iyzico odemeyi onayladi, bakiye yuklendi
+  FAILED // Iyzico reddetti / musteri vazgecti
+  EXPIRED // Form suresi doldu, sonuc gelmedi (mutabakat isaretler)
+}
+
+// Iyzico Checkout Form ile kart yuklemesi (ADR-0003, Faz 5b).
+// Bakiye yalniz SUCCEEDED gecisiyle ayni transaction'da, `card-topup:<id>` anahtariyla
+// yuklenir; callback, webhook ve mutabakat ayni gecisi yarissa bile tek CREDIT olusur.
+// Iade (yalniz orijinal karta, admin onayiyla, Faz 6) icin Iyzico kimlikleri saklanir.
+model CardTopUp {
+  id                   String          @id @default(uuid())
+  userId               String
+  user                 User            @relation(fields: [userId], references: [id], onDelete: Restrict)
+  walletId             String
+  amountKurus          Int
+  status               CardTopUpStatus @default(PENDING)
+  idempotencyKey       String // Istemcinin Idempotency-Key basligi
+  iyzicoToken          String?         @unique
+  paymentPageUrl       String? // Ayni Idempotency-Key tekrarinda ayni sayfa doner
+  iyzicoPaymentId      String?
+  paymentTransactionId String? // Iade (/payment/refund) icin gerekli
+  refundedKurus        Int             @default(0)
+  failureReason        String?
+  createdAt            DateTime        @default(now())
+  completedAt          DateTime?
+
+  @@unique([userId, idempotencyKey])
+  @@index([status, createdAt])
+}
+
+// Yukleme ayarlari; tek satir (id = 1). Admin paneli (Faz 6) degistirir.
+// Hazir tutarlar minimumun katlaridir: min, 2*min, 4*min (Burak, 2026-09-26).
+model TopUpSettings {
+  id            Int      @id @default(1)
+  minTopUpKurus Int      @default(5000)
+  maxTopUpKurus Int      @default(500000)
+  updatedAt     DateTime @updatedAt
 }
 
 // Degistirilemez muhasebe kaydi. UPDATE/DELETE veritabani trigger'i ile engellenir.
@@ -280,13 +322,13 @@ model SessionTransition {
 
 // Cihazin bildirdigi son durum (device twin'in "reported" tarafi, ADR-0006).
 model Device {
-  deviceId        String   @id // MAC, ayiracsiz buyuk harf
-  bayId           String?  @unique
-  bay             Bay?     @relation(fields: [bayId], references: [id], onDelete: SetNull)
-  reportedStatus  String // ONLINE, BUSY, OFFLINE, ERROR...
-  firmwareVersion String?
-  resetReason     Int?
-  lastSeenAt      DateTime
+  deviceId         String    @id // MAC, ayiracsiz buyuk harf
+  bayId            String?   @unique
+  bay              Bay?      @relation(fields: [bayId], references: [id], onDelete: SetNull)
+  reportedStatus   String // ONLINE, BUSY, OFFLINE, ERROR...
+  firmwareVersion  String?
+  resetReason      Int?
+  lastSeenAt       DateTime
   // Device twin (ADR-0006): desired durum seans tablosundan turetilir; burada yalnizca
   // cihazin bildirdigiyle uyusmazlik tutulur. driftConfirmedAt tolerans asilinca dolar.
   driftKind        String?
@@ -294,7 +336,7 @@ model Device {
   driftSince       DateTime?
   driftConfirmedAt DateTime?
   lastDriftStopAt  DateTime?
-  updatedAt       DateTime @updatedAt
+  updatedAt        DateTime  @updatedAt
 }
 
 // MQTT'ye gidecek komutlar; is kaydiyla ayni transaction'da yazilir (ADR-0005).

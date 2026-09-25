@@ -154,9 +154,11 @@ Faz 2 ve Faz 3 birbirinden bagimsizdir; iki kisi veya iki paralel calisma akisi 
 
 **Hedef:** Gercek musteri akisini uctan uca acmak: QR → giris → bakiye yukle → seans baslat → izle.
 
-- [ ] Iyzico sandbox checkout, 3D Secure akisi.
-- [ ] Webhook imza dogrulamasi, idempotent isleme, reconciliation worker (ADR-0003).
-- [ ] Basarisiz/tekrarlanan callback'in duplicate bakiye olusturmadigi testi.
+- [x] Iyzico Checkout Form entegrasyonu (Faz 5b backend): REST istemcisi (IYZWSv2, yanit imzasi), `CardTopUp`, admin ayarli minimum + kat hazir tutarlar (`TopUpSettings`). Kart verisi sunucuya hic gelmez.
+- [ ] Iyzico sandbox'ta gercek 3D Secure denemesi (Burak'in sandbox anahtarlari gerekli); zorunlu alici alanlari (TCKN yer tutucu, adres, telefon) sandbox'ta dogrulanir.
+- [x] Webhook V3 imza dogrulamasi, idempotent isleme, dakikalik mutabakat worker'i (gec basari EXPIRED'dan da islenir).
+- [x] Basarisiz/tekrarlanan/eszamanli callback'in duplicate bakiye olusturmadigi testi (21 servis + 4 HTTP + 7 imza birim testi).
+- [ ] Webhook icin herkese acik adres (sandbox'ta tunel, canlida alan adi) ve Iyzico panelinde bildirim URL'si.
 - [x] Kimlik dogrulama backend'i (ADR-0009, Faz 5a): e-posta/sifre + e-posta dogrulama, Google girisi, sifre sifirlama, refresh rotasyonu + reuse tespiti, rate limit, API yanit zarfi. 30 test (servis + HTTP).
 - [ ] Google OAuth client/consent ekrani (Google Cloud Console; Burak) ve `GOOGLE_CLIENT_ID`.
 - [ ] E-posta saglayicisi secimi ve `Mailer` uygulamasi (production icin zorunlu).

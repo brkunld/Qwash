@@ -16,6 +16,7 @@ import type { Request, Response } from 'express';
 import { map, Observable } from 'rxjs';
 import { z } from 'zod';
 import { AuthError } from '../auth/auth.errors';
+import { PaymentError } from '../payments/payments.errors';
 
 // API.md 2: tum yanitlar { success, data | error, metadata } zarfinda doner.
 
@@ -44,7 +45,7 @@ export class EnvelopeInterceptor implements NestInterceptor {
   }
 }
 
-const AUTH_STATUS: Record<string, HttpStatus> = {
+const DOMAIN_STATUS: Record<string, HttpStatus> = {
   EMAIL_TAKEN: HttpStatus.CONFLICT,
   INVALID_CREDENTIALS: HttpStatus.UNAUTHORIZED,
   UNAUTHENTICATED: HttpStatus.UNAUTHORIZED,
@@ -52,6 +53,13 @@ const AUTH_STATUS: Record<string, HttpStatus> = {
   INVALID_TOKEN: HttpStatus.BAD_REQUEST,
   GOOGLE_LOGIN_DISABLED: HttpStatus.SERVICE_UNAVAILABLE,
   GOOGLE_EMAIL_NOT_VERIFIED: HttpStatus.FORBIDDEN,
+  PAYMENTS_DISABLED: HttpStatus.SERVICE_UNAVAILABLE,
+  EMAIL_NOT_VERIFIED: HttpStatus.FORBIDDEN,
+  TOPUP_AMOUNT_OUT_OF_RANGE: HttpStatus.BAD_REQUEST,
+  TOPUP_NOT_FOUND: HttpStatus.NOT_FOUND,
+  IDEMPOTENCY_KEY_REQUIRED: HttpStatus.BAD_REQUEST,
+  IDEMPOTENCY_CONFLICT: HttpStatus.CONFLICT,
+  PAYMENT_PROVIDER_UNAVAILABLE: HttpStatus.BAD_GATEWAY,
 };
 
 export class ValidationError extends Error {
@@ -82,11 +90,12 @@ export class ApiErrorFilter implements ExceptionFilter {
     message: string;
     details?: unknown;
   } {
-    if (exception instanceof AuthError) {
+    if (exception instanceof AuthError || exception instanceof PaymentError) {
       return {
-        status: AUTH_STATUS[exception.code] ?? HttpStatus.BAD_REQUEST,
+        status: DOMAIN_STATUS[exception.code] ?? HttpStatus.BAD_REQUEST,
         code: exception.code,
         message: exception.message,
+        details: exception instanceof PaymentError ? exception.details : undefined,
       };
     }
     if (exception instanceof ValidationError) {
