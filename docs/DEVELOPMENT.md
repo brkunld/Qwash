@@ -112,6 +112,14 @@ pnpm dev
 
 ---
 
+### Yerel CI ve push öncesi kontrol
+
+GitHub Actions hesap düzeyindeki fatura kilidi çözülene kadar çalışmıyor. Aynı adımlar yerelde çalışır:
+
+- `pnpm ci:local` — `.github/workflows/ci.yml` ile aynı sıra: install, format:check, lint, typecheck, test, test:integration, build, infra:check, gitleaks (Docker). Entegrasyon testi için önce `pnpm infra:up`.
+- `pnpm ci:local --quick` — entegrasyon testi, build ve gitleaks hariç (birkaç saniye).
+- `.githooks/pre-push` her push'tan önce tam `ci:local` çalıştırır; kırmızıysa push durur. `pnpm install` hook'u `prepare` ile etkinleştirir (`git config core.hooksPath .githooks`). Acil durumda: `git push --no-verify`.
+
 ## 5. Test Stratejisi
 
 Proje üç katmanlı test yapısı kullanır. Her katmanın kapsamı ve bağımlılıkları aşağıdaki gibidir:
