@@ -65,7 +65,8 @@ Ilk cihaz olcumu (2026-09-25, kuru calisma, ev Wi-Fi'i, RSSI -43): START→START
 
 ## Surum notlari
 
-- **0.2.0-spike (2026-09-25):** STOP yalnizca `sessionId` eslesirse uygulanir. Son biten seans NVS'te tutulur ve her MQTT baglantisinda yeniden gonderilir. Seans surerken heartbeat 10 sn'de bir gider ve `sessionId` + `remainingSec` icerir (backend'in kanitlanmis kullanim hesabi, ADR-0010 #8). **Cihazda henuz denenmedi.**
+- **0.2.0-spike (2026-09-25):** STOP yalnizca `sessionId` eslesirse uygulanir. Son biten seans NVS'te tutulur ve her MQTT baglantisinda yeniden gonderilir. Seans surerken heartbeat 10 sn'de bir gider ve `sessionId` + `remainingSec` icerir (backend'in kanitlanmis kullanim hesabi, ADR-0010 #8). Cihazda dogrulandi: normal seansta heartbeat ile kanitlanmis sure artti; seans sirasinda broker durdurulunca bitis bilgisi broker donunce ulasti ve seans gercek sureyle kapandi.
+- **0.2.1-spike (2026-09-25):** Broker seans sirasinda durdurulunca cihaz Task WDT (`resetReason` 6) ile yeniden basliyordu: Docker'in port yonlendirmesi TCP'yi kabul edip CONNACK vermedigi icin PubSubClient baglanmayi 15 sn (varsayilan) bekliyordu. `setSocketTimeout(3)` ile duzeltildi. `SESSION_RECOVERED` artik kurtarilan `sessionId` ve o anki kalan sureyi her zaman tasir (seans cevrimdisiyken bitmis olsa bile). **Cihazda henuz denenmedi.**
 
 ## Bilinen sinirlar (spike)
 

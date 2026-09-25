@@ -53,6 +53,10 @@ static char recentCmds[8][40];
 static uint8_t recentIdx = 0;
 static uint32_t lastNvsSave = 0, lastHeartbeat = 0, lastMqttTry = 0;
 static bool recoveredPending = false;
+// Yeniden baslamada NVS'ten kurtarilan seans: bildirim cevrimdisiyken seans bitse bile
+// kurtarma aninin kalan suresi kanit olarak gonderilir.
+static char recoveredSid[40] = "";
+static uint32_t recoveredRem = 0;
 static bool paramsChanged = false;
 static UiMode uiMode = UiMode::BOOT;
 static uint32_t lastUiSec = 0xFFFFFFFF;
@@ -423,7 +427,12 @@ static void mqttTryConnect() {
     if (recoveredPending) {
       char detail[32];
       snprintf(detail, sizeof(detail), "RESET_REASON_%d", (int)esp_reset_reason());
-      publishSimpleEvent("SESSION_RECOVERED", detail);
+      publishEvent(tEvents, false, [&](JsonObject p) {
+        p["type"] = "SESSION_RECOVERED";
+        p["detail"] = detail;
+        p["sessionId"] = recoveredSid;
+        p["remainingSec"] = recoveredRem;
+      });
       recoveredPending = false;
     }
   } else {
@@ -508,6 +517,8 @@ void setup() {
       sess.endMs = millis() + rem * 1000UL;
       relaySet(rel, true);
       recoveredPending = true;
+      strlcpy(recoveredSid, sess.sessionId, sizeof(recoveredSid));
+      recoveredRem = rem;
       uiMode = UiMode::RUNNING;
       Serial.printf("[session] kurtarildi, kalan %us\n", rem);
     } else {
@@ -516,6 +527,9 @@ void setup() {
   }
 
   mqtt.setBufferSize(1024);
+  // Varsayilan 15 sn: broker TCP'yi kabul edip CONNACK vermezse (Docker'in port yonlendirmesi
+  // boyle davranir) baglanma denemesi 15 sn'lik WDT'yi asip cihazi seans ortasinda resetliyordu.
+  mqtt.setSocketTimeout(3);
   mqtt.setCallback(onMessage);
 
   // Bloklamayan portal: seans sirasinda Wi-Fi yoksa bile loop() (sayac, WDT) calismaya devam eder.
