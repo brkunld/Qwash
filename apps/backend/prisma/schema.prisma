@@ -232,6 +232,13 @@ model Device {
   firmwareVersion String?
   resetReason     Int?
   lastSeenAt      DateTime
+  // Device twin (ADR-0006): desired durum seans tablosundan turetilir; burada yalnizca
+  // cihazin bildirdigiyle uyusmazlik tutulur. driftConfirmedAt tolerans asilinca dolar.
+  driftKind        String?
+  driftSessionId   String?
+  driftSince       DateTime?
+  driftConfirmedAt DateTime?
+  lastDriftStopAt  DateTime?
   updatedAt       DateTime @updatedAt
 }
 

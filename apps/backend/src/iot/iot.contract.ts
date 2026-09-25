@@ -43,7 +43,7 @@ export interface StartCommandPayload {
 
 export interface StopCommandPayload {
   type: 'STOP';
-  reason: 'USER_STOP' | 'ACK_TIMEOUT' | 'LATE_ACK' | 'ADMIN_OVERRIDE';
+  reason: 'USER_STOP' | 'ACK_TIMEOUT' | 'LATE_ACK' | 'ADMIN_OVERRIDE' | 'DRIFT';
 }
 
 export interface CommandEnvelope {
@@ -111,6 +111,8 @@ export const HeartbeatSchema = z.object({
   // Seans surerken: kanitlanmis kullanim bunlardan hesaplanir (ADR-0010 #8).
   sessionId: z.string().optional(),
   remainingSec: z.number().int().nonnegative().optional(),
+  // Device twin: seans surerken cekili role (firmware 0.5.0+).
+  relayIndex: z.number().int().optional(),
 });
 
 export const DeviceMessageSchema = z.object({
