@@ -3,6 +3,8 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { LoggerModule } from 'nestjs-pino';
 import { Env, validateEnv } from './config/env';
 import { HealthController } from './health/health.controller';
+import { PrismaModule } from './prisma/prisma.module';
+import { WalletModule } from './wallet/wallet.module';
 
 @Module({
   imports: [
@@ -25,6 +27,8 @@ import { HealthController } from './health/health.controller';
         },
       }),
     }),
+    PrismaModule,
+    WalletModule,
   ],
   controllers: [HealthController],
 })

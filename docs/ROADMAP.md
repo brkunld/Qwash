@@ -85,17 +85,18 @@ Faz 2 ve Faz 3 birbirinden bagimsizdir; iki kisi veya iki paralel calisma akisi 
 
 **Hedef:** Seans ve odeme mantigi uzerine kurulmadan once para dogrulugunu izole olarak kanitlamak. Bu faz IoT'ye ve gercek odeme saglayicisina bagli degildir.
 
-- [ ] Kullanici, cuzdan, ledger entry, yikama programi icin PostgreSQL/Prisma semasi.
-- [ ] Negatif bakiye ve gecersiz hold durumlarini engelleyen DB constraint'leri (ADR-0004).
-- [ ] HOLD / CAPTURE / RELEASE cuzdan operasyonlari (birim + entegrasyon testli).
-- [ ] Yikama programlari ve saniyelik kurus tarifesi yonetimi.
-- [ ] Kritik yazma islemleri icin idempotency.
-- [ ] Ledger degismezligi: entry silinmez/guncellenmez; duzeltme yeni entry ile yapilir.
+- [x] Kullanici, cuzdan, ledger entry, bloke (`WalletHold`), istasyon, peron, yikama programi ve peron-program icin Prisma 7 semasi + ilk migration.
+- [x] Negatif bakiye ve gecersiz hold durumlarini engelleyen DB CHECK constraint'leri (ADR-0004).
+- [x] CREDIT / HOLD / CAPTURE / RELEASE cuzdan operasyonlari (`WalletService`, gercek PostgreSQL uzerinde entegrasyon testli).
+- [~] Yikama programlari ve saniyelik kurus tarifesi: sema + seed hazir. Admin yonetim API'si Faz 6'da.
+- [x] Kritik yazma islemleri icin idempotency (credit ve hold anahtarli; capture/release blokeye gore idempotent).
+- [x] Ledger degismezligi: UPDATE/DELETE veritabani trigger'i ile reddedilir.
 
-**Tamamlanma Kriterleri**
-- Eszamanli istekler bakiyeyi negatife dusuremez (concurrency testi ile kanitli).
-- Her finansal hareket denetlenebilir ledger kaydi uretir.
-- Ayni idempotency key ile tekrarlanan istek duplicate hareket olusturmaz.
+**Tamamlanma Kriterleri** (2026-09-25, 19 entegrasyon testi)
+- [x] Eszamanli istekler bakiyeyi negatife dusuremez: 5000 bakiyeye 20 paralel 1000'lik bloke, tam 5'i basarili.
+- [x] Her finansal hareket denetlenebilir ledger kaydi uretir; ledger'dan yeniden hesaplanan bakiye cuzdanla birebir ayni.
+- [x] Ayni idempotency key ile tekrarlanan istek duplicate hareket olusturmaz: 10 paralel ayni webhook, tek yukleme.
+- [x] Ayni blokeye 10 paralel tahsil: para yalnizca bir kez duser.
 
 ---
 
@@ -130,6 +131,7 @@ Faz 2 ve Faz 3 birbirinden bagimsizdir; iki kisi veya iki paralel calisma akisi 
 - [ ] NestJS backend: health endpoint, structured logging (Pino).
 - [ ] Deterministik seans state machine (ADR-0007): `WAITING → STARTING → RUNNING → COMPLETED/FAILED`.
 - [ ] Two-phase ACK: HOLD → MQTT START → STARTED_ACK → CAPTURE. ACK gelmezse RELEASE (5 sn timeout).
+- [ ] **Gec ACK kurali:** RELEASE edilmis/iptal edilmis bir seans icin sonradan `STARTED_ACK` gelirse backend derhal STOP gonderir ve olayi kaydeder. Gerekce: saati senkron olmayan cihaz `expiresAt` kontrolunu yapamaz ve suresi dolmus START'i kabul eder (Faz 3'te cihazda goruldu, 2026-09-25).
 - [ ] Komutlar icin transactional outbox, ACK/telemetri icin idempotent inbox (ADR-0005).
 - [ ] **Seans sonu mutabakati:** Cihazin bildirdigi gercek calisma suresi ile tahsil edilen tutar karsilastirilir; fark iade veya duzeltme entry'si olarak islenir. Seans ortasinda cihaz kaybolursa (guc/ag) seans `RECONCILING` durumuna alinir ve cihaz geri geldiginde kapatilir.
 - [ ] Device twin: desired/reported state, drift tespiti (ADR-0006).

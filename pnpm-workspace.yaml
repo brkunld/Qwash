@@ -7,3 +7,6 @@ allowBuilds:
   '@parcel/watcher': true # Next/Nest dosya izleyicisi icin native modul
   unrs-resolver: true # ESLint import cozumleyicisinin native modulu
   '@scarf/scarf': false # Kullanim telemetrisi; gerekli degil
+  '@prisma/engines': true # Migration (schema engine) ikili dosyasi
+  prisma: true # Prisma CLI kurulum adimi
+  esbuild: true # tsx icin platforma ozel derleyici ikili dosyasi

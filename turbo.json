@@ -15,6 +15,11 @@
       "dependsOn": ["^build"],
       "outputs": []
     },
+    "test:integration": {
+      "dependsOn": ["^build"],
+      "cache": false,
+      "passThroughEnv": ["DATABASE_URL", "TEST_DATABASE_URL"]
+    },
     "dev": {
       "dependsOn": ["^build"],
       "cache": false,

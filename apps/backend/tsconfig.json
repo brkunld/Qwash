@@ -2,8 +2,8 @@
   "extends": "@qwash/tsconfig/nestjs.json",
   "compilerOptions": {
     "outDir": "dist",
-    "rootDir": "src",
+    "rootDir": ".",
     "types": ["node", "jest"]
   },
-  "include": ["src"]
+  "include": ["src", "test", "prisma", "prisma.config.ts"]
 }

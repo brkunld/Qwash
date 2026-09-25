@@ -38,7 +38,7 @@ services:
   mosquitto:
     image: eclipse-mosquitto:2
     ports:
-      - '127.0.0.1:${MQTT_HOST_PORT:-11883}:1883' # MQTT
+      - '${MQTT_BIND:-127.0.0.1}:${MQTT_HOST_PORT:-11883}:1883' # MQTT (ESP32 testi icin .env'de MQTT_BIND=0.0.0.0)
       - '127.0.0.1:${MQTT_WS_HOST_PORT:-19001}:9001' # MQTT over WebSocket
     volumes:
       - ./docker/mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
