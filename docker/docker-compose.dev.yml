@@ -42,9 +42,13 @@ services:
       - '127.0.0.1:${MQTT_WS_HOST_PORT:-19001}:9001' # MQTT over WebSocket
     volumes:
       - ./docker/mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - ./docker/mosquitto/acl:/mosquitto/config/acl:ro
+      - ./docker/mosquitto/passwd:/mosquitto/config/passwd:ro # pnpm mqtt:credentials
       - mosquitto-data:/mosquitto/data
+    environment:
+      MQTT_HEALTH_PASSWORD: ${MQTT_HEALTH_PASSWORD:?pnpm mqtt:credentials oncesi .env'de tanimla}
     healthcheck:
-      test: ['CMD', 'mosquitto_sub', '-t', '$$SYS/broker/uptime', '-C', '1', '-W', '3']
+      test: ['CMD-SHELL', 'mosquitto_sub -u qwash-health -P "$$MQTT_HEALTH_PASSWORD" -t \$$SYS/broker/uptime -C 1 -W 3']
       interval: 5s
       timeout: 5s
       retries: 10

@@ -27,6 +27,7 @@
 static char deviceId[13];  // MAC, ayiracsiz buyuk harf (docs/IOT.md)
 static char mqttHost[64] = DEFAULT_MQTT_HOST;
 static char mqttPortStr[8] = DEFAULT_MQTT_PORT;
+static char mqttPass[65] = "";  // Kullanici adi deviceId; sifre portaldan girilir (docker/mosquitto/acl).
 static char stationId[32] = DEFAULT_STATION_ID;
 static char bayId[32] = DEFAULT_BAY_ID;
 static char qrBase[96] = DEFAULT_QR_BASE;
@@ -134,6 +135,7 @@ static uint32_t remainingSec() {
 static void loadSettings() {
   strlcpy(mqttHost, prefs.getString("mqttHost", DEFAULT_MQTT_HOST).c_str(), sizeof(mqttHost));
   strlcpy(mqttPortStr, prefs.getString("mqttPort", DEFAULT_MQTT_PORT).c_str(), sizeof(mqttPortStr));
+  strlcpy(mqttPass, prefs.getString("mqttPass", DEFAULT_MQTT_PASS).c_str(), sizeof(mqttPass));
   strlcpy(stationId, prefs.getString("station", DEFAULT_STATION_ID).c_str(), sizeof(stationId));
   strlcpy(bayId, prefs.getString("bay", DEFAULT_BAY_ID).c_str(), sizeof(bayId));
   strlcpy(qrBase, prefs.getString("qrBase", DEFAULT_QR_BASE).c_str(), sizeof(qrBase));
@@ -390,6 +392,8 @@ static void onSaveParams() { paramsChanged = true; }
 
 static WiFiManagerParameter pHost("host", "MQTT sunucu (IP)", DEFAULT_MQTT_HOST, 63);
 static WiFiManagerParameter pPort("port", "MQTT port", DEFAULT_MQTT_PORT, 7);
+// Kayitli sifre portalda gosterilmez; bos birakilirsa mevcut sifre korunur.
+static WiFiManagerParameter pPass("pass", "MQTT sifre (bos = degistirme)", "", 64, "type='password'");
 static WiFiManagerParameter pStation("station", "Istasyon ID", DEFAULT_STATION_ID, 31);
 static WiFiManagerParameter pBay("bay", "Peron ID", DEFAULT_BAY_ID, 31);
 static WiFiManagerParameter pQr("qr", "QR taban adresi", DEFAULT_QR_BASE, 95);
@@ -397,6 +401,7 @@ static WiFiManagerParameter pQr("qr", "QR taban adresi", DEFAULT_QR_BASE, 95);
 static void applyPortalParams() {
   prefs.putString("mqttHost", pHost.getValue());
   prefs.putString("mqttPort", pPort.getValue());
+  if (strlen(pPass.getValue()) > 0) prefs.putString("mqttPass", pPass.getValue());
   prefs.putString("station", pStation.getValue());
   prefs.putString("bay", pBay.getValue());
   prefs.putString("qrBase", pQr.getValue());
@@ -419,7 +424,8 @@ static void mqttTryConnect() {
   snprintf(lwt, sizeof(lwt),
            "{\"deviceId\":\"%s\",\"stationId\":\"%s\",\"bayId\":\"%s\",\"payload\":{\"type\":\"DEVICE_STATUS\",\"status\":\"OFFLINE\"}}",
            deviceId, stationId, bayId);
-  if (mqtt.connect(clientId, nullptr, nullptr, tStatus, 1, true, lwt)) {
+  // rc=4/5 donerse kullanici/sifre ya da yetki hatasi: sifreyi portaldan gir.
+  if (mqtt.connect(clientId, deviceId, mqttPass, tStatus, 1, true, lwt)) {
     Serial.printf("[mqtt] baglandi %s:%s\n", mqttHost, mqttPortStr);
     mqtt.subscribe(tCmd, 1);
     publishStatus(sess.active ? "BUSY" : "ONLINE");
@@ -549,6 +555,7 @@ void setup() {
   pQr.setValue(qrBase, 95);
   wm.addParameter(&pHost);
   wm.addParameter(&pPort);
+  wm.addParameter(&pPass);
   wm.addParameter(&pStation);
   wm.addParameter(&pBay);
   wm.addParameter(&pQr);

@@ -2,7 +2,7 @@
 // QWASH peron firmware'i (Faz 3 SPIKE). Kontrat: docs/IOT.md
 // Donanim: ESP32-32E 3.2" ST7789 240x320 (SKU E32R32P).
 
-#define FW_VERSION "0.2.2-spike"
+#define FW_VERSION "0.3.0-spike"
 
 // ---- Ekran pinleri (E32R32P uretici semasi; kartinla dogrula) ----
 constexpr int PIN_TFT_SCLK = 14;
@@ -37,6 +37,15 @@ constexpr uint32_t WIFI_RETRY_MS = 15000;  // Wi-Fi kopunca kendi yeniden deneme
 // ---- Portal ile ayarlanabilen varsayilanlar (NVS'te saklanir) ----
 #define DEFAULT_MQTT_HOST "192.168.1.100"  // Bilgisayarinin LAN IP'si
 #define DEFAULT_MQTT_PORT "11883"          // docker/docker-compose.dev.yml
+// MQTT sifresi (kullanici adi deviceId). Portal yalnizca Wi-Fi baglanamazsa acildigi icin
+// gelistirmede sifre secrets.h'den gelir (git'e girmez; secrets.h.example'a bak). NVS'te portaldan
+// girilmis sifre varsa o kullanilir.
+#if __has_include("secrets.h")
+#include "secrets.h"
+#endif
+#ifndef DEFAULT_MQTT_PASS
+#define DEFAULT_MQTT_PASS ""
+#endif
 #define DEFAULT_STATION_ID "STATION-01"
 #define DEFAULT_BAY_ID "BAY-001"
 // QR icerigi = QR_BASE + bayId. Gercek alan adi belli olunca portaldan guncellenir.

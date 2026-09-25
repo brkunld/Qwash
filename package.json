@@ -20,6 +20,7 @@
     "db:studio": "pnpm --filter @qwash/backend db:studio",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
+    "mqtt:credentials": "node scripts/mqtt-credentials.mjs",
     "infra:up": "docker compose --project-directory . -f docker/docker-compose.dev.yml up -d --wait",
     "infra:down": "docker compose --project-directory . -f docker/docker-compose.dev.yml down",
     "infra:check": "docker compose --project-directory . -f docker/docker-compose.dev.yml config --quiet"

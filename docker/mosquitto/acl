@@ -1,0 +1,18 @@
+# Kullanici bazli ACL (docs/IOT.md 3.1). Listede olmayan topic'e erisim reddedilir.
+# Cihaz kullanici adi = MAC tabanli deviceId. Cihaz yalnizca kendi peronunun topic'lerini kullanir;
+# portalda yanlis istasyon/peron girilse bile baska peron adina yayin yapamaz.
+
+user qwash-backend
+topic readwrite qwash/#
+
+user qwash-health
+topic read $SYS/broker/uptime
+
+# ---- Gelistirme cihazi (E32R32P) ----
+user 4CC382C3CC1C
+topic read qwash/station/STATION-01/bay/BAY-001/cmd
+topic write qwash/station/STATION-01/bay/BAY-001/ack
+topic write qwash/station/STATION-01/bay/BAY-001/status
+topic write qwash/station/STATION-01/bay/BAY-001/heartbeat
+topic write qwash/station/STATION-01/bay/BAY-001/telemetry
+topic write qwash/station/STATION-01/bay/BAY-001/events

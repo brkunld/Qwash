@@ -40,6 +40,8 @@ Bu doküman, peronlarda çalışan ESP32 gömülü sisteminin haberleşme protok
 
 ## 3. MQTT Topic Hiyerarşisi & Kapsamlı Erişim (ACL)
 
+> **Uygulama (geliştirme, 2026-09-26):** Anonim bağlantı kapalı. Kullanıcılar: `qwash-backend` (`qwash/#`), `qwash-health` (yalnız `$SYS/broker/uptime`) ve her cihaz için `deviceId` (MAC). Cihaz yalnızca kendi peronunun `cmd` topic'ini okur, `ack/status/heartbeat/telemetry/events` topic'lerine yazar; başka peron adına yayın broker'da düşer. Tanımlar `docker/mosquitto/acl`, şifreler `.env` → `pnpm mqtt:credentials`. TLS sonraki adım.
+
 Her ESP32 cihazı yalnızca kendi istasyon ve peronuna ait topic'leri dinleyebilir ve yayınlayabilir (Yetkisiz dinleme ve spoofing engellenir):
 
 | Topic                                           | Yön             | QoS | İçerik                                                             |
