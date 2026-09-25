@@ -36,3 +36,5 @@ apps/backend/src/generated/
 # MQTT kimlikleri (pnpm mqtt:credentials ile uretilir)
 docker/mosquitto/passwd
 firmware/qwash_bay/secrets.h
+docker/mosquitto/certs/
+firmware/qwash_bay/mqtt_ca.h
