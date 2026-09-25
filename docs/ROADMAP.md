@@ -222,9 +222,9 @@ Faz 2 ve Faz 3 birbirinden bagimsizdir; iki kisi veya iki paralel calisma akisi 
 | 1 | Tarife gercek mi ornek mi? | **Kapandi (2026-09-25):** Fiyatlari admin belirler; dokumandaki degerler seed/ornek. |
 | 2 | Musteri kimligi | **Kapandi (2026-09-25):** E-posta/sifre + Google, misafir yok, telefon opsiyonel (ADR-0009). |
 | 3 | Ekran davranisi | **Kapandi (2026-09-25):** Dokunmatik ekran yalnizca sure gosterir; girisler PWA'dan. |
-| 4 | Iade / para cikarma politikasi | **Ertelendi.** Faz 5'te kullanim sartlari metni yazilmadan once (en gec bakiye yukleme UI'i bitmeden) karara baglanmali. Iyzico komisyonu ve yasal gereksinimler nedeniyle pilot oncesine birakilamaz. |
-| 5 | Minimum bakiye yukleme tutari | **Acik.** Iyzico komisyonu kucuk tutarlarda orani buyutur; iade politikasiyla birlikte karara baglanacak. |
-| 6 | Elektrik/internet kesintisinde iade politikasi | **Acik.** Iade politikasiyla (4) birlikte; mutabakat kurallarinin is tarafi. |
+| 4 | Iade / para cikarma politikasi | **Kapandi (2026-09-26, Burak):** Bakiye iadesi yok. Iki istisna: (a) teknik hata / hizmet alamama (su, elektrik, vana, sistem arizasi) icin musteri destek talebi acar; (b) hesap silme / kullanimdan vazgecme durumunda kalan bakiye talep edilebilir. Iade yalniz paranin yuklendigi orijinal kart islemine Iyzico refund/cancel ile yapilir; baska IBAN'a veya karta asla gonderilmez. Iade kullanici arayuzunden tek tikla yapilmaz: destek kanaliyla gelir, admin panelinden (Faz 6) yonetici onayiyla yapilir. |
+| 5 | Minimum bakiye yukleme tutari | **Kapandi (2026-09-26, Burak):** Admin ayarlar. Musteri ekranindaki hazir tutarlar bu minimumun katlarindan otomatik uretilir (orn. 50 → 50 / 100 / 200). |
+| 6 | Elektrik/internet kesintisinde iade politikasi | **Kapandi (4a ile):** Cihaz kaybinda kanitlanmis sure disi otomatik iade (Faz 4); diger ariza iadeleri destek talebi + admin onayi. |
 | 7 | Bir istasyonda kac peron, bir peronda kac program/role? | **Kismen:** Cihaz basina 4 role (Su/Kopuk/Cila/Hava). Istasyon basina peron sayisi acik; MVP tek peron. |
 | 8 | E-fatura/e-arsiv gerekiyor mu? | **Acik.** Muhasebeciyle teyit edilmeli; odeme akisina ek entegrasyon gerektirebilir. |
 | 9 | Pilotun yeri, kapsami ve zamani | **Acik.** Faz 7 oncesi belirlenecek. |
