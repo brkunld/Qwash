@@ -1,0 +1,10 @@
+#!/bin/sh
+# Push oncesi yerel CI (scripts/ci-local.mjs). Acil durumda atlamak icin: git push --no-verify
+# Yalniz silme push'u (git push origin --delete ...) icin calismaz.
+while read -r local_ref local_sha remote_ref remote_sha; do
+  case "$local_sha" in
+    0000000000000000000000000000000000000000) ;;
+    *) exec pnpm run ci:local ;;
+  esac
+done
+exit 0
