@@ -685,6 +685,141 @@ describe('SessionService (gercek PostgreSQL)', () => {
     expect(publisher.sent.length + p2.sent.length).toBe(1);
   });
 
+  // ---------------------------------------------------------------- ariza enjeksiyonu
+
+  it('STARTED_ACK kaybolur ama cihaz calisip biterse: gercek sureyle kapanir, sonra gelen ACK etkisiz', async () => {
+    const user = await userWith(10_000);
+    const s = await start(user, 60);
+    // ACK hic gelmedi; zaman asimi taramasindan once cihazin bitis bildirimi ulasti.
+    expect(await ended(s, 20)).toBe('SESSION_COMPLETED');
+    expect(await reload(s)).toMatchObject({
+      status: SessionStatus.COMPLETED,
+      usedSeconds: 40,
+      chargedKurus: 2000n,
+    });
+    expect(await balance(user)).toBe(8_000);
+    expect(await available(user)).toBe(8_000);
+    expect(await bayStatus()).toBe(BayStatus.IDLE);
+
+    // Kaybolan ACK gec gelir, tarama da calisir: hicbiri seansi ya da parayi degistirmez.
+    expect(await ack(s)).toBe('NO_OP');
+    advance(DEFAULT_TIMINGS.ackTimeoutMs);
+    expect((await sessions.sweep()).ackTimeouts).toBe(0);
+    expect((await reload(s)).status).toBe(SessionStatus.COMPLETED);
+    expect(await balance(user)).toBe(8_000);
+    await outbox.publishPending(publisher);
+    expect(publisher.ofType('STOP')).toHaveLength(0);
+  });
+
+  it('ayni ACK farkli eventId ile eszamanli gelirse seans bir kez RUNNING olur', async () => {
+    const user = await userWith(10_000);
+    const s = await start(user, 60);
+    const outcomes = await Promise.all(Array.from({ length: 5 }, () => ack(s)));
+    expect(outcomes.filter((o) => o === 'SESSION_RUNNING')).toHaveLength(1);
+    expect(outcomes.filter((o) => o !== 'SESSION_RUNNING').every((o) => o === 'NO_OP')).toBe(true);
+    expect(
+      await prisma.sessionTransition.count({
+        where: { sessionId: s.id, toState: SessionStatus.RUNNING },
+      }),
+    ).toBe(1);
+    expect((await holdOf(s)).status).toBe(HoldStatus.ACTIVE);
+  });
+
+  it('ayni ACK ayni eventId ile eszamanli gelirse yalnizca biri islenir', async () => {
+    const user = await userWith(10_000);
+    const s = await start(user, 60);
+    const id = randomUUID();
+    const outcomes = await Promise.all(Array.from({ length: 5 }, () => ack(s, 'SUCCESS', {}, id)));
+    expect(outcomes.filter((o) => o === 'SESSION_RUNNING')).toHaveLength(1);
+    expect(outcomes.filter((o) => o === 'DUPLICATE_EVENT')).toHaveLength(4);
+  });
+
+  it('eszamanli bitis bildirimleri (SESSION_ENDED x3 + STOPPED_ACK) tek tahsilat yapar', async () => {
+    const user = await userWith(10_000);
+    const s = await start(user, 60);
+    await ack(s);
+    const outcomes = await Promise.all([
+      ended(s, 30),
+      ended(s, 30),
+      ended(s, 30),
+      deviceSays(BAY, {
+        type: 'STOPPED_ACK',
+        commandId: randomUUID(),
+        sessionId: s.id,
+        status: 'SUCCESS',
+        remainingSec: 30,
+      }),
+    ]);
+    expect(outcomes.filter((o) => o === 'SESSION_COMPLETED')).toHaveLength(1);
+    expect(
+      await prisma.ledgerEntry.count({ where: { holdId: s.holdId, type: LedgerType.CAPTURE } }),
+    ).toBe(1);
+    expect(await reload(s)).toMatchObject({ usedSeconds: 30, chargedKurus: 1500n });
+    expect(await balance(user)).toBe(8_500);
+    expect(await available(user)).toBe(8_500);
+  });
+
+  it('backend yeniden baslarsa: bekleyen START yeni sureçte gider, ACK ve tekrarlari dogru islenir', async () => {
+    const user = await userWith(10_000);
+    const s = await start(user, 60);
+    const ackId = randomUUID();
+
+    // Eski surec START'i yayinlayamadan oldu; durum yalnizca veritabaninda.
+    const outbox2 = new OutboxService(prisma, clock);
+    const sessions2 = new SessionService(prisma, wallets, outbox2, clock);
+    advance(2_000);
+    await outbox2.publishPending(publisher);
+    expect(publisher.ofType('START')).toHaveLength(1);
+    expect(publisher.ofType('START')[0]!.envelope.commandId).toBe(s.startCommandId);
+
+    const envelope = (payload: object) =>
+      JSON.stringify({ eventId: ackId, deviceId: DEVICE, stationId: STATION, bayId: BAY, payload });
+    const ackMsg = envelope({
+      type: 'STARTED_ACK',
+      commandId: s.startCommandId,
+      sessionId: s.id,
+      status: 'SUCCESS',
+    });
+    expect(await sessions2.handleDeviceMessage(T(BAY, 'ack'), ackMsg)).toBe('SESSION_RUNNING');
+    // Broker (clean: false) ayni mesaji yeniden baslayan diger surece de teslim eder.
+    expect(await sessions.handleDeviceMessage(T(BAY, 'ack'), ackMsg)).toBe('DUPLICATE_EVENT');
+
+    await sessions2.handleDeviceMessage(
+      T(BAY, 'events'),
+      JSON.stringify({
+        eventId: randomUUID(),
+        deviceId: DEVICE,
+        stationId: STATION,
+        bayId: BAY,
+        payload: { type: 'SESSION_ENDED', sessionId: s.id, reason: 'COMPLETED', remainingSec: 0 },
+      }),
+    );
+    expect(await reload(s)).toMatchObject({ status: SessionStatus.COMPLETED, chargedKurus: 3000n });
+    expect(await balance(user)).toBe(7_000);
+  });
+
+  it('yayindan sonra "gonderildi" yazilamadan cokerse: komut ayni commandId ile tekrar gider', async () => {
+    const user = await userWith(10_000);
+    const s = await start(user, 60);
+    await outbox.publishPending(publisher);
+    // Cokme benzetimi: broker mesaji aldi ama kayit PENDING kaldi.
+    await prisma.outboxEvent.updateMany({
+      data: { status: OutboxStatus.PENDING, publishedAt: null },
+    });
+    await outbox.publishPending(publisher);
+
+    const starts = publisher.ofType('START');
+    expect(starts).toHaveLength(2);
+    // Cihaz tekrari commandId ile ayirt eder (firmware idempotency); ikisi birebir ayni olmali.
+    expect(starts[1]!.envelope).toEqual(starts[0]!.envelope);
+    expect(starts[0]!.envelope.commandId).toBe(s.startCommandId);
+
+    // Cihaz iki komut icin de ACK gonderse bile tek seans, tek bloke.
+    expect(await ack(s)).toBe('SESSION_RUNNING');
+    expect(await ack(s)).toBe('NO_OP');
+    expect(await available(user)).toBe(10_000 - 60 * PRICE);
+  });
+
   it('gecersiz cihaz mesajlari sistemi bozmaz', async () => {
     expect(await sessions.handleDeviceMessage('baska/topic', '{}')).toBe('IGNORED_TOPIC');
     expect(await sessions.handleDeviceMessage(T(BAY, 'ack'), 'bu json degil')).toBe('INVALID_JSON');
