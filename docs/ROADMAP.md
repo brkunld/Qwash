@@ -229,9 +229,8 @@ Uc alt faz (2026-09-26 plani). Model onerisi parantez icinde.
 - [ ] Production Docker/Nginx deployment.
 - [ ] Yedekleme ve **test edilmis** restore proseduru.
 - [ ] Gozlemlenebilirlik: log toplama, health check, temel alarm (cihaz cevrimdisi, odeme hatasi, ACK zaman asimi orani).
-- [ ] Eszamanli seans baslatma icin yuk testi.
-- [ ] Musteri, admin, API ve cihaz akislari icin smoke testler.
-- [ ] Guvenlik gozden gecirmesi: auth, secret yonetimi, MQTT, odeme, rate limit.
+- [x] Eszamanli seans baslatma icin yuk testi. `pnpm --filter @qwash/backend test:load`; sonuclar `docs/LOAD-TEST.md` (double spending / kayip odemeli seans yok; asiri yukte 503 SERVICE_BUSY). Canlidan once hedef sunucuda bir kez daha calistirilmali.- [ ] Musteri, admin, API ve cihaz akislari icin smoke testler.
+- [x] Guvenlik gozden gecirmesi: auth, secret yonetimi, MQTT, odeme, rate limit. `docs/SECURITY.md` bolum 8 (acik kalanlar: admin MFA, hiz siniri bellekte).
 - [ ] Yaygin arizalar icin operasyon runbook'u.
 - [ ] Saha kurulum ve devreye alma kontrol listesi.
 - [ ] Faz 3'teki donanim spike'inin gercek cihazla dogrulandiginin kaydi.

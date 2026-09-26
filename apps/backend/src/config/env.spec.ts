@@ -15,6 +15,7 @@ describe('validateEnv', () => {
       JWT_ACCESS_SECRET,
       CUSTOMER_APP_URL: 'http://localhost:3000',
       TRUST_PROXY: 0,
+      DB_POOL_MAX: 10,
       CORS_ORIGINS: 'http://localhost:3000,http://localhost:3002',
       API_PUBLIC_URL: 'http://localhost:3001',
       IYZICO_BASE_URL: 'https://sandbox-api.iyzipay.com',

@@ -7,6 +7,9 @@ export const EnvSchema = z
     BACKEND_PORT: z.coerce.number().int().positive().default(3001),
     LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
     DATABASE_URL: z.url({ protocol: /^postgres(ql)?$/ }),
+    // Veritabani baglanti havuzu. Havuz dolunca islem 2 sn icinde baslayamazsa istek
+    // 503 SERVICE_BUSY alir (yuk testi, docs/LOAD-TEST.md). PostgreSQL max_connections'i asmamali.
+    DB_POOL_MAX: z.coerce.number().int().min(1).max(100).default(10),
     MQTT_URL: z.url({ protocol: /^mqtts?$/ }).default('mqtt://localhost:11883'),
     // Access token imza anahtari (HS256), en az 32 karakter rastgele (SECURITY.md).
     JWT_ACCESS_SECRET: z.string().min(32),
