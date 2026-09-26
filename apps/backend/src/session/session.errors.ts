@@ -46,6 +46,12 @@ export class SessionNotFoundError extends SessionError {
   }
 }
 
+export class SessionAccountNotActiveError extends SessionError {
+  constructor() {
+    super('ACCOUNT_NOT_ACTIVE', 'Hesap kapali; seans baslatilamaz.');
+  }
+}
+
 export class SessionIdempotencyConflictError extends SessionError {
   constructor(key: string) {
     super(

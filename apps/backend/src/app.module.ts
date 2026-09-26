@@ -1,14 +1,16 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
-import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { ThrottlerModule } from '@nestjs/throttler';
 import { LoggerModule } from 'nestjs-pino';
 import { AccountModule } from './account/account.module';
 import { AuthModule } from './auth/auth.module';
 import { Env, validateEnv } from './config/env';
 import { HealthController } from './health/health.controller';
+import { UserThrottlerGuard } from './http/user-throttler.guard';
 import { PaymentsModule } from './payments/payments.module';
 import { PrismaModule } from './prisma/prisma.module';
+import { RealtimeModule } from './realtime/realtime.module';
 import { SessionModule } from './session/session.module';
 import { WalletModule } from './wallet/wallet.module';
 
@@ -41,8 +43,9 @@ import { WalletModule } from './wallet/wallet.module';
     AuthModule,
     PaymentsModule,
     AccountModule,
+    RealtimeModule,
   ],
   controllers: [HealthController],
-  providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
+  providers: [{ provide: APP_GUARD, useClass: UserThrottlerGuard }],
 })
 export class AppModule {}

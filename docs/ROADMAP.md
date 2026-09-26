@@ -139,7 +139,7 @@ Faz 2 ve Faz 3 birbirinden bagimsizdir; iki kisi veya iki paralel calisma akisi 
 - [x] **RECONCILING'de kalan seans icin is kurali (2026-09-25):** 30 dk cihaz beklenir; donmezse yalnizca kanitlanmis kullanim tahsil, kalan iade, admin incelemesine isaret (ADR-0010 #8). Firmware son bitisi her baglantida yeniden gonderir.
 - [x] Device twin: desired/reported state, drift tespiti (ADR-0006). Desired seans tablosundan turetilir; heartbeat ile karsilastirilir. Aktif seansi olmayan calismaya aninda STOP (`DRIFT`), diger uyusmazliklar 15 sn tolerans sonrasi `Device.driftConfirmedAt`. Admin bildirimi Faz 6.
 - [ ] MQTT guvenligi: TLS, cihaz basina kimlik/ACL (cihaz yalniz kendi topic'lerine yazar/okur).
-- [ ] Gercek zamanli seans durumu (Socket.IO) + `GET /sessions/active` ile durum geri yukleme.
+- [x] Gercek zamanli seans durumu (Socket.IO) + `GET /sessions/active` ile durum geri yukleme. _(Faz 5c, 2026-09-26: pg NOTIFY + kullanici odasi)_
 
 **Tamamlanma Kriterleri**
 - START'a ACK gelmezse bloke tutar serbest kalir, peron `ERROR` olur.
@@ -167,7 +167,8 @@ Faz 2 ve Faz 3 birbirinden bagimsizdir; iki kisi veya iki paralel calisma akisi 
 - [ ] KVKK: aydinlatma metni, kullanim sartlari (iade politikasi metni dahil), hesap silme ekrani (PWA, 5d).
 - [ ] Iade talebinin islenmesi (Faz 6): Iyzico `/payment/refund` (karta), EFT (IBAN, alici adi muhurlu adla gozle karsilastirilir), `CASH_REFUND` (kasa); bloke tahsil edilir, `CardTopUp.refundedKurus` artar, `contactEmail` temizlenir.
 - [ ] Hareketsiz bakiye hatirlatmasi (9-10 ay, yalniz bilgilendirme dili) — e-posta saglayicisi secilince.
-- [ ] QR sonrasi peron onay adimi ("Peron X'e baglaniyorsunuz"); QR adresi yalniz QWASH alan adina gider, bilinmeyen `bayCode` icin anlasilir hata.
+- [x] Seans REST uclari ve anlik durum (Faz 5c, 2026-09-26): `POST /sessions`, `GET /sessions/active`, `GET /sessions/:id`, `POST /sessions/:id/stop`, Socket.IO `session.updated` / `session.resync`. Hiz siniri girisli istekte kullanici basina. 11 HTTP + soket entegrasyon testi.
+- [ ] QR sonrasi peron onay adimi ("Peron X'e baglaniyorsunuz"); QR adresi yalniz QWASH alan adina gider, bilinmeyen `bayCode` icin anlasilir hata. _Backend hazir (`GET /bays/:bayCode`, 5c); ekran 5d'de._
 - [ ] Musteri PWA (Next.js): QR ile peron baglama, kayit/giris, bakiye yukleme, program secimi, canli seans ekrani (kalan sure/bakiye).
 - [ ] PWA manifest, ana ekrana ekleme, arka plandan donuste seans durumu geri yukleme (ADR-0008).
 - [ ] Kullanici deneyimi: ilk kez gelen musteri icin sade akis, hata durumlarinda anlasilir mesaj (ACK zaman asimi, yetersiz bakiye, peron dolu).

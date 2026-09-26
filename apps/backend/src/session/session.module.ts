@@ -7,12 +7,22 @@ import { OutboxService } from '../outbox/outbox.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { WalletModule } from '../wallet/wallet.module';
 import { WalletService } from '../wallet/wallet.service';
+import { AuthModule } from '../auth/auth.module';
+import { BayController, SessionController } from './session.controller';
+import { SessionQueries } from './session.queries';
 import { SessionService } from './session.service';
 import { SessionWorker } from './session.worker';
 
 @Module({
-  imports: [WalletModule],
+  imports: [WalletModule, AuthModule],
+  controllers: [BayController, SessionController],
   providers: [
+    {
+      provide: SessionQueries,
+      inject: [PrismaService, SessionService],
+      useFactory: (prisma: PrismaService, sessions: SessionService) =>
+        new SessionQueries(prisma, sessions),
+    },
     {
       provide: OutboxService,
       inject: [PrismaService],
@@ -37,6 +47,6 @@ import { SessionWorker } from './session.worker';
         new SessionWorker(mqtt, outbox, sessions, { outboxMs: 250, sweepMs: 1_000 }),
     },
   ],
-  exports: [SessionService],
+  exports: [SessionService, SessionQueries],
 })
 export class SessionModule {}
