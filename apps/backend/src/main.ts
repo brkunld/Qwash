@@ -5,17 +5,25 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { Logger } from 'nestjs-pino';
 import { AppModule } from './app.module';
 import { Env } from './config/env';
+import { configureApp } from './http/configure-app';
 
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule, { bufferLogs: true });
   app.useLogger(app.get(Logger));
-  app.setGlobalPrefix('api/v1');
+  const config = app.get<ConfigService<Env, true>>(ConfigService);
+  configureApp(
+    app,
+    config
+      .get('CORS_ORIGINS', { infer: true })
+      .split(',')
+      .map((origin) => origin.trim())
+      .filter(Boolean),
+  );
   app.enableShutdownHooks();
 
   const swaggerConfig = new DocumentBuilder().setTitle('QWASH API').setVersion('0.0.0').build();
   SwaggerModule.setup('api/docs', app, SwaggerModule.createDocument(app, swaggerConfig));
 
-  const config = app.get<ConfigService<Env, true>>(ConfigService);
   await app.listen(config.get('BACKEND_PORT', { infer: true }));
 }
 

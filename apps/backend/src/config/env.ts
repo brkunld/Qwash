@@ -7,6 +7,14 @@ export const EnvSchema = z.object({
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
   DATABASE_URL: z.url({ protocol: /^postgres(ql)?$/ }),
   MQTT_URL: z.url({ protocol: /^mqtts?$/ }).default('mqtt://localhost:11883'),
+  // Access token imza anahtari (HS256), en az 32 karakter rastgele (SECURITY.md).
+  JWT_ACCESS_SECRET: z.string().min(32),
+  // Google OAuth client id; tanimli degilse Google girisi kapali.
+  GOOGLE_CLIENT_ID: z.preprocess((v) => (v === '' ? undefined : v), z.string().optional()),
+  // E-postadaki dogrulama/sifirlama baglantilarinin acilacagi musteri PWA adresi.
+  CUSTOMER_APP_URL: z.url().default('http://localhost:3000'),
+  // Tarayicidan API'ye cookie ile istek atabilecek kaynaklar (virgulle ayrilir).
+  CORS_ORIGINS: z.string().default('http://localhost:3000'),
 });
 
 export type Env = z.infer<typeof EnvSchema>;

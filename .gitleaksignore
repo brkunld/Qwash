@@ -1,3 +1,5 @@
 # docs/API.md ornek Idempotency-Key (UUID) API anahtari saniliyor; gercek sir degil.
 7a530462d4ceb61e6823d8cb85a05b3d82bf34f7:docs/API.md:generic-api-key:64
 35b6a99e8d36f61f372415ca541c7bb756bc379c:docs/API.md:generic-api-key:64
+# auth testinde sahte imza anahtari; gercek sir degil (sonraki commit'te 'b'.repeat(40) yapildi).
+1b1c7fe53934945c55098c0f134cb291c4b7c025:apps/backend/test/auth.int-spec.ts:generic-api-key:133

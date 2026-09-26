@@ -64,10 +64,65 @@ model User {
   phoneNumber     String?       @unique
   role            UserRole      @default(USER)
   status          UserStatus    @default(ACTIVE)
+  fullName        String? // Odeme saglayicisi alici adi ister (Iyzico); Google'dan gelir
   wallet          Wallet?
   sessions        WashSession[]
+  identities      AuthIdentity[]
+  refreshTokens   RefreshToken[]
+  authTokens      AuthToken[]
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
+}
+
+enum AuthProvider {
+  GOOGLE
+}
+
+// Harici kimlik yontemleri (ADR-0009). E-posta/sifre User.passwordHash'te durur.
+model AuthIdentity {
+  id             String       @id @default(uuid())
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider       AuthProvider
+  providerUserId String // Google "sub"
+  createdAt      DateTime     @default(now())
+
+  @@unique([provider, providerUserId])
+  @@index([userId])
+}
+
+// Opak refresh token; yalniz SHA-256 ozeti saklanir (SECURITY.md 1.2).
+// Donusumde eski kayit revokedAt alir; iptal edilmis token tekrar gelirse
+// kullanicinin tum oturumlari kapatilir (token reuse).
+model RefreshToken {
+  id         String    @id @default(uuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash  String    @unique
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([userId])
+}
+
+enum AuthTokenType {
+  EMAIL_VERIFY
+  PASSWORD_RESET
+}
+
+// Tek kullanimlik e-posta dogrulama / sifre sifirlama token'lari; yalniz ozet saklanir.
+model AuthToken {
+  id        String        @id @default(uuid())
+  userId    String
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      AuthTokenType
+  tokenHash String        @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime      @default(now())
+
+  @@index([userId, type])
 }
 
 // balanceKurus: cuzdandaki toplam para (bloke dahil).
