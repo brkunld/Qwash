@@ -5,6 +5,10 @@
       "dependsOn": ["^build"],
       "outputs": ["dist/**", ".next/**", "!.next/cache/**"]
     },
+    "build:ci": {
+      "dependsOn": ["^build"],
+      "outputs": ["dist-ci/**", ".next/**", "!.next/cache/**"]
+    },
     "typecheck": {
       "dependsOn": ["^build"]
     },

@@ -1,0 +1,9 @@
+{
+  // Yerel CI derlemesi (pnpm ci:local) ayri klasore yazar: `nest build` cikti klasorunu
+  // silip yeniden yazar (deleteOutDir); `dist/` kullanilsaydi acik `pnpm dev` backend'i
+  // yeniden baslarken dist/main.js'i bulamayip cokuyordu.
+  "extends": "./tsconfig.build.json",
+  "compilerOptions": {
+    "outDir": "dist-ci"
+  }
+}
