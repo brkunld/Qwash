@@ -154,3 +154,20 @@ Proje üç katmanlı test yapısı kullanır. Her katmanın kapsamı ve bağıml
 > [!TIP]
 > CI pipeline'da unit ve integration testler her PR'da çalışır. E2E testler yalnızca `main` branch'e merge sonrası staging ortamında tetiklenir (yavaş olduğu için).
 
+
+## E-posta (SMTP)
+
+Doğrulama ve şifre sıfırlama e-postaları `apps/backend/src/auth/smtp-mailer.ts` ile SMTP üzerinden gider; sağlayıcıdan bağımsızdır (Gmail, Brevo, Resend, SES SMTP...). Ayarlar `.env` dosyasındadır (`.env.example` sonundaki `SMTP_*` ve `MAIL_FROM`). `SMTP_HOST` boşsa geliştirmede bağlantı backend loguna yazılır (`[DEV e-posta]`), production'da uygulama başlamaz.
+
+**Gmail ile geliştirme/küçük pilot (alan adı gerekmez):**
+1. Google hesabında 2 adımlı doğrulama açık olmalı.
+2. <https://myaccount.google.com/apppasswords> adresinden "QWash" adıyla bir **uygulama şifresi** oluştur (16 hane). Hesap şifreni kullanma.
+3. `.env`: `SMTP_HOST=smtp.gmail.com`, `SMTP_PORT=587`, `SMTP_SECURE=false`, `SMTP_USER=<gmail adresin>`, `SMTP_PASSWORD=<uygulama şifresi>`, `MAIL_FROM=QWash <gmail adresin>`. Backend'i yeniden başlat.
+4. Dene: PWA'da "Şifremi unuttum" ile kendi adresine bağlantı iste. Backend logunda `E-posta gönderildi (PASSWORD_RESET)` görünmeli (alıcı adresi ve bağlantı loga yazılmaz).
+
+Sınırlar: Gmail günde yaklaşık 500 e-posta ile sınırlıdır ve gönderen adresi senin Gmail'in olur. Canlıda kendi alan adından gönderilmelidir (SPF/DKIM doğrulaması; Gmail ve Yahoo doğrulanmamış toplu postayı reddeder). Alan adı alınınca yalnız `.env` değişir: Brevo/Resend'in SMTP bilgileri ve `MAIL_FROM=QWash <no-reply@alanadin>`.
+
+**Tasarım kararları:**
+- Gönderim **arka planda** yapılır, istek beklemez. Beklense SMTP hatası hesap oluşmuşken kaydı 500 yapardı ve "şifremi unuttum" yanıtı hesap varsa yavaş, yoksa hızlı dönerek hesabın var olup olmadığını sızdırırdı. Başarısız gönderim loglanır (`E-posta gönderilemedi`); kullanıcı doğrulamayı hesap sayfasından yeniden isteyebilir.
+- Port 587'de STARTTLS **zorunludur**; sunucu TLS sunmazsa düz metne düşülmez, gönderim başarısız olur. Sertifika doğrulaması kapatılmaz.
+- Bağlantı ve alıcı adresi loglanmaz.

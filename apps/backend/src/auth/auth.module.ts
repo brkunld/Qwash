@@ -7,6 +7,7 @@ import { AccessTokenGuard } from './auth.guard';
 import { AuthService } from './auth.service';
 import { GoogleTokenVerifier, JoseGoogleTokenVerifier } from './google';
 import { DevConsoleMailer, Mailer } from './mailer';
+import { SmtpMailer } from './smtp-mailer';
 
 @Module({
   controllers: [AuthController],
@@ -15,9 +16,20 @@ import { DevConsoleMailer, Mailer } from './mailer';
       provide: Mailer,
       inject: [ConfigService],
       useFactory: (config: ConfigService<Env, true>): Mailer => {
+        const host = config.get('SMTP_HOST', { infer: true });
+        if (host) {
+          return new SmtpMailer({
+            host,
+            port: config.get('SMTP_PORT', { infer: true }),
+            secure: config.get('SMTP_SECURE', { infer: true }),
+            user: config.get('SMTP_USER', { infer: true }),
+            password: config.get('SMTP_PASSWORD', { infer: true }),
+            from: config.get('MAIL_FROM', { infer: true })!,
+          });
+        }
         if (config.get('NODE_ENV', { infer: true }) === 'production') {
-          // E-posta saglayicisi secilmeden production'da dogrulama/sifirlama calismaz.
-          throw new Error('Production icin e-posta saglayicisi tanimlanmadi (auth/mailer.ts)');
+          // SMTP tanimlanmadan production'da dogrulama/sifirlama calismaz.
+          throw new Error('Production icin SMTP_HOST ve MAIL_FROM tanimlanmali (.env.example)');
         }
         return new DevConsoleMailer();
       },

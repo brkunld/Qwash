@@ -1,3 +1,4 @@
+import { Logger } from '@nestjs/common';
 import type { Me } from '@qwash/contracts';
 import { jwtVerify, SignJWT } from 'jose';
 import { PrismaClient } from '../generated/prisma/client';
@@ -17,6 +18,7 @@ import {
   UnauthenticatedError,
 } from './auth.errors';
 import { GoogleTokenVerifier } from './google';
+import type { AuthMail } from './mailer';
 import { Mailer } from './mailer';
 
 // Kimlik dogrulama (ADR-0009, SECURITY.md 1-2).
@@ -58,6 +60,8 @@ export interface AccessClaims {
 let dummyHash: Promise<string> | undefined;
 
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   private readonly key: Uint8Array;
   private readonly now: () => Date;
 
@@ -233,7 +237,7 @@ export class AuthService {
       AuthTokenType.PASSWORD_RESET,
       PASSWORD_RESET_TTL_MS,
     );
-    await this.options.mailer.send({
+    this.deliver({
       to: user.email,
       kind: 'PASSWORD_RESET',
       link: this.link('/reset-password', token),
@@ -324,10 +328,22 @@ export class AuthService {
 
   private async sendVerificationMail(user: User): Promise<void> {
     const token = await this.createToken(user.id, AuthTokenType.EMAIL_VERIFY, EMAIL_VERIFY_TTL_MS);
-    await this.options.mailer.send({
+    this.deliver({
       to: user.email,
       kind: 'EMAIL_VERIFY',
       link: this.link('/verify-email', token),
+    });
+  }
+
+  /**
+   * E-postayi arka planda gonderir; istek gonderimi beklemez ve hata istemciye yansimaz.
+   * Bekleseydik (1) SMTP hatasi hesap olusmusken kayit istegini 500 yapardi, (2) "sifremi
+   * unuttum" yaniti hesap varsa yavas, yoksa hizli donerdi ve sure farki hesabin var olup
+   * olmadigini sizdirirdi. Basarisizlik loglanir; kullanici dogrulamayi yeniden isteyebilir.
+   */
+  private deliver(mail: AuthMail): void {
+    this.options.mailer.send(mail).catch((err: unknown) => {
+      this.logger.error({ err, kind: mail.kind }, 'E-posta gonderilemedi');
     });
   }
 

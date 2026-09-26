@@ -1,27 +1,49 @@
 import { z } from 'zod';
 
 // Uygulama baslarken ortam degiskenleri dogrulanir; eksik/yanlis deger varsa hemen durur.
-export const EnvSchema = z.object({
-  NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
-  BACKEND_PORT: z.coerce.number().int().positive().default(3001),
-  LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
-  DATABASE_URL: z.url({ protocol: /^postgres(ql)?$/ }),
-  MQTT_URL: z.url({ protocol: /^mqtts?$/ }).default('mqtt://localhost:11883'),
-  // Access token imza anahtari (HS256), en az 32 karakter rastgele (SECURITY.md).
-  JWT_ACCESS_SECRET: z.string().min(32),
-  // Google OAuth client id; tanimli degilse Google girisi kapali.
-  GOOGLE_CLIENT_ID: z.preprocess((v) => (v === '' ? undefined : v), z.string().optional()),
-  // E-postadaki dogrulama/sifirlama baglantilarinin acilacagi musteri PWA adresi.
-  CUSTOMER_APP_URL: z.url().default('http://localhost:3000'),
-  // Tarayicidan API'ye cookie ile istek atabilecek kaynaklar (virgulle ayrilir).
-  CORS_ORIGINS: z.string().default('http://localhost:3000'),
-  // Iyzico odeme formunun donecegi API adresi (callback: <API_PUBLIC_URL>/api/v1/payments/iyzico/callback).
-  API_PUBLIC_URL: z.url().default('http://localhost:3001'),
-  // Iyzico anahtarlari; tanimli degilse kart yukleme kapali (ADR-0003).
-  IYZICO_API_KEY: z.preprocess((v) => (v === '' ? undefined : v), z.string().optional()),
-  IYZICO_SECRET_KEY: z.preprocess((v) => (v === '' ? undefined : v), z.string().optional()),
-  IYZICO_BASE_URL: z.url().default('https://sandbox-api.iyzipay.com'),
-});
+export const EnvSchema = z
+  .object({
+    NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
+    BACKEND_PORT: z.coerce.number().int().positive().default(3001),
+    LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
+    DATABASE_URL: z.url({ protocol: /^postgres(ql)?$/ }),
+    MQTT_URL: z.url({ protocol: /^mqtts?$/ }).default('mqtt://localhost:11883'),
+    // Access token imza anahtari (HS256), en az 32 karakter rastgele (SECURITY.md).
+    JWT_ACCESS_SECRET: z.string().min(32),
+    // Google OAuth client id; tanimli degilse Google girisi kapali.
+    GOOGLE_CLIENT_ID: z.preprocess((v) => (v === '' ? undefined : v), z.string().optional()),
+    // E-postadaki dogrulama/sifirlama baglantilarinin acilacagi musteri PWA adresi.
+    CUSTOMER_APP_URL: z.url().default('http://localhost:3000'),
+    // Tarayicidan API'ye cookie ile istek atabilecek kaynaklar (virgulle ayrilir).
+    CORS_ORIGINS: z.string().default('http://localhost:3000'),
+    // Iyzico odeme formunun donecegi API adresi (callback: <API_PUBLIC_URL>/api/v1/payments/iyzico/callback).
+    API_PUBLIC_URL: z.url().default('http://localhost:3001'),
+    // Iyzico anahtarlari; tanimli degilse kart yukleme kapali (ADR-0003).
+    IYZICO_API_KEY: z.preprocess((v) => (v === '' ? undefined : v), z.string().optional()),
+    IYZICO_SECRET_KEY: z.preprocess((v) => (v === '' ? undefined : v), z.string().optional()),
+    IYZICO_BASE_URL: z.url().default('https://sandbox-api.iyzipay.com'),
+    // E-posta (SMTP). SMTP_HOST tanimli degilse gelistirmede baglanti konsola yazilir,
+    // production'da uygulama baslamaz. Gmail: smtp.gmail.com:587 + uygulama sifresi.
+    SMTP_HOST: z.preprocess((v) => (v === '' ? undefined : v), z.string().optional()),
+    SMTP_PORT: z.coerce.number().int().positive().default(587),
+    // 465 icin true (baslangicta TLS); 587 icin false (STARTTLS zorunlu).
+    SMTP_SECURE: z
+      .enum(['true', 'false'])
+      .default('false')
+      .transform((v) => v === 'true'),
+    SMTP_USER: z.preprocess((v) => (v === '' ? undefined : v), z.string().optional()),
+    SMTP_PASSWORD: z.preprocess((v) => (v === '' ? undefined : v), z.string().optional()),
+    // Gonderen, ornek: `QWash <adres@alan.com>`. SMTP_HOST tanimliysa zorunludur.
+    MAIL_FROM: z.preprocess((v) => (v === '' ? undefined : v), z.string().optional()),
+  })
+  .refine((e) => !e.SMTP_HOST || !!e.MAIL_FROM, {
+    path: ['MAIL_FROM'],
+    message: 'SMTP_HOST tanimliyken MAIL_FROM zorunlu.',
+  })
+  .refine((e) => !!e.SMTP_USER === !!e.SMTP_PASSWORD, {
+    path: ['SMTP_PASSWORD'],
+    message: 'SMTP_USER ve SMTP_PASSWORD birlikte verilmeli.',
+  });
 
 export type Env = z.infer<typeof EnvSchema>;
 
