@@ -26,9 +26,9 @@ import { RefundAdminService } from './refund-admin.service';
     },
     {
       provide: OpsService,
-      inject: [PrismaService, SessionService],
-      useFactory: (prisma: PrismaService, sessions: SessionService) =>
-        new OpsService(prisma, sessions),
+      inject: [PrismaService, SessionService, WalletService],
+      useFactory: (prisma: PrismaService, sessions: SessionService, wallets: WalletService) =>
+        new OpsService(prisma, sessions, wallets),
     },
     {
       provide: AdminService,

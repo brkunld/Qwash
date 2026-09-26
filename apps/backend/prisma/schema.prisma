@@ -41,6 +41,7 @@ enum LedgerSource {
   REFUND // Iade talebi blokesi ve iade cikisi
   FORFEIT // Hesap silmede musterinin feragat ettigi bakiye
   CASH_REFUND // Istasyonda kasadan nakit iade (Faz 6)
+  SERVICE_REFUND // Teknik hata iadesi: seans ucreti bakiyeye geri (seans basina bir kez)
 }
 
 enum HoldStatus {

@@ -1,14 +1,24 @@
 import { Injectable } from '@nestjs/common';
-import type { AdminBayView, AdminSessionView, SetMaintenanceRequest } from '@qwash/contracts';
+import type {
+  AdminBayView,
+  AdminSessionView,
+  ServiceRefundRequest,
+  SetMaintenanceRequest,
+} from '@qwash/contracts';
 import { PrismaClient } from '../generated/prisma/client';
-import type { Prisma } from '../generated/prisma/client';
-import { SessionStatus } from '../generated/prisma/enums';
+import type { LedgerEntry, Prisma } from '../generated/prisma/client';
+import { LedgerSource, SessionStatus, UserStatus } from '../generated/prisma/enums';
 import { PrismaService } from '../prisma/prisma.service';
 import { SessionNotFoundError } from '../session/session.errors';
 import { SessionService } from '../session/session.service';
-import { AdminError } from './admin.errors';
+import { WalletService } from '../wallet/wallet.service';
+import { AdminError, TargetAccountNotActiveError } from './admin.errors';
 import type { AdminActor } from './admin.guard';
+import { isUniqueViolation, lockUserWallet } from './admin.service';
 import { writeAudit } from './audit';
+
+/** Seans basina tek iade: ayni anahtar ledger'da unique oldugu icin ikinci kredi yazilamaz. */
+const serviceRefundKey = (sessionId: string) => `service-refund:${sessionId}`;
 
 const ACTIVE = [SessionStatus.STARTING, SessionStatus.RUNNING, SessionStatus.RECONCILING];
 
@@ -30,6 +40,7 @@ export class OpsService {
   constructor(
     private readonly prisma: PrismaService | PrismaClient,
     private readonly sessions: SessionService,
+    private readonly wallets: WalletService,
   ) {}
 
   /** Dashboard: tum peronlar, cihaz sagligi, aktif seans, baslatilabilirlik. */
@@ -152,7 +163,7 @@ export class OpsService {
       orderBy: { createdAt: 'asc' },
       take: 100,
     });
-    return rows.map(toSessionView);
+    return this.withRefunds(rows);
   }
 
   async session(sessionId: string): Promise<AdminSessionView> {
@@ -161,7 +172,77 @@ export class OpsService {
       include: sessionInclude,
     });
     if (!row) throw new SessionNotFoundError(sessionId);
-    return toSessionView(row);
+    return (await this.withRefunds([row]))[0]!;
+  }
+
+  /**
+   * Teknik hata iadesi (Burak, 2026-09-26): seans ucreti karta degil cuzdana geri yazilir.
+   * Seans basina en fazla bir kez; tutar tahsil edileni asamaz. Kredi, denetim kaydi ve
+   * kontroller cuzdan kilidi altinda tek transaction'da.
+   */
+  async serviceRefund(
+    actor: AdminActor,
+    sessionId: string,
+    input: ServiceRefundRequest,
+  ): Promise<AdminSessionView> {
+    const key = serviceRefundKey(sessionId);
+    try {
+      await this.prisma.$transaction(async (tx) => {
+        const s = await tx.washSession.findUnique({ where: { id: sessionId } });
+        if (!s) throw new SessionNotFoundError(sessionId);
+        // Hesap silme / nakit yukleme ile ayni kilit; silinmekte olan hesaba para yazilmaz.
+        const { user, wallet } = await lockUserWallet(tx, s.userId);
+        if (user.status === UserStatus.DELETED) throw new TargetAccountNotActiveError();
+
+        if (await tx.ledgerEntry.findUnique({ where: { idempotencyKey: key } })) {
+          throw alreadyRefunded();
+        }
+        const charged = Number(s.chargedKurus ?? 0n);
+        if (s.status !== SessionStatus.COMPLETED || charged <= 0) {
+          throw new AdminError(
+            'SESSION_NOT_REFUNDABLE',
+            'Yalniz tamamlanmis ve ucret alinmis seans iade edilebilir.',
+            { status: s.status, chargedKurus: charged },
+          );
+        }
+        const amount = input.amountKurus ?? charged;
+        if (amount > charged) {
+          throw new AdminError('REFUND_EXCEEDS_CHARGE', 'Iade tutari tahsil edileni asamaz.', {
+            chargedKurus: charged,
+          });
+        }
+
+        const entry = await this.wallets.creditTx(tx, {
+          walletId: wallet.id,
+          amountKurus: amount,
+          source: LedgerSource.SERVICE_REFUND,
+          idempotencyKey: key,
+          referenceId: sessionId,
+          note: input.reason,
+        });
+        await writeAudit(tx, {
+          actorId: actor.userId,
+          action: 'SESSION_SERVICE_REFUND',
+          targetType: 'SESSION',
+          targetId: sessionId,
+          reason: input.reason,
+          details: { ledgerEntryId: entry.id, amountKurus: amount, chargedKurus: charged },
+        });
+      });
+    } catch (error) {
+      // Eszamanli iki istek: kaybeden unique ihlaliyle geri alinir.
+      if (isUniqueViolation(error)) throw alreadyRefunded();
+      throw error;
+    }
+    return this.session(sessionId);
+  }
+
+  private async withRefunds(rows: SessionRow[]): Promise<AdminSessionView[]> {
+    const entries = await this.prisma.ledgerEntry.findMany({
+      where: { idempotencyKey: { in: rows.map((r) => serviceRefundKey(r.id)) } },
+    });
+    const bySession = new Map(entries.map((e) => [e.referenceId, e]));
+    return rows.map((r) => toSessionView(r, bySession.get(r.id)));
   }
 
   /**
@@ -197,7 +278,14 @@ export class OpsService {
   }
 }
 
-function toSessionView(s: SessionRow): AdminSessionView {
+function alreadyRefunded(): AdminError {
+  return new AdminError(
+    'SESSION_ALREADY_REFUNDED',
+    'Bu seans icin teknik hata iadesi zaten yapildi.',
+  );
+}
+
+function toSessionView(s: SessionRow, refund?: LedgerEntry): AdminSessionView {
   return {
     id: s.id,
     userId: s.userId,
@@ -216,5 +304,12 @@ function toSessionView(s: SessionRow): AdminSessionView {
     transitions: s.transitions.map((t) => ({ reason: t.reason, at: t.createdAt.toISOString() })),
     createdAt: s.createdAt.toISOString(),
     endedAt: s.endedAt?.toISOString() ?? null,
+    serviceRefund: refund
+      ? {
+          amountKurus: Number(refund.amountKurus),
+          note: refund.note,
+          at: refund.createdAt.toISOString(),
+        }
+      : null,
   };
 }

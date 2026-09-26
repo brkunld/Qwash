@@ -31,6 +31,8 @@ import {
   AdminStopSessionRequestSchema,
   type ReviewSessionRequest,
   ReviewSessionRequestSchema,
+  type ServiceRefundRequest,
+  ServiceRefundRequestSchema,
   type SetMaintenanceRequest,
   SetMaintenanceRequestSchema,
   type AdminMe,
@@ -222,6 +224,17 @@ export class AdminController {
   @Get('sessions/:id')
   session(@Param('id', ParseUUIDPipe) id: string): Promise<AdminSessionView> {
     return this.ops.session(id);
+  }
+
+  /** Teknik hata iadesi: bakiyeye, seans basina bir kez (ADMIN ve SUPER_ADMIN). */
+  @Post('sessions/:id/service-refund')
+  @HttpCode(200)
+  serviceRefund(
+    @CurrentAdmin() actor: AdminActor,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body(new ZodBody(ServiceRefundRequestSchema)) body: ServiceRefundRequest,
+  ): Promise<AdminSessionView> {
+    return this.ops.serviceRefund(actor, id, body);
   }
 
   @Post('sessions/:id/review')

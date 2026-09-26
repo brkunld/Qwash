@@ -25,6 +25,9 @@ const MESSAGES: Record<string, string> = {
   REFUND_HAS_PAID_PARTS: 'Ödenmiş veya sonucu belirsiz parçası olan talep reddedilemez.',
   STATION_REQUIRED: 'Kasadan ödemede istasyon seçin.',
   SESSION_NOT_ACTIVE: 'Seans aktif değil; durdurulacak bir şey yok.',
+  SESSION_ALREADY_REFUNDED: 'Bu seans için teknik hata iadesi zaten yapıldı.',
+  SESSION_NOT_REFUNDABLE: 'Yalnız tamamlanmış ve ücret alınmış seans iade edilebilir.',
+  REFUND_EXCEEDS_CHARGE: 'İade tutarı tahsil edilen tutarı aşamaz.',
   PAYMENTS_DISABLED: 'Iyzico anahtarları tanımlı değil; kart iadesi yapılamaz.',
 };
 

@@ -279,8 +279,19 @@ export const AdminSessionViewSchema = z.object({
   transitions: z.array(z.object({ reason: z.string(), at: z.string() })),
   createdAt: z.string(),
   endedAt: z.string().nullable(),
+  /** Teknik hata iadesi (bakiyeye); seans basina en fazla bir tane. */
+  serviceRefund: z
+    .object({ amountKurus: z.number().int(), note: z.string().nullable(), at: z.string() })
+    .nullable(),
 });
 export type AdminSessionView = z.infer<typeof AdminSessionViewSchema>;
+
+/** Tutar verilmezse tahsil edilenin tamami iade edilir. */
+export const ServiceRefundRequestSchema = z.object({
+  reason: Reason,
+  amountKurus: z.number().int().positive().optional(),
+});
+export type ServiceRefundRequest = z.infer<typeof ServiceRefundRequestSchema>;
 
 export const ReviewSessionRequestSchema = z.object({ note: Reason });
 export type ReviewSessionRequest = z.infer<typeof ReviewSessionRequestSchema>;
