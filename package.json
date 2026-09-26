@@ -20,6 +20,8 @@
     "db:migrate:deploy": "pnpm --filter @qwash/backend db:migrate:deploy",
     "db:seed": "pnpm --filter @qwash/backend db:seed",
     "db:studio": "pnpm --filter @qwash/backend db:studio",
+    "db:backup": "node scripts/db-backup.mjs",
+    "db:restore-verify": "node scripts/db-restore-verify.mjs",
     "admin:grant": "pnpm --filter @qwash/backend admin:grant",
     "format": "prettier --write .",
     "format:check": "prettier --check .",

@@ -12,6 +12,9 @@ out/
 *.tsbuildinfo
 next-env.d.ts
 
+# Veritabani yedekleri (kisisel veri + para kayitlari icerir)
+backups/
+
 # Arac onbellekleri
 .turbo/
 coverage/
