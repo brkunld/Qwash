@@ -283,6 +283,28 @@ export class SessionService {
     });
   }
 
+  /**
+   * Admin acil durdurma (ADR-0011 #6). Musteri durdurmasiyla ayni yol (STOP takibi,
+   * tahsilat tavani); fark: sahiplik kontrolu yok, neden ADMIN_OVERRIDE. `audit` ayni
+   * transaction'da denetim kaydi yazar. Aktif olmayan seansta null doner.
+   */
+  async adminStop(
+    sessionId: string,
+    audit: (tx: Tx, session: WashSession) => Promise<void>,
+  ): Promise<WashSession | null> {
+    return this.prisma.$transaction(async (tx) => {
+      const session = await this.lockSession(tx, { id: sessionId });
+      if (!session) throw new SessionNotFoundError(sessionId);
+      if (session.status !== SessionStatus.STARTING && session.status !== SessionStatus.RUNNING) {
+        return null;
+      }
+      await this.enqueueStop(tx, session, 'ADMIN_OVERRIDE');
+      await this.transition(tx, session.id, session.status, session.status, 'ADMIN_STOP_REQUESTED');
+      await audit(tx, session);
+      return tx.washSession.findUniqueOrThrow({ where: { id: session.id } });
+    });
+  }
+
   // ---------------------------------------------------------------------------
   // Cihazdan gelen mesajlar
   // ---------------------------------------------------------------------------
@@ -878,7 +900,7 @@ export class SessionService {
    * ayni kurali kullanir (onay ekraninda "uygun" gorunen peron baslatmada reddedilmesin).
    */
   bayProblem(bay: BayWithDevice): string | null {
-    if (bay.status === BayStatus.MAINTENANCE) return 'MAINTENANCE';
+    if (bay.status === BayStatus.MAINTENANCE || bay.maintenanceAt) return 'MAINTENANCE';
     if (!bay.device) return 'NO_DEVICE';
     if (bay.device.reportedStatus !== 'ONLINE') return `DEVICE_${bay.device.reportedStatus}`;
     const age = this.clock().getTime() - bay.device.lastSeenAt.getTime();

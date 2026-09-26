@@ -1,3 +1,4 @@
+export * from './admin.ts';
 export * from './account.ts';
 export * from './auth.ts';
 export * from './health.ts';

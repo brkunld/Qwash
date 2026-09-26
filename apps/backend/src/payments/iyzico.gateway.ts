@@ -6,6 +6,8 @@ import {
   InitializedCheckout,
   PaymentGateway,
   PaymentProviderError,
+  RefundOutcome,
+  RefundPaymentInput,
   ReversePaymentInput,
 } from './payment-gateway';
 
@@ -170,6 +172,21 @@ export class IyzicoGateway extends PaymentGateway {
     throw new PaymentProviderError(
       `Iyzico iptal/iade basarisiz: iptal=${describeError(cancel)}; iade=${describeError(refund)}`,
     );
+  }
+
+  async refundPayment(input: RefundPaymentInput): Promise<RefundOutcome> {
+    const res = await this.post(REFUND_PATH, {
+      locale: 'tr',
+      conversationId: input.payoutId,
+      paymentTransactionId: input.paymentTransactionId,
+      price: kurusToPrice(input.amountKurus),
+      currency: 'TRY',
+    });
+    if (res.status === 'success') {
+      return { kind: 'REFUNDED', providerRef: str(res.paymentId) ?? input.paymentTransactionId };
+    }
+    if (res.status === 'failure') return { kind: 'REJECTED', reason: describeError(res) };
+    throw new PaymentProviderError('Iyzico iade yaniti belirsiz (status alani yok)');
   }
 
   /** V3: HMAC-SHA256(secretKey, secretKey + iyziEventType + iyziPaymentId + token + paymentConversationId + status), hex. */

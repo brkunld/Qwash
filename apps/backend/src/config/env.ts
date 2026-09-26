@@ -15,7 +15,7 @@ export const EnvSchema = z
     // E-postadaki dogrulama/sifirlama baglantilarinin acilacagi musteri PWA adresi.
     CUSTOMER_APP_URL: z.url().default('http://localhost:3000'),
     // Tarayicidan API'ye cookie ile istek atabilecek kaynaklar (virgulle ayrilir).
-    CORS_ORIGINS: z.string().default('http://localhost:3000'),
+    CORS_ORIGINS: z.string().default('http://localhost:3000,http://localhost:3002'),
     // Iyzico odeme formunun donecegi API adresi (callback: <API_PUBLIC_URL>/api/v1/payments/iyzico/callback).
     API_PUBLIC_URL: z.url().default('http://localhost:3001'),
     // Iyzico anahtarlari; tanimli degilse kart yukleme kapali (ADR-0003).

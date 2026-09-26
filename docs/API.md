@@ -116,18 +116,35 @@ Uygulandı (Faz 5c, 2026-09-26). Tümü giriş ister; yanıt `SessionView` (`pac
 Kart yüklemesi, callback + webhook + dakikalık mutabakat worker'ı üzerinden üç yoldan sonuçlanır; hangisi önce gelirse gelsin tek `CREDIT` oluşur (`CardTopUp` durum geçişi ve ledger aynı transaction'da, anahtar `card-topup:<id>`). Uygulama: `apps/backend/src/payments/` (Faz 5b).
 
 ### 🛠️ Admin Uç Noktaları (`/api/v1/admin`)
-* `GET /api/v1/admin/dashboard` — Anlık telemetri, aktif seanslar ve ciro metrikleri.
-* `POST /api/v1/admin/programs` — Sıfırdan yeni yıkama programı/paketi ekleme (`code`, `name`, `description?`, `icon?`, `pricePerSecondKurus`, `relayIndex`, `stationId?`).
-* `GET /api/v1/admin/programs` — İstasyon/peron yıkama programlarını ve saniyelik fiyat tarifelerini listeleme (`includeInactive` filtresi ile).
-* `PUT /api/v1/admin/programs/:id` — Program bilgilerini ve saniyelik kuruş fiyatını güncelleme.
-* `PUT /api/v1/admin/bays/:id/programs` — Peronda geçerli programları ve her birinin röle kanalını atama (`[{ programId, relayIndex, isEnabled }]`). Aynı röle iki programa atanamaz.
-* `PATCH /api/v1/admin/programs/:id/toggle` — Programı anında aktif/pasif duruma alma (`isActive`).
-* `DELETE /api/v1/admin/programs/:id` — Programı sistemden silme (Finansal tutarlılık ve geçmiş seansların korunması için Soft-Delete: `deletedAt` atanır, müşteri ekranından derhal kaldırılır).
-* `POST /api/v1/admin/bays/:id/maintenance` — Peronu bakım moduna alma/çıkarma.
-* `POST /api/v1/admin/users/:id/adjust-balance` — Hata düzeltme amaçlı manuel bakiye değişikliği (Zorunlu audit açıklaması, yalnız `SUPER_ADMIN`). Nakit yükleme için kullanılmaz.
-* `POST /api/v1/admin/users/:id/cash-topup` — Kasada nakit alıp müşterinin bakiyesine yükleme. Body: `{ "amountKurus": 10000, "note": "..." }`, `Idempotency-Key` zorunlu. Makbuz numarası üretir; `CashTopUp` + `LedgerEntry(CREDIT, source=CASH_TOPUP)` aynı transaction'da yazılır.
-* `GET /api/v1/admin/cash-topups?stationId=&date=` — Gün sonu kasa mutabakatı: istasyon/gün/operatör bazında nakit yükleme listesi ve toplamı.
-* `GET /api/v1/admin/audit-logs` — Yönetici işlem denetim geçmişi.
+Kararlar: [ADR-0011](adr/0011-admin-operations.md). Tüm uçlar `AdminGuard` arkasında: rol ve hesap durumu her istekte veritabanından okunur. Yetkisiz: `403 ADMIN_FORBIDDEN`. Para hareket ettiren her işlem ledger kaydıyla aynı transaction'da değiştirilemez `AdminAuditLog`'a yazılır.
+
+**Faz 6a (hazır):**
+* `GET /admin/me` — Oturumdaki admin ve rolü (panelin rol kontrolü).
+* `GET /admin/stations` — İstasyon listesi (kasa seçimi).
+* `GET /admin/users?q=` — E-posta, ad veya kullanıcı id ile arama (en fazla 20). `GET /admin/users/:id` — cüzdan + son 50 ledger hareketi.
+* `POST /admin/cash-topups` — Kasada nakit yükleme. Body `{ userId, stationId, amountKurus }`, `Idempotency-Key` zorunlu. Yalnız aktif hesap; üst sınır `TopUpSettings.maxTopUpKurus`. Yanıt makbuzdur (`receiptNo`, `balanceAfterKurus`). Aynı anahtar tekrarında aynı makbuz döner; farklı içerikle `409 IDEMPOTENCY_CONFLICT`.
+* `GET /admin/reports/cash?date=YYYY-AA-GG&stationId=` — Gün sonu kasa: İstanbul günü, operatör bazında nakit giriş ve kasadan iade, beklenen kasa.
+* `POST /admin/users/:id/adjustments` — **Yalnız SUPER_ADMIN.** Hata düzeltme. Body `{ direction: CREDIT|DEBIT, amountKurus, reason }` (gerekçe en az 10 karakter), `Idempotency-Key` zorunlu. DEBIT blokeye dokunmaz (`422 INSUFFICIENT_AVAILABLE`). Silinmiş hesapta yapılmaz. Nakit yükleme için kullanılmaz.
+* `GET /admin/refund-requests?status=`, `GET /admin/refund-requests/:id` — İade talepleri ve parçaları (`payouts`: CARD / IBAN / CASH_AT_STATION; PENDING / IN_FLIGHT / DONE / FAILED). EFT açıklaması `transferDescription`.
+* `POST /admin/refund-requests/:id/payouts/:index/card-refund` — Kart parçasını Iyzico'dan kısmi iade eder. Cevap belirsizse parça `IN_FLIGHT` kalır ve tekrar gönderilemez (`409 PAYOUT_STATE`).
+* `POST /admin/refund-requests/:id/payouts/:index/resolve` — `{ outcome: "PAID", reference, stationId? }`: IBAN/kasa parçasını (kasada `stationId` zorunlu) veya IN_FLIGHT kart parçasını kapatır. `{ outcome: "NOT_PAID", reason }`: IN_FLIGHT kart parçasını yeniden denenebilir yapar. Son parça ödenince bloke tahsil edilir, talep `COMPLETED` olur.
+* `POST /admin/refund-requests/:id/reject` — `{ reason }`. Ödenmiş veya sonucu belirsiz parça varsa `409 REFUND_HAS_PAID_PARTS`; yoksa bloke serbest kalır.
+* `GET /admin/settings/topup`, `PUT /admin/settings/topup` (**yalnız SUPER_ADMIN**) — `{ minTopUpKurus, maxTopUpKurus }`.
+
+**Faz 6b (hazır):**
+* `GET /admin/bays` — Dashboard: tüm peronlar; çalışma durumu, `problem` (müşteri başlatabilir mi: MAINTENANCE, NO_DEVICE, DEVICE_STALE…), bakım bilgisi, cihaz sağlığı (heartbeat, firmware, reset nedeni, drift), aktif seans.
+* `PUT /admin/bays/:id/maintenance` — `{ enabled: true, reason }` / `{ enabled: false }`. Süren seans kesilmez; seans bitince peron bakımda kalır.
+* `POST /admin/sessions/:id/stop` — `{ reason }`. Acil durdurma: cihaza STOP (`ADMIN_OVERRIDE`), tahsilat kullanılan saniye kadar. Aktif değilse `409 SESSION_NOT_ACTIVE`.
+* `GET /admin/sessions/review?all=true` — `needsReview` seansları (varsayılan: incelenmemişler), geçiş nedenleriyle. `GET /admin/sessions/:id`.
+* `POST /admin/sessions/:id/review` — `{ note }`. İncelemeyi kapatır; para hareket etmez (fark gerekiyorsa SUPER_ADMIN bakiye düzeltmesi).
+
+**Faz 6c (hazır):** Yalnız `SUPER_ADMIN` yazar; `ADMIN` okuyabilir.
+* `GET /admin/programs?stationId=&includeDeleted=` — Programlar, fiyatları ve peron/röle eşlemeleri.
+* `POST /admin/programs` — `{ stationId, code, name, description?, icon?, pricePerSecondKurus }`. Kod istasyonda benzersiz (silinmiş program kodu da yeniden kullanılamaz: `409 PROGRAM_CODE_TAKEN`). Saniyelik fiyat 1–10.000 kuruş.
+* `PUT /admin/programs/:id` — `{ name, description, icon, pricePerSecondKurus, isActive }`. Fiyat değişikliği yalnız yeni seansları etkiler.
+* `DELETE /admin/programs/:id` — Soft-delete (`deletedAt`); geçmiş seanslar korunur, müşteriden hemen kalkar.
+* `PUT /admin/bays/:id/programs` — `{ programs: [{ programId, relayIndex (1-4), isEnabled }] }` peronun eşlemesini tamamen değiştirir. Aynı röle iki programa atanamaz (`400 RELAY_CONFLICT`); iki programın rölesi tek istekte takas edilebilir. Silinmiş veya başka istasyonun programı reddedilir.
+* `GET /admin/audit-logs?limit=&targetType=&targetId=` — Denetim kaydı (en fazla 200), yapan kişinin e-postasıyla.
 
 ---
 

@@ -4,6 +4,8 @@ import {
   InitializedCheckout,
   PaymentGateway,
   PaymentProviderError,
+  RefundOutcome,
+  RefundPaymentInput,
   ReversePaymentInput,
 } from '../src/payments/payment-gateway';
 
@@ -42,6 +44,21 @@ export class FakePaymentGateway extends PaymentGateway {
     if (this.failReverse) return Promise.reject(new PaymentProviderError('Iyzico iade kapali'));
     this.reversed.push(input);
     return Promise.resolve('CANCELLED');
+  }
+
+  readonly refunds: RefundPaymentInput[] = [];
+  /** 'REJECT': Iyzico reddeder; 'TIMEOUT': istek gitti ama cevap gelmedi (belirsiz). */
+  refundMode: 'OK' | 'REJECT' | 'TIMEOUT' = 'OK';
+
+  refundPayment(input: RefundPaymentInput): Promise<RefundOutcome> {
+    this.refunds.push(input);
+    if (this.refundMode === 'TIMEOUT') {
+      return Promise.reject(new PaymentProviderError('zaman asimi'));
+    }
+    if (this.refundMode === 'REJECT') {
+      return Promise.resolve({ kind: 'REJECTED', reason: '10093 iade suresi gecmis' });
+    }
+    return Promise.resolve({ kind: 'REFUNDED', providerRef: `rf-${input.payoutId}` });
   }
 
   /** topUpId icin basarili odeme sonucu kurar. */

@@ -44,8 +44,10 @@ POST /auth/login
 | Rol | Yetki |
 |---|---|
 | `USER` | Kendi seansları, kendi cüzdanı, genel peron listesi |
-| `ADMIN` | Tüm peronlar, tüm seanslar, kullanıcı bakiye düzeltme |
-| `SUPER_ADMIN` | Admin yetkisi + admin kullanıcı oluşturma, sistem ayarları |
+| `ADMIN` | Tüm peronlar, tüm seanslar, nakit yükleme, iade işleme, bakım modu |
+| `SUPER_ADMIN` | Admin yetkisi + manuel bakiye düzeltme, yükleme ayarları, tarife, admin rolü verme |
+
+Uygulama ([ADR-0011](adr/0011-admin-operations.md)): `AdminGuard` rolü ve hesap durumunu her istekte veritabanından okur; yetkisi alınan admin bir sonraki isteğinde reddedilir (token'ın 15 dakikası beklenmez). İlk SUPER_ADMIN yalnız komut satırından atanır: `pnpm admin:grant <e-posta> SUPER_ADMIN` (e-postası doğrulanmış hesap). Admin işlemleri değiştirilemez `AdminAuditLog` tablosuna yazılır. MFA henüz yok (canlıdan önce ele alınacak).
 
 ---
 
@@ -149,7 +151,7 @@ Prod deploy öncesinde aşağıdaki maddeler manuel olarak doğrulanmalıdır:
 
 - [ ] TLS 1.2 altı protokoller devre dışı (Nginx `ssl_protocols TLSv1.2 TLSv1.3`)
 - [ ] MQTTS portu `8883` açık, `1883` kapalı
-- [ ] Tüm Admin endpoint'leri `ADMIN` rolü guard'ı ile korumalı
+- [x] Tüm Admin endpoint'leri `AdminGuard` ile korumalı (rol veritabanından, Faz 6a)
 - [ ] `POST /payments/webhook` HMAC doğrulaması aktif
 - [ ] Rate limiting Redis'te aktif ve `429` doğru dönüyor
 - [ ] `X-Frame-Options: DENY` yanıtlarda mevcut

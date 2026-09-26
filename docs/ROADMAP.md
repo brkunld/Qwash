@@ -183,20 +183,42 @@ Faz 2 ve Faz 3 birbirinden bagimsizdir; iki kisi veya iki paralel calisma akisi 
 
 ## Faz 6: Admin Operasyonlari
 
-**Hedef:** Operatore sistemi calistirmak ve desteklemek icin gereken araclari vermek.
+**Hedef:** Operatore sistemi calistirmak ve desteklemek icin gereken araclari vermek. Kararlar: [ADR-0011](adr/0011-admin-operations.md).
 
-- [ ] Canli peron durumu dashboard'u.
-- [ ] Bakim modu ve acil durdurma.
-- [ ] Kullanici ve cuzdan arama.
-- [ ] Kasada nakit yukleme: operator musteriyi bulur (e-posta), tutari girer, makbuz numarasi uretilir, idempotent yazilir. Gun sonu kasa raporu (istasyon/gun/operator toplami). (Karar: Burak, 2026-09-25)
-- [ ] Zorunlu gerekce ve audit kaydi ile manuel bakiye duzeltme (yalniz hata duzeltme, nakit yukleme icin kullanilmaz).
-- [ ] Program/tarife yonetimi (ekleme, fiyat degistirme, soft-delete, role esleme).
-- [ ] Cihaz sagligi: heartbeat, RSSI, alarm gorunurlugu.
-- [ ] Admin girisi guclendirme: rol tabanli yetki, oturum suresi, gerekirse MFA.
+Uc alt faz (2026-09-26 plani). Model onerisi parantez icinde.
+
+**6a — Admin cekirdegi ve para islemleri, backend (Opus):** _Tamam (2026-09-26, 20 entegrasyon testi)._
+- [x] `AdminGuard`: rol ve durum her istekte veritabanindan okunur; `ADMIN` / `SUPER_ADMIN` ayrimi. Ilk SUPER_ADMIN: `pnpm admin:grant`.
+- [x] Degistirilemez `AdminAuditLog` (trigger); para hareketiyle ayni transaction'da.
+- [x] Kasada nakit yukleme: operator musteriyi bulur (e-posta), tutari girer, makbuz numarasi uretilir, idempotent yazilir. Gun sonu kasa raporu (istasyon/gun/operator toplami). (Karar: Burak, 2026-09-25)
+- [x] Zorunlu gerekce ve audit kaydi ile manuel bakiye duzeltme (yalniz hata duzeltme, nakit yukleme icin kullanilmaz).
+- [x] Iade talebinin islenmesi: parca bazli `RefundPayout`, Iyzico kismi iade (`IN_FLIGHT` korumasi), EFT/kasa isaretleme, bitince bloke tahsili; red.
+- [x] Yukleme ayarlari (`TopUpSettings`) yonetimi (SUPER_ADMIN).
+- [x] Kullanici ve cuzdan arama (e-posta, ad; cuzdan + son hareketler).
+
+**6b — Peron ve seans operasyonlari, backend (Opus):** _Cekirdek tamam (2026-09-26, 4 entegrasyon testi)._
+- [x] Bakim modu (`Bay.maintenanceAt`, calisma durumundan ayri; suren seans kesilmez, bitince peron `MAINTENANCE`'ta kalir) ve acil durdurma (`ADMIN_STOP`).
+- [x] `needsReview` seanslari: liste + "incelendi" kapatma (denetim kaydiyla; para hareket etmez). Peron dashboard ucu cihaz sagligi ve drift'i gosterir.
+- [ ] Teknik hata iadesi (`SERVICE_FAILURE`): admin bir seans icin iade olusturur. **Burak'in karari bekleniyor:** bakiyeye mi, karta mi? (Seans parasi karisik kaynakli bakiyeden cekilir; politika "iade yalniz orijinal karta".)
+- [ ] Admin Socket.IO odasi: peron durumu ve cihaz telemetrisi. _6c'ye tasindi (Sonnet); o zamana kadar panel `GET /admin/bays`'i 5 sn'de bir yoklar._
+
+**6c — Admin paneli ekranlari + dusuk riskli uclar (Sonnet):** _Tamam (2026-09-26): 12 ekran, program/tarife ve denetim ucu, 6 yeni entegrasyon testi; tarayicida giris, rol kapisi, canli peron ve nakit yukleme + kasa raporu denendi._
+- [x] `apps/web-admin`: giris, rol kontrolu, oturum yenileme (musteri PWA'sindaki istemci deseni).
+- [x] Canli peron durumu dashboard'u; cihaz sagligi (heartbeat, RSSI, firmware, reset nedeni, drift).
+- [x] Nakit yukleme ve makbuz ekrani, kasa raporu, kullanici/cuzdan arama, bakiye duzeltme formu.
+- [x] Iade talepleri ekrani (parca parca isleme, EFT dekont no, kasa odemesi).
+- [x] Program/tarife yonetimi (ekleme, fiyat degistirme, soft-delete, role esleme): CRUD ucu + ekran.
+- [x] Yukleme ayarlari ekrani, `needsReview` listesi, bakim modu dugmesi.
+
+**6c'de denenmeyenler:** iade isleme ve bakim modu/acil durdurma ekranlari tarayicida elle denenmedi (backend entegrasyon testleri var); seans baslatmak gercek cihazi tetikleyecegi icin acil durdurma gercek peronda denenmedi. Admin Socket.IO odasi yapilmadi: panel `GET /admin/bays`'i 5 sn'de bir yoklar (pilot icin yeterli; canli istasyon sayisi artinca odaya gecilir).
+
+**Ertelenen:** MFA (canlidan once step-up), admin icin ayri sifre sifirlama akisi (simdilik musteriyle ayni), hareketsiz bakiye hatirlatmasi (alan adi bekliyor).
 
 **Tamamlanma Kriterleri**
 - Operator peron ve cihaz durumunu tek ekrandan gorur.
 - Tum bakim ve finansal aksiyonlar denetlenebilir kayit uretir.
+- Ayni nakit yukleme/duzeltme/iade istegi iki kez gelse de para bir kez hareket eder.
+- Yetkisi alinan admin bir sonraki isteginde reddedilir.
 
 ---
 
