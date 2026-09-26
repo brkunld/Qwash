@@ -160,7 +160,7 @@ Faz 2 ve Faz 3 birbirinden bagimsizdir; iki kisi veya iki paralel calisma akisi 
 - [x] Basarisiz/tekrarlanan/eszamanli callback'in duplicate bakiye olusturmadigi testi (21 servis + 4 HTTP + 7 imza birim testi).
 - [ ] Webhook icin herkese acik adres (sandbox'ta tunel, canlida alan adi) ve Iyzico panelinde bildirim URL'si.
 - [x] Kimlik dogrulama backend'i (ADR-0009, Faz 5a): e-posta/sifre + e-posta dogrulama, Google girisi, sifre sifirlama, refresh rotasyonu + reuse tespiti, rate limit, API yanit zarfi. 30 test (servis + HTTP).
-- [ ] Google OAuth client/consent ekrani (Google Cloud Console; Burak) ve `GOOGLE_CLIENT_ID`.
+- [x] Google OAuth: client + "Testing" modu consent ekrani (Burak), `GOOGLE_CLIENT_ID`, PWA "Google ile devam et" dugmesi (2026-09-26, `docs/DEVELOPMENT.md`). Canlida alan adi + "In production" yayin durumu.
 - [x] E-posta: saglayicidan bagimsiz SMTP `Mailer` (Faz 5, 2026-09-26; `docs/DEVELOPMENT.md`). Gonderim arka planda (hesap sizdirma/500 riski), STARTTLS zorunlu. Gmail ile gercek gonderim Burak tarafindan denenecek; canlida kendi alan adindan (SPF/DKIM).
 - [ ] Iyzico zorunlu alici alanlari sandbox'ta dogrulanir; telefon gerekirse profilden istenir.
 - [x] Hesap silme backend'i: anonimlestirme, feragat (`FORFEIT`), FIFO dagilimli iade talebi (`RefundRequest` + bloke), IBAN kontrolu, ad muhru (`nameLockedAt`). 13 entegrasyon + 6 FIFO + 2 IBAN testi.

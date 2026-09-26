@@ -354,6 +354,9 @@ importers:
 
   apps/web-customer:
     dependencies:
+      '@next/env':
+        specifier: ^16.3.6
+        version: 16.3.6
       '@qwash/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts

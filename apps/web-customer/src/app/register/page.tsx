@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useState, type FormEvent } from 'react';
+import { GoogleButton } from '@/components/google-button';
 import { Alert, Button, Card, Field, Loading, Page } from '@/components/ui';
 import { register, safeNext } from '@/lib/auth';
 import { errorMessage } from '@/lib/errors';
@@ -77,6 +78,9 @@ function RegisterForm() {
           </Link>
         </p>
       </form>
+      <div className="mt-4">
+        <GoogleButton onSuccess={() => router.replace(next)} />
+      </div>
     </Card>
   );
 }
