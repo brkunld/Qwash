@@ -8,8 +8,11 @@ const MESSAGES: Record<string, string> = {
   INVALID_CREDENTIALS: 'E-posta veya şifre hatalı.',
   EMAIL_TAKEN: 'Bu e-posta ile zaten bir hesap var. Giriş yapmayı deneyin.',
   ACCOUNT_DISABLED: 'Hesabınız kullanıma kapalı. Destek ile iletişime geçin.',
+  GOOGLE_LOGIN_DISABLED: 'Google ile giriş şu an kapalı. E-posta ve şifreyle giriş yapabilirsiniz.',
+  GOOGLE_EMAIL_NOT_VERIFIED: 'Google hesabınızın e-posta adresi doğrulanmamış.',
   ACCOUNT_NOT_ACTIVE: 'Hesabınız kapatılmış.',
-  INVALID_TOKEN: 'Bağlantının süresi dolmuş veya daha önce kullanılmış.',
+  INVALID_TOKEN:
+    'Doğrulama geçersiz, süresi dolmuş veya daha önce kullanılmış. Lütfen tekrar deneyin.',
   EMAIL_NOT_VERIFIED: 'Bakiye yüklemek için önce e-posta adresinizi doğrulayın.',
   BAY_NOT_FOUND: 'Bu peron bulunamadı. Peron ekranındaki QR kodu yeniden okutun.',
   BAY_BUSY: 'Bu peronda şu an başka bir yıkama sürüyor.',

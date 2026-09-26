@@ -171,3 +171,16 @@ Sınırlar: Gmail günde yaklaşık 500 e-posta ile sınırlıdır ve gönderen 
 - Gönderim **arka planda** yapılır, istek beklemez. Beklense SMTP hatası hesap oluşmuşken kaydı 500 yapardı ve "şifremi unuttum" yanıtı hesap varsa yavaş, yoksa hızlı dönerek hesabın var olup olmadığını sızdırırdı. Başarısız gönderim loglanır (`E-posta gönderilemedi`); kullanıcı doğrulamayı hesap sayfasından yeniden isteyebilir.
 - Port 587'de STARTTLS **zorunludur**; sunucu TLS sunmazsa düz metne düşülmez, gönderim başarısız olur. Sertifika doğrulaması kapatılmaz.
 - Bağlantı ve alıcı adresi loglanmaz.
+
+## Google ile giriş
+
+Backend `POST /auth/google` ile Google ID token'ını sunucuda doğrular (imza, `aud`, `iss`, `exp`, `email_verified`; `apps/backend/src/auth/google.ts`). PWA'da giriş ve kayıt sayfalarında "Google ile devam et" düğmesi (`google-button.tsx`, Google Identity Services) bulunur.
+
+**Kurulum (alan adı gerekmez, "Testing" modu):**
+1. <https://console.cloud.google.com> altında proje oluştur, "APIs & Services > OAuth consent screen": tür **External**, uygulama adı QWash, yayın durumu **Testing**.
+2. "Test users" altına giriş yapacak Google hesaplarını ekle (en fazla 100). Listede olmayan hesap giriş yapamaz.
+3. "Credentials > Create credentials > OAuth client ID": tür **Web application**, "Authorized JavaScript origins" = `http://localhost:3000` (geliştirme). Yönlendirme adresi gerekmez (ID token akışı).
+4. Client ID'yi kök `.env` dosyasına **iki yere** yaz: `GOOGLE_CLIENT_ID` (backend) ve `NEXT_PUBLIC_GOOGLE_CLIENT_ID` (PWA; derleme sırasında gömülür, değişince PWA yeniden derlenir/başlatılır). Client ID gizli değildir; gizli olan client secret'tır ve bu akışta hiç kullanılmaz.
+5. Backend ve PWA'yı yeniden başlat. `GOOGLE_CLIENT_ID` boşsa Google girişi kapalıdır ve düğme çizilmez.
+
+**Davranış:** Google hesabındaki e-posta doğrulanmışsa QWash hesabı otomatik açılır (e-posta doğrulaması gerekmez, kart yükleme açılır). Aynı e-postayla önceki bir hesap varsa Google kimliği o hesaba bağlanır (ADR-0009 madde 5). Önceki hesabın e-postası doğrulanmamışsa şifresi silinir ve açık oturumları kapatılır: birinin başkasının e-postasıyla önceden kayıt olup sonradan hesabı ele geçirmesi engellenir. Doğrulanmışsa şifre ve oturumlar korunur. Canlıda: gerçek alan adı `Authorized JavaScript origins`'e eklenir, onay ekranına gizlilik ve kullanım şartları bağlantıları (`/legal/kvkk`, `/legal/terms`) yazılır ve yayın durumu "In production" yapılır; yalnız `openid email profile` istendiği için genellikle ayrıca Google doğrulaması gerekmez (güncel şartları Console'da kontrol et).
