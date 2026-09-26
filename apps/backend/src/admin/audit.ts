@@ -17,9 +17,14 @@ export type AuditAction =
   | 'BAY_MAINTENANCE_ON'
   | 'BAY_MAINTENANCE_OFF'
   | 'SESSION_ADMIN_STOP'
-  | 'SESSION_REVIEWED';
+  | 'SESSION_REVIEWED'
+  | 'PROGRAM_CREATED'
+  | 'PROGRAM_UPDATED'
+  | 'PROGRAM_DELETED'
+  | 'BAY_PROGRAMS_SET';
 
-export type AuditTarget = 'USER' | 'REFUND_REQUEST' | 'TOPUP_SETTINGS' | 'BAY' | 'SESSION';
+export type AuditTarget =
+  'USER' | 'REFUND_REQUEST' | 'TOPUP_SETTINGS' | 'BAY' | 'SESSION' | 'PROGRAM';
 
 export interface AuditEntry {
   /** null: komut satiri betigi. */

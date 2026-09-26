@@ -1,1 +1,11 @@
 @import 'tailwindcss';
+
+/* QWASH marka rengi (musteri PWA'siyla ayni): logodaki turuncu #FA9A09. Turuncu zeminde koyu metin. */
+@theme {
+  --color-brand-50: #fff7e8;
+  --color-brand-200: #fcd79a;
+  --color-brand-500: #fa9a09;
+  --color-brand-600: #e58a00;
+  --color-brand-700: #964b00;
+  --color-brand-900: #5c2e00;
+}

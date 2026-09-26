@@ -206,3 +206,9 @@ Admin, müşteriyle aynı giriş akışını kullanır; yetki `User.role` alanı
 3. Admin paneli `http://localhost:3002`'den API'ye çağrı yapar; kök `.env`'de `CORS_ORIGINS` içinde `http://localhost:3002` olmalı (`.env.example`'daki gibi, virgülle).
 
 Rol değişikliği anında etkilidir: `AdminGuard` rolü her istekte veritabanından okur, yeniden giriş gerekmez.
+
+### Admin paneli (`apps/web-admin`)
+
+`pnpm dev` paneli `http://localhost:3002`'de açar (API adresi `NEXT_PUBLIC_API_URL`, varsayılan `http://localhost:3001/api/v1`). Giriş sayfası `/login`; yönetici olmayan hesap "Yetkiniz yok" ekranı görür. **Süper yönetici**: program/tarife, yükleme ayarları, bakiye düzeltme. **Yönetici**: peron izleme, bakım, acil durdurma, nakit yükleme, kasa raporu, iade işleme, inceleme.
+
+**Tarayıcıda tek oturum:** Refresh çerezi API adresine bağlıdır ve `localhost` çerezleri portlar arasında paylaşılır (üretimde de API alt alan adına bağlı tek çerez). Aynı tarayıcıda müşteri PWA'sı ile admin paneli **aynı hesabı** kullanır: birinde çıkış yapmak veya farklı hesapla girmek diğerini etkiler. Yönetici hesabını ayrı bir tarayıcı profilinde kullanın. İki uygulama aynı anda ilk yükleniyorsa nadiren çift yenileme yarışı olabilir; sonuç güvenli tarafta oturumun kapanmasıdır.

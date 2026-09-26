@@ -284,3 +284,83 @@ export type AdminSessionView = z.infer<typeof AdminSessionViewSchema>;
 
 export const ReviewSessionRequestSchema = z.object({ note: Reason });
 export type ReviewSessionRequest = z.infer<typeof ReviewSessionRequestSchema>;
+
+// ---------------------------------------------------------------------------
+// Program ve tarife yonetimi (Faz 6c)
+// ---------------------------------------------------------------------------
+
+/** Saniyelik fiyat kurus cinsinden; 0 ve fahis fiyat (yanlis basilan sifir) reddedilir. */
+const PricePerSecond = z.number().int().min(1).max(10_000);
+
+export const ProgramCodeSchema = z
+  .string()
+  .trim()
+  .toUpperCase()
+  .regex(/^[A-Z0-9_]{2,20}$/, 'Kod 2-20 karakter: harf, rakam veya alt cizgi.');
+
+export const AdminProgramSchema = z.object({
+  id: z.string(),
+  stationId: z.string(),
+  code: z.string(),
+  name: z.string(),
+  description: z.string().nullable(),
+  icon: z.string().nullable(),
+  pricePerSecondKurus: z.number().int(),
+  isActive: z.boolean(),
+  deleted: z.boolean(),
+  /** Programin atandigi peronlar ve role kanallari. */
+  bays: z.array(
+    z.object({
+      bayId: z.string(),
+      bayCode: z.string(),
+      relayIndex: z.number().int(),
+      isEnabled: z.boolean(),
+    }),
+  ),
+});
+export type AdminProgram = z.infer<typeof AdminProgramSchema>;
+
+export const CreateProgramRequestSchema = z.object({
+  stationId: z.uuid(),
+  code: ProgramCodeSchema,
+  name: z.string().trim().min(2).max(60),
+  description: z.string().trim().max(200).optional(),
+  icon: z.string().trim().max(40).optional(),
+  pricePerSecondKurus: PricePerSecond,
+});
+export type CreateProgramRequest = z.infer<typeof CreateProgramRequestSchema>;
+
+export const UpdateProgramRequestSchema = z.object({
+  name: z.string().trim().min(2).max(60),
+  description: z.string().trim().max(200).nullable(),
+  icon: z.string().trim().max(40).nullable(),
+  pricePerSecondKurus: PricePerSecond,
+  isActive: z.boolean(),
+});
+export type UpdateProgramRequest = z.infer<typeof UpdateProgramRequestSchema>;
+
+export const SetBayProgramsRequestSchema = z.object({
+  programs: z
+    .array(
+      z.object({
+        programId: z.uuid(),
+        relayIndex: z.number().int().min(1).max(4),
+        isEnabled: z.boolean(),
+      }),
+    )
+    .max(20),
+});
+export type SetBayProgramsRequest = z.infer<typeof SetBayProgramsRequestSchema>;
+
+export const AdminAuditEntrySchema = z.object({
+  id: z.string(),
+  actorId: z.string().nullable(),
+  actorEmail: z.string().nullable(),
+  action: z.string(),
+  targetType: z.string(),
+  targetId: z.string().nullable(),
+  reason: z.string().nullable(),
+  details: z.unknown(),
+  createdAt: z.string(),
+});
+export type AdminAuditEntry = z.infer<typeof AdminAuditEntrySchema>;

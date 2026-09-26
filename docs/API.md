@@ -138,15 +138,13 @@ Kararlar: [ADR-0011](adr/0011-admin-operations.md). Tüm uçlar `AdminGuard` ark
 * `GET /admin/sessions/review?all=true` — `needsReview` seansları (varsayılan: incelenmemişler), geçiş nedenleriyle. `GET /admin/sessions/:id`.
 * `POST /admin/sessions/:id/review` — `{ note }`. İncelemeyi kapatır; para hareket etmez (fark gerekiyorsa SUPER_ADMIN bakiye düzeltmesi).
 
-**Faz 6c (planlı, aşağıdaki eski taslak):**
-* `GET /api/v1/admin/dashboard` — Anlık telemetri, aktif seanslar ve ciro metrikleri.
-* `POST /api/v1/admin/programs` — Sıfırdan yeni yıkama programı/paketi ekleme (`code`, `name`, `description?`, `icon?`, `pricePerSecondKurus`, `relayIndex`, `stationId?`).
-* `GET /api/v1/admin/programs` — İstasyon/peron yıkama programlarını ve saniyelik fiyat tarifelerini listeleme (`includeInactive` filtresi ile).
-* `PUT /api/v1/admin/programs/:id` — Program bilgilerini ve saniyelik kuruş fiyatını güncelleme.
-* `PUT /api/v1/admin/bays/:id/programs` — Peronda geçerli programları ve her birinin röle kanalını atama (`[{ programId, relayIndex, isEnabled }]`). Aynı röle iki programa atanamaz.
-* `PATCH /api/v1/admin/programs/:id/toggle` — Programı anında aktif/pasif duruma alma (`isActive`).
-* `DELETE /api/v1/admin/programs/:id` — Programı sistemden silme (Finansal tutarlılık ve geçmiş seansların korunması için Soft-Delete: `deletedAt` atanır, müşteri ekranından derhal kaldırılır).
-* `GET /api/v1/admin/audit-logs` — Yönetici işlem denetim geçmişi.
+**Faz 6c (hazır):** Yalnız `SUPER_ADMIN` yazar; `ADMIN` okuyabilir.
+* `GET /admin/programs?stationId=&includeDeleted=` — Programlar, fiyatları ve peron/röle eşlemeleri.
+* `POST /admin/programs` — `{ stationId, code, name, description?, icon?, pricePerSecondKurus }`. Kod istasyonda benzersiz (silinmiş program kodu da yeniden kullanılamaz: `409 PROGRAM_CODE_TAKEN`). Saniyelik fiyat 1–10.000 kuruş.
+* `PUT /admin/programs/:id` — `{ name, description, icon, pricePerSecondKurus, isActive }`. Fiyat değişikliği yalnız yeni seansları etkiler.
+* `DELETE /admin/programs/:id` — Soft-delete (`deletedAt`); geçmiş seanslar korunur, müşteriden hemen kalkar.
+* `PUT /admin/bays/:id/programs` — `{ programs: [{ programId, relayIndex (1-4), isEnabled }] }` peronun eşlemesini tamamen değiştirir. Aynı röle iki programa atanamaz (`400 RELAY_CONFLICT`); iki programın rölesi tek istekte takas edilebilir. Silinmiş veya başka istasyonun programı reddedilir.
+* `GET /admin/audit-logs?limit=&targetType=&targetId=` — Denetim kaydı (en fazla 200), yapan kişinin e-postasıyla.
 
 ---
 

@@ -11,6 +11,7 @@ import { AdminController } from './admin.controller';
 import { AdminGuard } from './admin.guard';
 import { AdminService } from './admin.service';
 import { OpsService } from './ops.service';
+import { ProgramService } from './program.service';
 import { RefundAdminService } from './refund-admin.service';
 
 @Module({
@@ -18,6 +19,11 @@ import { RefundAdminService } from './refund-admin.service';
   controllers: [AdminController],
   providers: [
     AdminGuard,
+    {
+      provide: ProgramService,
+      inject: [PrismaService],
+      useFactory: (prisma: PrismaService) => new ProgramService(prisma),
+    },
     {
       provide: OpsService,
       inject: [PrismaService, SessionService],

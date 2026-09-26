@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   createParamDecorator,
   ExecutionContext,
   Get,
@@ -16,6 +17,14 @@ import {
 } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import {
+  type AdminAuditEntry,
+  type AdminProgram,
+  type CreateProgramRequest,
+  CreateProgramRequestSchema,
+  type SetBayProgramsRequest,
+  SetBayProgramsRequestSchema,
+  type UpdateProgramRequest,
+  UpdateProgramRequestSchema,
   type AdminBayView,
   type AdminSessionView,
   type AdminStopSessionRequest,
@@ -54,6 +63,7 @@ import { IdempotencyKeyRequiredError } from '../payments/payments.errors';
 import { AdminGuard, adminFromRequest, type AdminActor, SuperAdminOnly } from './admin.guard';
 import { AdminService } from './admin.service';
 import { OpsService } from './ops.service';
+import { ProgramService } from './program.service';
 import { RefundAdminService } from './refund-admin.service';
 
 const CurrentAdmin = createParamDecorator((_: unknown, context: ExecutionContext): AdminActor =>
@@ -77,6 +87,7 @@ export class AdminController {
     private readonly admin: AdminService,
     private readonly refunds: RefundAdminService,
     private readonly ops: OpsService,
+    private readonly programs: ProgramService,
   ) {}
 
   @Get('me')
@@ -221,6 +232,63 @@ export class AdminController {
     @Body(new ZodBody(ReviewSessionRequestSchema)) body: ReviewSessionRequest,
   ): Promise<AdminSessionView> {
     return this.ops.markReviewed(actor, id, body.note);
+  }
+
+  // --- Program ve tarife (yalniz SUPER_ADMIN yazar; 6c) -----------------------
+
+  @Get('programs')
+  listPrograms(
+    @Query('stationId') stationId: string | undefined,
+    @Query('includeDeleted') includeDeleted: string | undefined,
+  ): Promise<AdminProgram[]> {
+    return this.programs.list(stationId, includeDeleted === 'true');
+  }
+
+  @Post('programs')
+  @SuperAdminOnly()
+  createProgram(
+    @CurrentAdmin() actor: AdminActor,
+    @Body(new ZodBody(CreateProgramRequestSchema)) body: CreateProgramRequest,
+  ): Promise<AdminProgram> {
+    return this.programs.create(actor, body);
+  }
+
+  @Put('programs/:id')
+  @SuperAdminOnly()
+  updateProgram(
+    @CurrentAdmin() actor: AdminActor,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body(new ZodBody(UpdateProgramRequestSchema)) body: UpdateProgramRequest,
+  ): Promise<AdminProgram> {
+    return this.programs.update(actor, id, body);
+  }
+
+  @Delete('programs/:id')
+  @SuperAdminOnly()
+  deleteProgram(
+    @CurrentAdmin() actor: AdminActor,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<AdminProgram> {
+    return this.programs.remove(actor, id);
+  }
+
+  @Put('bays/:id/programs')
+  @SuperAdminOnly()
+  setBayPrograms(
+    @CurrentAdmin() actor: AdminActor,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body(new ZodBody(SetBayProgramsRequestSchema)) body: SetBayProgramsRequest,
+  ): Promise<AdminProgram[]> {
+    return this.programs.setBayPrograms(actor, id, body);
+  }
+
+  @Get('audit-logs')
+  auditLog(
+    @Query('limit') limit: string | undefined,
+    @Query('targetType') targetType: string | undefined,
+    @Query('targetId') targetId: string | undefined,
+  ): Promise<AdminAuditEntry[]> {
+    return this.programs.auditLog(Number(limit) || 50, targetType, targetId);
   }
 
   // --- Ayarlar -----------------------------------------------------------------

@@ -202,13 +202,15 @@ Uc alt faz (2026-09-26 plani). Model onerisi parantez icinde.
 - [ ] Teknik hata iadesi (`SERVICE_FAILURE`): admin bir seans icin iade olusturur. **Burak'in karari bekleniyor:** bakiyeye mi, karta mi? (Seans parasi karisik kaynakli bakiyeden cekilir; politika "iade yalniz orijinal karta".)
 - [ ] Admin Socket.IO odasi: peron durumu ve cihaz telemetrisi. _6c'ye tasindi (Sonnet); o zamana kadar panel `GET /admin/bays`'i 5 sn'de bir yoklar._
 
-**6c — Admin paneli ekranlari + dusuk riskli uclar (Sonnet):**
-- [ ] `apps/web-admin`: giris, rol kontrolu, oturum yenileme (musteri PWA'sindaki istemci deseni).
-- [ ] Canli peron durumu dashboard'u; cihaz sagligi (heartbeat, RSSI, firmware, reset nedeni, drift).
-- [ ] Nakit yukleme ve makbuz ekrani, kasa raporu, kullanici/cuzdan arama, bakiye duzeltme formu.
-- [ ] Iade talepleri ekrani (parca parca isleme, EFT dekont no, kasa odemesi).
-- [ ] Program/tarife yonetimi (ekleme, fiyat degistirme, soft-delete, role esleme): CRUD ucu + ekran.
-- [ ] Yukleme ayarlari ekrani, `needsReview` listesi, bakim modu dugmesi.
+**6c — Admin paneli ekranlari + dusuk riskli uclar (Sonnet):** _Tamam (2026-09-26): 12 ekran, program/tarife ve denetim ucu, 6 yeni entegrasyon testi; tarayicida giris, rol kapisi, canli peron ve nakit yukleme + kasa raporu denendi._
+- [x] `apps/web-admin`: giris, rol kontrolu, oturum yenileme (musteri PWA'sindaki istemci deseni).
+- [x] Canli peron durumu dashboard'u; cihaz sagligi (heartbeat, RSSI, firmware, reset nedeni, drift).
+- [x] Nakit yukleme ve makbuz ekrani, kasa raporu, kullanici/cuzdan arama, bakiye duzeltme formu.
+- [x] Iade talepleri ekrani (parca parca isleme, EFT dekont no, kasa odemesi).
+- [x] Program/tarife yonetimi (ekleme, fiyat degistirme, soft-delete, role esleme): CRUD ucu + ekran.
+- [x] Yukleme ayarlari ekrani, `needsReview` listesi, bakim modu dugmesi.
+
+**6c'de denenmeyenler:** iade isleme ve bakim modu/acil durdurma ekranlari tarayicida elle denenmedi (backend entegrasyon testleri var); seans baslatmak gercek cihazi tetikleyecegi icin acil durdurma gercek peronda denenmedi. Admin Socket.IO odasi yapilmadi: panel `GET /admin/bays`'i 5 sn'de bir yoklar (pilot icin yeterli; canli istasyon sayisi artinca odaya gecilir).
 
 **Ertelenen:** MFA (canlidan once step-up), admin icin ayri sifre sifirlama akisi (simdilik musteriyle ayni), hareketsiz bakiye hatirlatmasi (alan adi bekliyor).
 
