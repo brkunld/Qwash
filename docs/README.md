@@ -20,6 +20,7 @@ Dokumanlar; hedef mimariyi, teslimat planini, guvenlik modelini, IoT davranisini
 | [TESTING.md](TESTING.md) | Test stratejisi, ariza senaryolari ve concurrency dogrulamasi. | QA, backend, platform |
 | [DEVELOPMENT.md](DEVELOPMENT.md) | Planlanan lokal gelistirme akisi ve komutlari. | Gelistiriciler |
 | [DEPLOYMENT.md](DEPLOYMENT.md) | Planlanan ortam modeli, CI/CD ve production operasyonlari. | DevOps, platform |
+| [RUNBOOK.md](RUNBOOK.md) | Yaygın arızalarda belirti, para durumu ve yapılacaklar; `pnpm smoke`. | Operasyon, saha |
 
 ---
 
