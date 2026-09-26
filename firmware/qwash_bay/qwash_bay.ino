@@ -1,6 +1,11 @@
 // QWASH peron firmware'i (Faz 3 SPIKE) - Arduino IDE.
 // Kontrat: docs/IOT.md. Kurulum ve test: firmware/README.md
 //
+// Dokunmatik menu (0.6.0): musteri QR'i okutup telefonda onaylayinca backend SHOW_MENU gonderir,
+// ekran o hesaba bagli paket/sure menusune gecer. Cihaz yalniz secimi bildirir (MENU_START);
+// tutar, bakiye ve seans karari backend'dedir. DURDUR roleyi cihazda hemen kapatir; tahsilat
+// bildirilen kalan sureden yapilir (SESSION_ENDED). Seans bitince 30 sn "tekrar sec", sonra QR.
+//
 // Fail-safe ilkeleri:
 //  - Acilista once tum roleler kapatilir.
 //  - Sure ESP32'nin kendi millis() sayacindan gelir; Wi-Fi/MQTT kopsa da sure dolunca roleler kapanir.
@@ -70,6 +75,36 @@ static UiMode uiMode = UiMode::BOOT;
 static uint32_t lastUiSec = 0xFFFFFFFF;
 static bool lastWifi = false, lastMqtt = false;
 static uint32_t doneUntilMs = 0;
+static bool uiDirty = true;  // Ekran tamamen yeniden cizilmeli
+
+// ---------- Dokunmatik menu durumu ----------
+struct MenuProgram {
+  char code[17];
+  char label[20];
+  uint32_t pricePerSec;  // kurus/sn
+};
+struct Menu {
+  bool active = false;  // Ekran bir musterinin hesabina bagli (claim)
+  char claimId[40] = "";
+  char holder[28] = "";  // Maskeli hesap etiketi
+  long long availableKurus = 0;
+  MenuProgram programs[MENU_MAX_PROGRAMS];
+  uint8_t programCount = 0;
+  uint32_t durations[MENU_MAX_DURATIONS] = {};
+  uint8_t durationCount = 0;
+  uint32_t deadlineMs = 0;
+  bool afterSession = false;
+  int8_t selected = -1;  // Sure ekranindaki paket
+};
+static Menu menu;
+static char menuMsg[32] = "";
+static uint32_t menuMsgUntil = 0;
+static uint32_t waitingSinceMs = 0;
+// Ayni secim tekrar denenirse ayni anahtar gider: ilk mesaj ulastiysa backend ikinci seans acmaz.
+static char pendingReq[40] = "";
+static int8_t pendingProg = -1;
+static uint32_t pendingDur = 0;
+static bool stopSent = false;
 
 // ---------- Yardimcilar ----------
 static void newUuid(char* out) {  // v4
@@ -275,6 +310,148 @@ static void publishSimpleEvent(const char* type, const char* detail = nullptr) {
   });
 }
 
+// ---------- Dokunmatik menu ----------
+static void setMode(UiMode m) {
+  uiMode = m;
+  uiDirty = true;
+  lastUiSec = 0xFFFFFFFF;
+}
+
+static uint32_t menuLeftSec() {
+  int32_t left = (int32_t)(menu.deadlineMs - millis());
+  return left > 0 ? (uint32_t)((left + 999) / 1000) : 0;
+}
+
+static void menuMessage(const char* msg) {
+  strlcpy(menuMsg, msg, sizeof(menuMsg));
+  menuMsgUntil = millis() + MENU_MESSAGE_MS;
+  uiDirty = true;
+}
+
+// Bag bitti: ekran QR'a doner (seans suruyorsa seans ekrani kalir).
+static void menuClose() {
+  menu.active = false;
+  menu.claimId[0] = 0;
+  pendingReq[0] = 0;
+  if (!sess.active) setMode(UiMode::IDLE);
+}
+
+static void handleShowMenu(JsonObject pl) {
+  const char* claimId = pl["claimId"] | "";
+  if (!claimId[0]) return;
+  bool sameClaim = menu.active && strcmp(menu.claimId, claimId) == 0;
+  menu.active = true;
+  strlcpy(menu.claimId, claimId, sizeof(menu.claimId));
+  strlcpy(menu.holder, pl["holder"] | "", sizeof(menu.holder));
+  menu.availableKurus = pl["availableKurus"].as<long long>();
+  menu.afterSession = pl["afterSession"] | false;
+  uint32_t timeoutSec = pl["timeoutSec"] | 60;
+  menu.deadlineMs = millis() + timeoutSec * 1000UL;
+  menu.programCount = 0;
+  for (JsonObject p : pl["programs"].as<JsonArray>()) {
+    if (menu.programCount >= MENU_MAX_PROGRAMS) break;
+    MenuProgram& mp = menu.programs[menu.programCount++];
+    strlcpy(mp.code, p["code"] | "", sizeof(mp.code));
+    strlcpy(mp.label, p["label"] | "", sizeof(mp.label));
+    mp.pricePerSec = p["pricePerSecondKurus"] | 0;
+  }
+  menu.durationCount = 0;
+  for (JsonVariant d : pl["durationsSec"].as<JsonArray>()) {
+    if (menu.durationCount >= MENU_MAX_DURATIONS) break;
+    uint32_t v = d.as<uint32_t>();
+    if (v > 0 && v <= MAX_SESSION_SEC) menu.durations[menu.durationCount++] = v;
+  }
+  if (!sameClaim) {
+    menu.selected = -1;
+    pendingReq[0] = 0;
+  }
+  Serial.printf("[menu] %s: %u paket, %us\n", menu.afterSession ? "tekrar sec" : "acildi", menu.programCount,
+                (unsigned)timeoutSec);
+  if (sess.active) return;  // Seans bitince acilir (endSession).
+  // Ayni musteri sure ekranindaysa orada kal (bakiye tazelendi).
+  if (sameClaim && uiMode == UiMode::MENU_DURATIONS && menu.selected >= 0 && menu.selected < menu.programCount) {
+    uiDirty = true;
+    return;
+  }
+  setMode(UiMode::MENU_PROGRAMS);
+}
+
+static void handleShowQr(JsonObject pl) {
+  const char* claimId = pl["claimId"] | "";
+  if (claimId[0] && strcmp(claimId, menu.claimId) != 0) return;  // Eski bir bagin komutu
+  Serial.println("[menu] bag kapandi, QR");
+  menuClose();
+}
+
+static void handleMenuError(JsonObject pl) {
+  const char* claimId = pl["claimId"] | "";
+  if (!menu.active || strcmp(claimId, menu.claimId) != 0) return;
+  menu.deadlineMs = millis() + AFTER_SESSION_MENU_SEC * 1000UL;  // Backend de bagi uzatti
+  pendingReq[0] = 0;
+  menuMessage(pl["message"] | "BASLATILAMADI");
+  if (uiMode == UiMode::MENU_WAITING) setMode(menu.selected >= 0 ? UiMode::MENU_DURATIONS : UiMode::MENU_PROGRAMS);
+}
+
+static void menuStart(uint8_t durIdx) {
+  if (menu.selected < 0 || durIdx >= menu.durationCount) return;
+  if (!mqtt.connected()) {
+    menuMessage("SUNUCU YOK");
+    return;
+  }
+  uint32_t dur = menu.durations[durIdx];
+  if (!pendingReq[0] || pendingProg != menu.selected || pendingDur != dur) {
+    newUuid(pendingReq);
+    pendingProg = menu.selected;
+    pendingDur = dur;
+  }
+  const MenuProgram& p = menu.programs[menu.selected];
+  publishEvent(tEvents, false, [&](JsonObject o) {
+    o["type"] = "MENU_START";
+    o["claimId"] = menu.claimId;
+    o["programCode"] = p.code;
+    o["durationSec"] = dur;
+    o["requestId"] = pendingReq;
+  });
+  Serial.printf("[menu] secildi %s %us\n", p.code, (unsigned)dur);
+  waitingSinceMs = millis();
+  setMode(UiMode::MENU_WAITING);
+}
+
+static void drawMenu() {
+  gfx.fillScreen(TFT_BLACK);
+  char bal[20], sub[64];
+  fmtTl(bal, sizeof(bal), menu.availableKurus);
+  snprintf(sub, sizeof(sub), "%s  BAKIYE %s", menu.holder, bal);
+  if (uiMode == UiMode::MENU_PROGRAMS) {
+    uiHeader(menu.afterSession ? "TEKRAR SECEBILIRSINIZ" : "PAKET SECIN", sub);
+    for (uint8_t i = 0; i < menu.programCount; i++) {
+      const MenuProgram& p = menu.programs[i];
+      char price[20], line2[28];
+      fmtTl(price, sizeof(price), (long long)p.pricePerSec * 60);
+      snprintf(line2, sizeof(line2), "%s / DK", price);
+      uiButton(programBtn(i), p.label, line2, TFT_NAVY, TFT_WHITE);
+    }
+    uiButton(BTN_EXIT, "CIKIS", nullptr, TFT_DARKGREY, TFT_WHITE);
+  } else if (uiMode == UiMode::MENU_DURATIONS && menu.selected >= 0) {
+    const MenuProgram& p = menu.programs[menu.selected];
+    uiHeader(p.label, sub);
+    for (uint8_t i = 0; i < menu.durationCount; i++) {
+      uint32_t d = menu.durations[i];
+      long long cost = (long long)p.pricePerSec * d;
+      bool ok = cost <= menu.availableKurus;
+      char amount[20], row[48];
+      fmtTl(amount, sizeof(amount), cost);
+      if (d % 60 == 0) snprintf(row, sizeof(row), "%u DK   %s", (unsigned)(d / 60), amount);
+      else snprintf(row, sizeof(row), "%u SN   %s", (unsigned)d, amount);
+      uiButton(durationBtn(i), row, ok ? nullptr : "BAKIYE YETERSIZ", ok ? TFT_DARKGREEN : TFT_DARKGREY, TFT_WHITE);
+    }
+    uiButton(BTN_BACK, "GERI", nullptr, TFT_DARKGREY, TFT_WHITE);
+  } else {
+    uiMessage("BASLATILIYOR", TFT_YELLOW);
+  }
+  if (menuMsg[0]) uiFooterMessage(menuMsg, TFT_ORANGE);
+}
+
 // ---------- Seans ----------
 static void endSession(const char* reason) {
   if (!sess.active) return;
@@ -295,9 +472,18 @@ static void endSession(const char* reason) {
   Serial.printf("[session] bitti: %s (kalan %us)\n", reason, rem);
   publishLastEnd();
   publishStatus("ONLINE");  // Retained BUSY'yi temizle.
-  uiMode = UiMode::DONE;
-  doneUntilMs = millis() + 5000;
-  lastUiSec = 0xFFFFFFFF;
+  stopSent = false;
+  if (menu.active) {
+    // Ekrana bagli musteri: 30 sn "tekrar sec". Backend guncel bakiyeyle yeni SHOW_MENU da gonderir.
+    menu.afterSession = true;
+    menu.deadlineMs = millis() + AFTER_SESSION_MENU_SEC * 1000UL;
+    menu.selected = -1;
+    pendingReq[0] = 0;
+    setMode(UiMode::MENU_PROGRAMS);
+  } else {
+    setMode(UiMode::DONE);
+    doneUntilMs = millis() + 5000;
+  }
 }
 
 static void handleStart(JsonObject env, JsonObject pl, const char* commandId, const char* sessionId) {
@@ -341,8 +527,9 @@ static void handleStart(JsonObject env, JsonObject pl, const char* commandId, co
   saveSession();  // Role cekilmeden once kalici yaz (guc kesilirse kurtarilabilsin).
   relaySet(sess.relay, true);
   lastNvsSave = millis();
-  uiMode = UiMode::RUNNING;
-  lastUiSec = 0xFFFFFFFF;
+  stopSent = false;
+  pendingReq[0] = 0;
+  setMode(UiMode::RUNNING);
   publishAck("STARTED_ACK", commandId, sessionId, "SUCCESS");
   publishStatus("BUSY");
 }
@@ -388,6 +575,10 @@ static void onMessage(char* topic, byte* payload, unsigned int len) {
   Serial.printf("[cmd] %s (commandId=%s)\n", type, commandId);
   if (!strcmp(type, "START")) handleStart(env, pl, commandId, sessionId);
   else if (!strcmp(type, "STOP")) handleStop(pl, commandId, sessionId);
+  // Ekran komutlari rolelere dokunmaz; tekrar gelmeleri zararsizdir (commandId halkasina yazilmaz).
+  else if (!strcmp(type, "SHOW_MENU")) handleShowMenu(pl);
+  else if (!strcmp(type, "SHOW_QR")) handleShowQr(pl);
+  else if (!strcmp(type, "MENU_ERROR")) handleMenuError(pl);
   else if (!strcmp(type, "RESET")) {
     relaysAllOff();
     delay(200);
@@ -457,32 +648,154 @@ static void mqttTryConnect() {
 // ---------- Ekran guncelleme ----------
 static void updateUi() {
   bool w = WiFi.isConnected(), m = mqtt.connected();
-  if (uiMode == UiMode::DONE && (int32_t)(millis() - doneUntilMs) >= 0) {
-    uiMode = UiMode::IDLE;
-    lastUiSec = 0xFFFFFFFF;
+  if (uiMode == UiMode::BOOT) setMode(UiMode::IDLE);
+  if (uiMode == UiMode::DONE && (int32_t)(millis() - doneUntilMs) >= 0) setMode(UiMode::IDLE);
+
+  bool inMenu = uiMode == UiMode::MENU_PROGRAMS || uiMode == UiMode::MENU_DURATIONS || uiMode == UiMode::MENU_WAITING;
+  if (inMenu && uiMode != UiMode::MENU_WAITING && menuLeftSec() == 0) {
+    Serial.println("[menu] sure doldu, QR");
+    menuClose();  // Backend de ayni anda bagi kapatir (tarama).
+    inMenu = false;
   }
-  if (uiMode == UiMode::BOOT) uiMode = UiMode::IDLE;
-  if (uiMode == UiMode::RUNNING) {
-    uint32_t r = remainingSec();
-    if (r != lastUiSec) {
-      lastUiSec = r;
-      uiRunning(r, "CALISIYOR", TFT_GREEN);
-    }
-  } else if (uiMode == UiMode::DONE) {
-    if (lastUiSec != 0) {
-      lastUiSec = 0;
-      uiRunning(0, "BITTI", TFT_CYAN);
-    }
-  } else if (uiMode == UiMode::IDLE) {
-    if (lastUiSec != 1 || w != lastWifi || m != lastMqtt) {
-      lastUiSec = 1;
-      lastWifi = w;
-      lastMqtt = m;
-      char url[160];
-      snprintf(url, sizeof(url), "%s%s", qrBase, bayId);
-      uiIdle(url, bayId, w, m);
-    }
+  if (uiMode == UiMode::MENU_WAITING && millis() - waitingSinceMs >= MENU_WAIT_TIMEOUT_MS) {
+    menuMessage("CEVAP YOK, TEKRAR DENE");
+    setMode(UiMode::MENU_DURATIONS);
   }
+  if (menuMsg[0] && (int32_t)(millis() - menuMsgUntil) >= 0) {
+    menuMsg[0] = 0;
+    if (inMenu) uiDirty = true;
+  }
+
+  switch (uiMode) {
+    case UiMode::RUNNING: {
+      uint32_t r = remainingSec();
+      if (uiDirty) {
+        uiDirty = false;
+        lastUiSec = r;
+        uiRunning(r, "CALISIYOR", TFT_GREEN, true, stopSent);
+      } else if (r != lastUiSec) {
+        lastUiSec = r;
+        uiRunningTime(r);
+      }
+      break;
+    }
+    case UiMode::DONE:
+      if (uiDirty) {
+        uiDirty = false;
+        uiRunning(0, "BITTI", TFT_CYAN, false, false);
+      }
+      break;
+    case UiMode::IDLE:
+      if (uiDirty || w != lastWifi || m != lastMqtt) {
+        uiDirty = false;
+        lastWifi = w;
+        lastMqtt = m;
+        char url[160];
+        snprintf(url, sizeof(url), "%s%s", qrBase, bayId);
+        uiIdle(url, bayId, w, m);
+      }
+      break;
+    case UiMode::MENU_PROGRAMS:
+    case UiMode::MENU_DURATIONS:
+    case UiMode::MENU_WAITING: {
+      if (uiDirty) {
+        uiDirty = false;
+        drawMenu();
+        lastUiSec = 0xFFFFFFFF;
+      }
+      uint32_t left = menuLeftSec();
+      if (uiMode != UiMode::MENU_WAITING && left != lastUiSec) {
+        lastUiSec = left;
+        uiCountdown(left);
+      }
+      break;
+    }
+    default:
+      break;
+  }
+}
+
+// ---------- Dokunmatik ----------
+static void onTap(int32_t x, int32_t y) {
+  switch (uiMode) {
+    case UiMode::MENU_PROGRAMS:
+      for (uint8_t i = 0; i < menu.programCount; i++) {
+        if (programBtn(i).hit(x, y)) {
+          menu.selected = i;
+          setMode(UiMode::MENU_DURATIONS);
+          return;
+        }
+      }
+      if (BTN_EXIT.hit(x, y)) {
+        publishEvent(tEvents, false, [&](JsonObject o) {
+          o["type"] = "MENU_EXIT";
+          o["claimId"] = menu.claimId;
+        });
+        menuClose();
+      }
+      break;
+    case UiMode::MENU_DURATIONS:
+      for (uint8_t i = 0; i < menu.durationCount; i++) {
+        if (durationBtn(i).hit(x, y)) {
+          long long cost = (long long)menu.programs[menu.selected].pricePerSec * menu.durations[i];
+          if (cost > menu.availableKurus) menuMessage("BAKIYE YETERSIZ");
+          else menuStart(i);
+          return;
+        }
+      }
+      if (BTN_BACK.hit(x, y)) setMode(UiMode::MENU_PROGRAMS);
+      break;
+    case UiMode::RUNNING:
+      // Roleyi burada hemen kapat: su aninda kesilir, ag yokken de calisir. Tahsilat, bildirilen
+      // kalan sureden yapilir (SESSION_ENDED; cevrimdisiysa baglaninca gider).
+      if (BTN_STOP.hit(x, y) && sess.active && !stopSent) {
+        stopSent = true;
+        Serial.println("[touch] DURDUR");
+        endSession("SCREEN_STOP");
+      }
+      break;
+    default:
+      break;
+  }
+}
+
+static void pollTouch() {
+  static bool wasDown = false;
+  static uint32_t lastTapMs = 0;
+  int32_t x, y;
+  bool down = gfx.getTouch(&x, &y) > 0;
+  if (!down) {
+    wasDown = false;
+    return;
+  }
+  if (wasDown) return;  // Basili tutmak tek dokunus sayilir
+  wasDown = true;
+  if (millis() - lastTapMs < 300) return;  // Direncli ekranda ziplama
+  lastTapMs = millis();
+  Serial.printf("[touch] %ld,%ld\n", (long)x, (long)y);
+  onTap(x, y);
+}
+
+// Acilista ekrana ~2 sn basili tutulursa kalibrasyon (4 kose). Seans kurtarildiysa yapilmaz:
+// kalibrasyon ekrani loop()'u bekletir, role acikken sayac duramaz.
+static void maybeCalibrateTouch() {
+  int32_t x, y;
+  if (!gfx.getTouch(&x, &y)) return;
+  uint32_t t0 = millis();
+  uiMessage("BASILI TUTUN", TFT_YELLOW);
+  while (gfx.getTouch(&x, &y) && millis() - t0 < TOUCH_CALIBRATE_HOLD_MS) delay(20);
+  if (millis() - t0 < TOUCH_CALIBRATE_HOLD_MS) return;
+  uiMessage("BIRAKIN", TFT_WHITE);
+  while (gfx.getTouch(&x, &y)) delay(20);
+  delay(300);
+  uint16_t cal[8];
+  gfx.fillScreen(TFT_BLACK);
+  uiCenterText("OKLARIN UCUNA DOKUNUN", 100, 1, TFT_WHITE);
+  gfx.calibrateTouch(cal, TFT_WHITE, TFT_BLACK, 20);
+  prefs.putBytes("tcal", cal, sizeof(cal));
+  Serial.println("[touch] kalibrasyon kaydedildi");
+  uiMessage("KALIBRE EDILDI", TFT_GREEN);
+  delay(1000);
 }
 
 // ---------- setup / loop ----------
@@ -516,6 +829,10 @@ void setup() {
   buildTopics();
   uiBegin();
   uiMessage("QWASH", TFT_WHITE);
+  {
+    uint16_t cal[8];
+    if (prefs.getBytes("tcal", cal, sizeof(cal)) == sizeof(cal)) gfx.setTouchCalibrate(cal);
+  }
 
   // NVS seans kurtarma: role hemen tekrar cekilir, kalan sureyle devam.
   if (prefs.getBool("sActive", false)) {
@@ -540,7 +857,9 @@ void setup() {
     }
   }
 
-  mqtt.setBufferSize(1024);
+  if (!sess.active) maybeCalibrateTouch();
+
+  mqtt.setBufferSize(2048);  // SHOW_MENU (6 paket) 1 KB'i asabilir
   // Varsayilan 15 sn: broker TCP'yi kabul edip CONNACK vermezse (Docker'in port yonlendirmesi
   // boyle davranir) baglanma denemesi 15 sn'lik WDT'yi asip cihazi seans ortasinda resetliyordu.
   mqtt.setSocketTimeout(3);
@@ -628,5 +947,6 @@ void loop() {
     publishHeartbeat();
   }
 
+  pollTouch();
   updateUi();
 }

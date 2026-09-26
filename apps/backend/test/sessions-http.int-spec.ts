@@ -17,6 +17,7 @@ import { UserThrottlerGuard } from '../src/http/user-throttler.guard';
 import { OutboxService } from '../src/outbox/outbox.service';
 import { SessionChangeListener } from '../src/realtime/session-change.listener';
 import { SessionGateway } from '../src/realtime/session.gateway';
+import { BayClaimService } from '../src/session/bay-claim.service';
 import { BayController, SessionController } from '../src/session/session.controller';
 import { SessionQueries } from '../src/session/session.queries';
 import { SessionService } from '../src/session/session.service';
@@ -56,8 +57,10 @@ describe('Peron/seans HTTP + Socket.IO (gercek PostgreSQL)', () => {
       mailer: new CapturingMailer(),
       google: null,
     });
-    sessions = new SessionService(prisma, wallets, new OutboxService(prisma));
+    const outbox = new OutboxService(prisma);
+    sessions = new SessionService(prisma, wallets, outbox);
     const queries = new SessionQueries(prisma, sessions);
+    const claims = new BayClaimService(prisma, sessions, outbox);
     const moduleRef = await Test.createTestingModule({
       imports: [ThrottlerModule.forRoot([{ ttl: 60_000, limit: 120 }])],
       controllers: [BayController, SessionController, WalletController],
@@ -66,6 +69,7 @@ describe('Peron/seans HTTP + Socket.IO (gercek PostgreSQL)', () => {
         { provide: AuthService, useValue: auth },
         { provide: SessionService, useValue: sessions },
         { provide: SessionQueries, useValue: queries },
+        { provide: BayClaimService, useValue: claims },
         {
           provide: SessionChangeListener,
           useValue: new SessionChangeListener(process.env.TEST_DATABASE_URL!),
@@ -340,6 +344,41 @@ describe('Peron/seans HTTP + Socket.IO (gercek PostgreSQL)', () => {
       .set('Authorization', `Bearer ${stranger.token}`)
       .expect(200);
     expect(active.body.data).toBeNull();
+  });
+
+  it('peron ekranini baglama: giris ister, baskasi baslatamaz, birakinca acilir', async () => {
+    const bay = '/api/v1/bays/BAY-001';
+    await http().post(`${bay}/claim`).expect(401);
+
+    const owner = await customer(10_000);
+    const claimed = await http()
+      .post(`${bay}/claim`)
+      .set('Authorization', `Bearer ${owner.token}`)
+      .expect(200);
+    const claimId = (claimed.body.data as { claimId: string }).claimId;
+    const mine = await http()
+      .get(`${bay}/claim`)
+      .set('Authorization', `Bearer ${owner.token}`)
+      .expect(200);
+    expect(mine.body.data).toMatchObject({ claimId, bayCode: 'BAY-001' });
+
+    const view = await http().get(bay).expect(200);
+    expect(view.body.data).toMatchObject({ available: false, unavailableReason: 'CLAIMED' });
+
+    const stranger = await customer(10_000);
+    const blocked = await startSession(stranger.token).expect(422);
+    expect(blocked.body).toMatchObject({ error: { code: 'BAY_CLAIMED' } });
+    const none = await http()
+      .get(`${bay}/claim`)
+      .set('Authorization', `Bearer ${stranger.token}`)
+      .expect(200);
+    expect(none.body.data).toBeNull();
+
+    await http()
+      .post(`${bay}/claim/release`)
+      .set('Authorization', `Bearer ${owner.token}`)
+      .expect(204);
+    await startSession(stranger.token).expect(201);
   });
 
   it('kapali hesap seans baslatamaz', async () => {

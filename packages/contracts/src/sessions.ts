@@ -4,7 +4,8 @@ import { z } from 'zod';
 
 /**
  * Peron neden su an baslatilamaz. null: kullanilabilir.
- * BUSY: peronda baska bir seans suruyor. Digerleri cihaz/bakim durumudur.
+ * BUSY: peronda baska bir seans suruyor. CLAIMED: peron ekrani su an baska bir musteriye
+ * bagli (dokunmatikten secim yapiyor). Digerleri cihaz/bakim durumudur.
  */
 export const BayUnavailableReasonSchema = z.enum([
   'MAINTENANCE',
@@ -12,6 +13,7 @@ export const BayUnavailableReasonSchema = z.enum([
   'DEVICE_OFFLINE',
   'DEVICE_STALE',
   'BUSY',
+  'CLAIMED',
 ]);
 export type BayUnavailableReason = z.infer<typeof BayUnavailableReasonSchema>;
 
@@ -36,6 +38,20 @@ export const BayViewSchema = z.object({
   maxDurationSec: z.number().int(),
 });
 export type BayView = z.infer<typeof BayViewSchema>;
+
+/**
+ * Dokunmatik ekrandan seans: peron ekrani kisa sure musterinin hesabina baglanir, paket ve
+ * sure ekrandan secilir, para bu hesaptan cekilir. expiresAt'e kadar secim yapilmazsa (veya
+ * seans bittikten sonra ~30 sn icinde yeni paket secilmezse) bag kopar, ekran QR'a doner.
+ */
+export const BayClaimViewSchema = z.object({
+  claimId: z.string(),
+  bayCode: z.string(),
+  /** Bu anda seans yoksa bag sona erer. Seans surerken bag acik kalir. */
+  expiresAt: z.string(),
+  serverTime: z.string(),
+});
+export type BayClaimView = z.infer<typeof BayClaimViewSchema>;
 
 export const StartSessionRequestSchema = z.object({
   bayCode: z.string().min(1).max(64),

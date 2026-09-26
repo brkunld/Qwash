@@ -34,6 +34,12 @@ export class BayBusyError extends SessionError {
   }
 }
 
+export class BayClaimedError extends SessionError {
+  constructor(bayCode: string) {
+    super('BAY_CLAIMED', `Peron ekrani su an baska bir musteriye bagli: ${bayCode}`);
+  }
+}
+
 export class InvalidDurationError extends SessionError {
   constructor(durationSec: number, max: number) {
     super('INVALID_DURATION', `Sure 1..${max} saniye arasinda olmali: ${durationSec}`);

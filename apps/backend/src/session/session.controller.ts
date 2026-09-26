@@ -13,6 +13,7 @@ import { ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import {
   StartSessionRequestSchema,
+  type BayClaimView,
   type BayView,
   type SessionView,
   type StartSessionRequest,
@@ -21,6 +22,7 @@ import { AccessTokenGuard, CurrentUser } from '../auth/auth.guard';
 import type { AccessClaims } from '../auth/auth.service';
 import { ZodBody } from '../http/api-envelope';
 import { IdempotencyKeyRequiredError } from '../payments/payments.errors';
+import { BayClaimService } from './bay-claim.service';
 import { BayNotFoundError } from './session.errors';
 import { SessionQueries } from './session.queries';
 import { SessionService } from './session.service';
@@ -31,7 +33,10 @@ const BAY_CODE = /^[A-Za-z0-9_-]{1,64}$/;
 @ApiTags('bays')
 @Controller('bays')
 export class BayController {
-  constructor(private readonly queries: SessionQueries) {}
+  constructor(
+    private readonly queries: SessionQueries,
+    private readonly claims: BayClaimService,
+  ) {}
 
   /**
    * QR okutulunca "Peron X'e baglaniyorsunuz" onay ekrani. Giris gerektirmez: musteri
@@ -42,6 +47,42 @@ export class BayController {
   getBay(@Param('bayCode') bayCode: string): Promise<BayView> {
     if (!BAY_CODE.test(bayCode)) throw new BayNotFoundError(bayCode.slice(0, 64));
     return this.queries.getBay(bayCode);
+  }
+
+  /** Peron ekranini hesabima bagla: paketi dokunmatikten secerim, para bakiyemden cekilir. */
+  @Post(':bayCode/claim')
+  @HttpCode(200)
+  @UseGuards(AccessTokenGuard)
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  claim(
+    @CurrentUser() user: AccessClaims,
+    @Param('bayCode') bayCode: string,
+  ): Promise<BayClaimView> {
+    if (!BAY_CODE.test(bayCode)) throw new BayNotFoundError(bayCode.slice(0, 64));
+    return this.claims.claim(user.userId, bayCode);
+  }
+
+  /** Bu perondaki acik bagim (yoksa null). */
+  @Get(':bayCode/claim')
+  @UseGuards(AccessTokenGuard)
+  myClaim(
+    @CurrentUser() user: AccessClaims,
+    @Param('bayCode') bayCode: string,
+  ): Promise<BayClaimView | null> {
+    if (!BAY_CODE.test(bayCode)) throw new BayNotFoundError(bayCode.slice(0, 64));
+    return this.claims.mine(user.userId, bayCode);
+  }
+
+  /** Bagi birak: ekran QR'a doner. Suren seans etkilenmez. */
+  @Post(':bayCode/claim/release')
+  @HttpCode(204)
+  @UseGuards(AccessTokenGuard)
+  async release(
+    @CurrentUser() user: AccessClaims,
+    @Param('bayCode') bayCode: string,
+  ): Promise<void> {
+    if (!BAY_CODE.test(bayCode)) throw new BayNotFoundError(bayCode.slice(0, 64));
+    await this.claims.release(user.userId, bayCode);
   }
 }
 

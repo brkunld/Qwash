@@ -2,7 +2,7 @@
 // QWASH peron firmware'i (Faz 3 SPIKE). Kontrat: docs/IOT.md
 // Donanim: ESP32-32E 3.2" ST7789 240x320 (SKU E32R32P).
 
-#define FW_VERSION "0.5.0-spike"
+#define FW_VERSION "0.6.0-touch"
 
 // ---- Ekran pinleri (E32R32P uretici semasi; kartinla dogrula) ----
 constexpr int PIN_TFT_SCLK = 14;
@@ -13,6 +13,19 @@ constexpr int PIN_TFT_DC = 2;
 constexpr int PIN_TFT_BL = 27;
 constexpr bool TFT_INVERT = true;  // E32R32P'de dogrulandi (false iken renkler tersti).
 constexpr int TFT_ROTATION = 1;     // 1 = yatay (320x240). 0/2 dikey.
+
+// ---- Dokunmatik (XPT2046, ekranla ayni SPI hatti) ----
+constexpr int PIN_TOUCH_CS = 33;   // Burak'in TFT_eSPI User_Setup.h'indeki TOUCH_CS ile ayni.
+// IRQ pini (kartta genelde 36) dogrulanmadi; -1 = yoklama (polling), pin gerekmez.
+constexpr int PIN_TOUCH_IRQ = -1;
+
+// ---- Dokunmatik menu (ekrandan seans) ----
+constexpr uint8_t MENU_MAX_PROGRAMS = 6;         // 2 x 3 izgara
+constexpr uint8_t MENU_MAX_DURATIONS = 3;        // Hazir sure dugmeleri
+constexpr uint32_t AFTER_SESSION_MENU_SEC = 30;  // Seans bitince "tekrar sec" (Burak: ~30 sn)
+constexpr uint32_t MENU_WAIT_TIMEOUT_MS = 15000; // Secimden sonra backend cevabi bu surede gelmezse
+constexpr uint32_t MENU_MESSAGE_MS = 4000;       // Alt satirdaki hata mesajinin suresi
+constexpr uint32_t TOUCH_CALIBRATE_HOLD_MS = 2000; // Acilista bu kadar basili tutulursa kalibrasyon
 
 // ---- Role pinleri ----
 // GUVENLI VARSAYILAN: -1 = role baglanmamis (kuru calisma, yalniz log/ekran/MQTT).

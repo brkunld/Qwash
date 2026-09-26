@@ -2,17 +2,25 @@
 
 Arduino IDE sketch'i: `firmware/qwash_bay/`. Kontrat `docs/IOT.md` ile birebir. Donanim: ESP32-32E, 3.2" ST7789 240x320 dirençli dokunmatik ekran modulu (SKU E32R32P).
 
-> **Durum:** Iskelet yazildi ama **henuz derlenmedi ve cihazda denenmedi.** Ilk derleme/yukleme Burak'in Arduino IDE'sinde yapilacak. Beklenmedik derleme hatalari normaldir; hata metnini paylasin.
+> **Durum:** 0.5.0 gercek cihazda (E32R32P, `4CC382C3CC1C`) calisti. **0.6.0 (dokunmatik menu, ADR-0012) arduino-cli 1.5.1 + esp32 3.3.8 ile derlendi, cihazda henuz denenmedi.**
 
 ## Kurulum (Arduino IDE)
 
-1. **Kart:** Boards Manager'dan `esp32` (Espressif) kur. Kart olarak `ESP32 Dev Module` sec. Partition: `Default 4MB with spiffs`. Upload speed: 460800 (olmazsa 115200).
+1. **Kart:** Boards Manager'dan `esp32` (Espressif) kur. Kart olarak `ESP32 Dev Module` sec. Partition: **`Minimal SPIFFS (1.9MB APP with OTA)`** (varsayilan semada 0.6.0 alanin %98'ini dolduruyor; firmware SPIFFS kullanmiyor). Upload speed: 460800 (olmazsa 115200).
 2. **Kutuphaneler** (Library Manager):
    - `LovyanGFX` (lovyan03)
    - `PubSubClient` (Nick O'Leary)
    - `ArduinoJson` (Benoit Blanchon) — **v7**
    - `WiFiManager` (tzapu)
 3. `firmware/qwash_bay/qwash_bay.ino` dosyasini ac, kartı bagla, yukle. Seri monitor: 115200.
+
+## Dokunmatik menu (0.6.0)
+
+Musteri QR'i okutup telefonda peronu onaylayinca ekran onun hesabina baglanir: paketler (2 x 3 izgara, dakika fiyatiyla), sonra hazir sure dugmeleri (tutar ve "bakiye yetersiz" isaretiyle). Secim backend'e `MENU_START` olarak gider; seans normal `START` ile baslar. Seans surerken ekranda **DURDUR** roleyi cihazda hemen kapatir. Seans bitince 30 sn "tekrar sec", secilmezse QR. Ust satirda maskeli hesap, bakiye ve geri sayim gorunur.
+
+- **Dokunmatik:** XPT2046, ekranla ayni SPI hatti, CS 33 (`config.h` `PIN_TOUCH_CS`; Burak'in TFT_eSPI ayariyla ayni). IRQ kullanilmaz (yoklama).
+- **Kalibrasyon:** ilk yuklemeden sonra (ve dokunuslar kaymissa) cihazi ekrana **basili tutarak** ac; "BASILI TUTUN" -> "BIRAKIN" -> ekrandaki oklarin ucuna sirayla dokun. Sonuc NVS'e (`tcal`) yazilir. Seans kurtarilarak acilista kalibrasyon yapilmaz (role acikken sayac durmasin).
+- Seri monitorde her dokunus `[touch] x,y` olarak gorunur; dugme konumlari `display.h`'teki `programBtn/durationBtn/BTN_*`.
 
 ## Wi-Fi ve ayar (Captive Portal)
 

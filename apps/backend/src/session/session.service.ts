@@ -2,7 +2,13 @@ import { randomUUID } from 'node:crypto';
 import { Logger } from '@nestjs/common';
 import { Prisma, PrismaClient } from '../generated/prisma/client';
 import type { Bay, WashSession } from '../generated/prisma/client';
-import { BayStatus, LedgerSource, SessionStatus, UserStatus } from '../generated/prisma/enums';
+import {
+  BayClaimStatus,
+  BayStatus,
+  LedgerSource,
+  SessionStatus,
+  UserStatus,
+} from '../generated/prisma/enums';
 import {
   commandTopic,
   DeviceMessageSchema,
@@ -16,8 +22,10 @@ import {
 import { OutboxService } from '../outbox/outbox.service';
 import { WalletNotFoundError } from '../wallet/wallet.errors';
 import { WalletService, type Tx } from '../wallet/wallet.service';
+import type { ClaimHooks } from './bay-claim.service';
 import {
   BayBusyError,
+  BayClaimedError,
   BayNotFoundError,
   BayUnavailableError,
   InvalidDurationError,
@@ -91,7 +99,12 @@ export type DeviceMessageOutcome =
   | 'LATE_ACK_STOP_SENT'
   | 'UNPAID_RUN'
   | 'LATE_END_RECORDED'
-  | 'RECOVERY_RECORDED';
+  | 'RECOVERY_RECORDED'
+  | 'UNKNOWN_CLAIM'
+  | 'CLAIM_EXPIRED'
+  | 'CLAIM_RELEASED'
+  | 'MENU_SESSION_STARTED'
+  | 'MENU_START_REJECTED';
 
 export interface SweepResult {
   ackTimeouts: number;
@@ -148,6 +161,8 @@ const ACTIVE: SessionStatus[] = [
  */
 export class SessionService {
   private readonly logger = new Logger(SessionService.name);
+  /** Dokunmatik ekran bagi (BayClaimService kendini baglar); yoksa ekran olaylari yok sayilir. */
+  private claims: ClaimHooks | null = null;
 
   constructor(
     private readonly prisma: PrismaClient,
@@ -156,6 +171,10 @@ export class SessionService {
     private readonly clock: () => Date = () => new Date(),
     private readonly timings: SessionTimings = DEFAULT_TIMINGS,
   ) {}
+
+  attachClaims(claims: ClaimHooks): void {
+    this.claims = claims;
+  }
 
   // ---------------------------------------------------------------------------
   // Musteri islemleri
@@ -189,6 +208,17 @@ export class SessionService {
       include: { program: true },
     });
     if (!bayProgram) throw new ProgramNotAvailableError(input.bayCode, input.programCode);
+
+    // Peron ekrani baska bir musteriye bagliyken o musterinin secimi beklenir.
+    const claimedByOther = await this.prisma.bayClaim.count({
+      where: {
+        bayId: bay.id,
+        status: BayClaimStatus.ACTIVE,
+        userId: { not: input.userId },
+        expiresAt: { gt: this.clock() },
+      },
+    });
+    if (claimedByOther > 0) throw new BayClaimedError(input.bayCode);
 
     const wallet = await this.prisma.wallet.findUnique({
       where: { userId: input.userId },
@@ -330,6 +360,18 @@ export class SessionService {
     if (parsed.kind === 'status' || parsed.kind === 'heartbeat') {
       await this.recordDeviceState(parsed, msg);
       return 'DEVICE_STATE_RECORDED';
+    }
+
+    // Dokunmatik ekran olaylari kendi transaction'larini acar (seans baslatma dahil).
+    const p0 = msg.payload;
+    if (p0.type === 'MENU_START' || p0.type === 'MENU_EXIT') {
+      if (!this.claims || parsed.kind !== 'events') return 'NO_OP';
+      const eventId = msg.eventId;
+      if (eventId) {
+        const fresh = await this.prisma.$transaction((tx) => this.claimInbox(tx, eventId, topic));
+        if (!fresh) return 'DUPLICATE_EVENT';
+      }
+      return this.claims.onMenuEvent(parsed, p0);
     }
 
     return this.prisma.$transaction(async (tx) => {
@@ -581,6 +623,7 @@ export class SessionService {
       },
     });
     await tx.bay.update({ where: { id: s.bayId }, data: { status: BayStatus.IDLE } });
+    await this.claims?.onSessionClosed(tx, s);
     await this.transition(tx, s.id, s.status, SessionStatus.COMPLETED, reason, {
       usedSeconds: billed,
       remainingSec,
@@ -783,6 +826,7 @@ export class SessionService {
       },
     });
     await tx.bay.update({ where: { id: s.bayId }, data: { status: bayStatus } });
+    await this.claims?.onSessionClosed(tx, s);
     await this.transition(tx, s.id, s.status, SessionStatus.FAILED, reason);
   }
 

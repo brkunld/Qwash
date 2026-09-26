@@ -107,6 +107,24 @@ Tüm komut ve olaylar kurumsal standartlarda ortak bir zarf (envelope) yapısın
 - **`ErrorEventPayload`:** `errorCode`, `errorMessage`, `hardwareWatchdogFired`, `relayState`.
 - **`DeviceStatusPayload`:** `status` (`ONLINE`, `OFFLINE`, `BUSY`, `ERROR`, `MAINTENANCE`).
 
+### D. Dokunmatik Ekran Menüsü (ADR-0012)
+
+Müşteri QR'ı okutup telefonda onaylayınca peron ekranı kısa süre onun hesabına bağlanır; paket ve süre dokunmatikten seçilir. Cihaz yalnız seçimi bildirir, tutar ve seans kararı backend'dedir.
+
+Backend ➔ ESP32 (`cmd`, zarfta `sessionId` boş; cihaz bu komutları `commandId` halkasına yazmaz):
+
+- **`SHOW_MENU`:** `claimId`, `timeoutSec` (göreli; cihaz saati senkron olmayabilir), `afterSession` (seans yeni bitti, "tekrar seç"), `holder` (maskeli e-posta), `availableKurus`, `programs[]` (`code`, `label` ASCII/BÜYÜK, `pricePerSecondKurus`), `durationsSec[]` (hazır süre düğmeleri). Seans sürerken gelirse bekletilir, seans bitince açılır.
+- **`SHOW_QR`:** `claimId`. Bağ kapandı (müşteri bıraktı / süre doldu); ekran QR'a döner.
+- **`MENU_ERROR`:** `claimId`, `message` (kısa ASCII, ör. `BAKIYE YETERSIZ`). Seçim reddedildi, seans açılmadı; bağ 30 sn uzar.
+
+ESP32 ➔ Backend (`events`):
+
+- **`MENU_START`:** `claimId`, `programCode`, `durationSec`, `requestId` (seçim başına; aynı seçim tekrar gönderilirse aynı kalır, ikinci seans açılmaz). Başarılıysa normal `START` komutu gelir.
+- **`MENU_EXIT`:** `claimId`. Ekrandaki "Çıkış"; bağ kapanır.
+- Ekrandaki **DURDUR** ayrı olay değildir: cihaz röleyi hemen kapatır ve `SESSION_ENDED` (`reason: SCREEN_STOP`, `remainingSec`) gönderir; yalnız kullanılan süre tahsil edilir.
+
+Süreler: ilk seçim 90 sn, seans bitince 30 sn, sonra ekran QR'a döner (backend taraması ve cihaz sayacı birlikte).
+
 ---
 
 ## 5. Two-Phase ACK Protokolü (İki Aşamalı Başlatma)

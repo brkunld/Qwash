@@ -10,7 +10,7 @@ export function testPrisma(): PrismaClient {
 /** Tum tablolari bosaltir. TRUNCATE, ledger degistirilemezlik trigger'ini tetiklemez. */
 export async function resetDatabase(prisma: PrismaClient): Promise<void> {
   await prisma.$executeRawUnsafe(`
-    TRUNCATE "AdminAuditLog", "CashTopUp", "RefundPayout", "SessionTransition", "WashSession", "OutboxEvent", "InboxMessage", "Device",
+    TRUNCATE "AdminAuditLog", "BayClaim", "CashTopUp", "RefundPayout", "SessionTransition", "WashSession", "OutboxEvent", "InboxMessage", "Device",
              "LedgerEntry", "RefundRequest", "WalletHold", "CardTopUp", "TopUpSettings", "Wallet",
              "RefreshToken", "AuthToken", "AuthIdentity", "User", "LoginThrottle",
              "BayProgram", "WashProgram", "Bay", "Station"
