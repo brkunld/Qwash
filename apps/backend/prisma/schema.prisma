@@ -282,16 +282,21 @@ model Station {
 }
 
 model Bay {
-  id        String        @id @default(uuid())
-  bayCode   String        @unique // QR icerigi (Orn: "BAY-001")
-  name      String
-  status    BayStatus     @default(IDLE)
-  stationId String
-  station   Station       @relation(fields: [stationId], references: [id], onDelete: Restrict)
-  programs  BayProgram[]
-  sessions  WashSession[]
-  device    Device?
-  createdAt DateTime      @default(now())
+  id                String        @id @default(uuid())
+  bayCode           String        @unique // QR icerigi (Orn: "BAY-001")
+  name              String
+  status            BayStatus     @default(IDLE)
+  // Bakim modu (ADR-0011 #6): calisma durumundan ayri tutulur; seans bitince status IDLE
+  // olsa da peron bakimda kalir. Doluysa yeni seans baslatilamaz.
+  maintenanceAt     DateTime?
+  maintenanceReason String?
+  maintenanceBy     String?
+  stationId         String
+  station           Station       @relation(fields: [stationId], references: [id], onDelete: Restrict)
+  programs          BayProgram[]
+  sessions          WashSession[]
+  device            Device?
+  createdAt         DateTime      @default(now())
 }
 
 // ---------------------------------------------------------------------------
@@ -338,6 +343,9 @@ model WashSession {
   provenUsedSec       Int                 @default(0)
   reconcilingAt       DateTime?
   needsReview         Boolean             @default(false) // Admin incelemesi (Faz 6)
+  reviewedAt          DateTime? // Admin inceledi (needsReview kalir, gecmis icin)
+  reviewedBy          String?
+  reviewNote          String?
   // STOP takibi: musteri durdurma ani (tahsilat tavani) ve STOP'un cihaza ulastigi an.
   // Onay gelene kadar STOP yeniden gonderilir (ADR-0010 #9).
   stopRequestedAt     DateTime?

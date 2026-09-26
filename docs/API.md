@@ -131,7 +131,14 @@ Kararlar: [ADR-0011](adr/0011-admin-operations.md). Tüm uçlar `AdminGuard` ark
 * `POST /admin/refund-requests/:id/reject` — `{ reason }`. Ödenmiş veya sonucu belirsiz parça varsa `409 REFUND_HAS_PAID_PARTS`; yoksa bloke serbest kalır.
 * `GET /admin/settings/topup`, `PUT /admin/settings/topup` (**yalnız SUPER_ADMIN**) — `{ minTopUpKurus, maxTopUpKurus }`.
 
-**Faz 6b/6c (planlı, aşağıdaki eski taslak):**
+**Faz 6b (hazır):**
+* `GET /admin/bays` — Dashboard: tüm peronlar; çalışma durumu, `problem` (müşteri başlatabilir mi: MAINTENANCE, NO_DEVICE, DEVICE_STALE…), bakım bilgisi, cihaz sağlığı (heartbeat, firmware, reset nedeni, drift), aktif seans.
+* `PUT /admin/bays/:id/maintenance` — `{ enabled: true, reason }` / `{ enabled: false }`. Süren seans kesilmez; seans bitince peron bakımda kalır.
+* `POST /admin/sessions/:id/stop` — `{ reason }`. Acil durdurma: cihaza STOP (`ADMIN_OVERRIDE`), tahsilat kullanılan saniye kadar. Aktif değilse `409 SESSION_NOT_ACTIVE`.
+* `GET /admin/sessions/review?all=true` — `needsReview` seansları (varsayılan: incelenmemişler), geçiş nedenleriyle. `GET /admin/sessions/:id`.
+* `POST /admin/sessions/:id/review` — `{ note }`. İncelemeyi kapatır; para hareket etmez (fark gerekiyorsa SUPER_ADMIN bakiye düzeltmesi).
+
+**Faz 6c (planlı, aşağıdaki eski taslak):**
 * `GET /api/v1/admin/dashboard` — Anlık telemetri, aktif seanslar ve ciro metrikleri.
 * `POST /api/v1/admin/programs` — Sıfırdan yeni yıkama programı/paketi ekleme (`code`, `name`, `description?`, `icon?`, `pricePerSecondKurus`, `relayIndex`, `stationId?`).
 * `GET /api/v1/admin/programs` — İstasyon/peron yıkama programlarını ve saniyelik fiyat tarifelerini listeleme (`includeInactive` filtresi ile).
@@ -139,7 +146,6 @@ Kararlar: [ADR-0011](adr/0011-admin-operations.md). Tüm uçlar `AdminGuard` ark
 * `PUT /api/v1/admin/bays/:id/programs` — Peronda geçerli programları ve her birinin röle kanalını atama (`[{ programId, relayIndex, isEnabled }]`). Aynı röle iki programa atanamaz.
 * `PATCH /api/v1/admin/programs/:id/toggle` — Programı anında aktif/pasif duruma alma (`isActive`).
 * `DELETE /api/v1/admin/programs/:id` — Programı sistemden silme (Finansal tutarlılık ve geçmiş seansların korunması için Soft-Delete: `deletedAt` atanır, müşteri ekranından derhal kaldırılır).
-* `POST /api/v1/admin/bays/:id/maintenance` — Peronu bakım moduna alma/çıkarma.
 * `GET /api/v1/admin/audit-logs` — Yönetici işlem denetim geçmişi.
 
 ---

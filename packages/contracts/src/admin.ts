@@ -210,3 +210,77 @@ export type UpdateTopUpSettingsRequest = z.infer<typeof UpdateTopUpSettingsReque
 
 export const AdminStationSchema = z.object({ id: z.string(), code: z.string(), name: z.string() });
 export type AdminStation = z.infer<typeof AdminStationSchema>;
+
+// ---------------------------------------------------------------------------
+// Peron ve seans operasyonlari (Faz 6b)
+// ---------------------------------------------------------------------------
+
+export const AdminBayViewSchema = z.object({
+  id: z.string(),
+  bayCode: z.string(),
+  name: z.string(),
+  stationCode: z.string(),
+  status: z.enum(['IDLE', 'WAITING', 'RUNNING', 'OFFLINE', 'MAINTENANCE', 'ERROR']),
+  /** Musteri seans baslatabilir mi; degilse neden (MAINTENANCE, NO_DEVICE, DEVICE_STALE...). */
+  problem: z.string().nullable(),
+  maintenance: z
+    .object({ since: z.string(), reason: z.string().nullable(), by: z.string().nullable() })
+    .nullable(),
+  device: z
+    .object({
+      deviceId: z.string(),
+      reportedStatus: z.string(),
+      firmwareVersion: z.string().nullable(),
+      resetReason: z.number().int().nullable(),
+      lastSeenAt: z.string(),
+      driftKind: z.string().nullable(),
+      driftConfirmedAt: z.string().nullable(),
+    })
+    .nullable(),
+  activeSession: z
+    .object({
+      id: z.string(),
+      status: z.string(),
+      userId: z.string(),
+      programCode: z.string(),
+      plannedDurationSec: z.number().int(),
+      startedAt: z.string().nullable(),
+      stopRequestedAt: z.string().nullable(),
+    })
+    .nullable(),
+});
+export type AdminBayView = z.infer<typeof AdminBayViewSchema>;
+
+export const SetMaintenanceRequestSchema = z.discriminatedUnion('enabled', [
+  z.object({ enabled: z.literal(true), reason: z.string().trim().min(3).max(200) }),
+  z.object({ enabled: z.literal(false) }),
+]);
+export type SetMaintenanceRequest = z.infer<typeof SetMaintenanceRequestSchema>;
+
+export const AdminStopSessionRequestSchema = z.object({ reason: Reason });
+export type AdminStopSessionRequest = z.infer<typeof AdminStopSessionRequestSchema>;
+
+export const AdminSessionViewSchema = z.object({
+  id: z.string(),
+  userId: z.string(),
+  userEmail: z.string(),
+  bayCode: z.string(),
+  programCode: z.string(),
+  status: z.string(),
+  plannedDurationSec: z.number().int(),
+  usedSeconds: z.number().int().nullable(),
+  provenUsedSec: z.number().int(),
+  chargedKurus: z.number().int().nullable(),
+  endReason: z.string().nullable(),
+  needsReview: z.boolean(),
+  reviewedAt: z.string().nullable(),
+  reviewNote: z.string().nullable(),
+  /** Inceleme icin: seans gecis nedenleri (DEVICE_LOST, UNPAID_RUN_REPORTED...). */
+  transitions: z.array(z.object({ reason: z.string(), at: z.string() })),
+  createdAt: z.string(),
+  endedAt: z.string().nullable(),
+});
+export type AdminSessionView = z.infer<typeof AdminSessionViewSchema>;
+
+export const ReviewSessionRequestSchema = z.object({ note: Reason });
+export type ReviewSessionRequest = z.infer<typeof ReviewSessionRequestSchema>;

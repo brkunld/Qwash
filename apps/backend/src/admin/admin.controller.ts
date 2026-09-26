@@ -16,6 +16,14 @@ import {
 } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import {
+  type AdminBayView,
+  type AdminSessionView,
+  type AdminStopSessionRequest,
+  AdminStopSessionRequestSchema,
+  type ReviewSessionRequest,
+  ReviewSessionRequestSchema,
+  type SetMaintenanceRequest,
+  SetMaintenanceRequestSchema,
   type AdminMe,
   type AdminRefundRequest,
   type AdminStation,
@@ -45,6 +53,7 @@ import { ZodBody } from '../http/api-envelope';
 import { IdempotencyKeyRequiredError } from '../payments/payments.errors';
 import { AdminGuard, adminFromRequest, type AdminActor, SuperAdminOnly } from './admin.guard';
 import { AdminService } from './admin.service';
+import { OpsService } from './ops.service';
 import { RefundAdminService } from './refund-admin.service';
 
 const CurrentAdmin = createParamDecorator((_: unknown, context: ExecutionContext): AdminActor =>
@@ -67,6 +76,7 @@ export class AdminController {
   constructor(
     private readonly admin: AdminService,
     private readonly refunds: RefundAdminService,
+    private readonly ops: OpsService,
   ) {}
 
   @Get('me')
@@ -165,6 +175,52 @@ export class AdminController {
     @Body(new ZodBody(RejectRefundRequestSchema)) body: RejectRefundRequest,
   ): Promise<AdminRefundRequest> {
     return this.refunds.reject(actor, id, body.reason);
+  }
+
+  // --- Peron ve seans operasyonlari (6b) ----------------------------------------
+
+  @Get('bays')
+  bays(): Promise<AdminBayView[]> {
+    return this.ops.bays();
+  }
+
+  @Put('bays/:id/maintenance')
+  setMaintenance(
+    @CurrentAdmin() actor: AdminActor,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body(new ZodBody(SetMaintenanceRequestSchema)) body: SetMaintenanceRequest,
+  ): Promise<AdminBayView> {
+    return this.ops.setMaintenance(actor, id, body);
+  }
+
+  @Post('sessions/:id/stop')
+  @HttpCode(200)
+  stopSession(
+    @CurrentAdmin() actor: AdminActor,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body(new ZodBody(AdminStopSessionRequestSchema)) body: AdminStopSessionRequest,
+  ): Promise<AdminSessionView> {
+    return this.ops.stopSession(actor, id, body.reason);
+  }
+
+  @Get('sessions/review')
+  reviewQueue(@Query('all') all: string | undefined): Promise<AdminSessionView[]> {
+    return this.ops.reviewQueue(all !== 'true');
+  }
+
+  @Get('sessions/:id')
+  session(@Param('id', ParseUUIDPipe) id: string): Promise<AdminSessionView> {
+    return this.ops.session(id);
+  }
+
+  @Post('sessions/:id/review')
+  @HttpCode(200)
+  markReviewed(
+    @CurrentAdmin() actor: AdminActor,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body(new ZodBody(ReviewSessionRequestSchema)) body: ReviewSessionRequest,
+  ): Promise<AdminSessionView> {
+    return this.ops.markReviewed(actor, id, body.note);
   }
 
   // --- Ayarlar -----------------------------------------------------------------

@@ -13,9 +13,13 @@ export type AuditAction =
   | 'REFUND_COMPLETED'
   | 'REFUND_REJECTED'
   | 'TOPUP_SETTINGS_UPDATED'
-  | 'ROLE_GRANTED';
+  | 'ROLE_GRANTED'
+  | 'BAY_MAINTENANCE_ON'
+  | 'BAY_MAINTENANCE_OFF'
+  | 'SESSION_ADMIN_STOP'
+  | 'SESSION_REVIEWED';
 
-export type AuditTarget = 'USER' | 'REFUND_REQUEST' | 'TOPUP_SETTINGS';
+export type AuditTarget = 'USER' | 'REFUND_REQUEST' | 'TOPUP_SETTINGS' | 'BAY' | 'SESSION';
 
 export interface AuditEntry {
   /** null: komut satiri betigi. */

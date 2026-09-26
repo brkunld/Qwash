@@ -196,11 +196,11 @@ Uc alt faz (2026-09-26 plani). Model onerisi parantez icinde.
 - [x] Yukleme ayarlari (`TopUpSettings`) yonetimi (SUPER_ADMIN).
 - [x] Kullanici ve cuzdan arama (e-posta, ad; cuzdan + son hareketler).
 
-**6b — Peron ve seans operasyonlari, backend (Opus):**
-- [ ] Bakim modu (suren seans kesilmez, bitince peron `MAINTENANCE`'ta kalir) ve acil durdurma (`ADMIN_STOP`).
-- [ ] `needsReview` seanslari ve cihaz drift'i: liste + "incelendi" kapatma (denetim kaydiyla).
-- [ ] Teknik hata iadesi (`SERVICE_FAILURE`): admin bir seans icin iade olusturur.
-- [ ] Admin Socket.IO odasi: peron durumu ve cihaz telemetrisi.
+**6b — Peron ve seans operasyonlari, backend (Opus):** _Cekirdek tamam (2026-09-26, 4 entegrasyon testi)._
+- [x] Bakim modu (`Bay.maintenanceAt`, calisma durumundan ayri; suren seans kesilmez, bitince peron `MAINTENANCE`'ta kalir) ve acil durdurma (`ADMIN_STOP`).
+- [x] `needsReview` seanslari: liste + "incelendi" kapatma (denetim kaydiyla; para hareket etmez). Peron dashboard ucu cihaz sagligi ve drift'i gosterir.
+- [ ] Teknik hata iadesi (`SERVICE_FAILURE`): admin bir seans icin iade olusturur. **Burak'in karari bekleniyor:** bakiyeye mi, karta mi? (Seans parasi karisik kaynakli bakiyeden cekilir; politika "iade yalniz orijinal karta".)
+- [ ] Admin Socket.IO odasi: peron durumu ve cihaz telemetrisi. _6c'ye tasindi (Sonnet); o zamana kadar panel `GET /admin/bays`'i 5 sn'de bir yoklar._
 
 **6c — Admin paneli ekranlari + dusuk riskli uclar (Sonnet):**
 - [ ] `apps/web-admin`: giris, rol kontrolu, oturum yenileme (musteri PWA'sindaki istemci deseni).

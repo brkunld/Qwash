@@ -8,6 +8,7 @@ import { AdminController } from '../src/admin/admin.controller';
 import type { AdminActor } from '../src/admin/admin.guard';
 import { AdminGuard } from '../src/admin/admin.guard';
 import { AdminService } from '../src/admin/admin.service';
+import { OpsService } from '../src/admin/ops.service';
 import { RefundAdminService } from '../src/admin/refund-admin.service';
 import { AuthService } from '../src/auth/auth.service';
 import { CapturingMailer } from '../src/auth/mailer';
@@ -583,6 +584,7 @@ describe('Admin operasyonlari (gercek PostgreSQL)', () => {
           { provide: PrismaService, useValue: prisma },
           { provide: AdminService, useValue: admin },
           { provide: RefundAdminService, useValue: refunds },
+          { provide: OpsService, useValue: {} },
           { provide: APP_GUARD, useClass: ThrottlerGuard },
           AdminGuard,
         ],

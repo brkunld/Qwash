@@ -93,6 +93,9 @@ const DOMAIN_STATUS: Record<string, HttpStatus> = {
   PAYOUT_STATE: HttpStatus.CONFLICT,
   REFUND_HAS_PAID_PARTS: HttpStatus.CONFLICT,
   STATION_REQUIRED: HttpStatus.BAD_REQUEST,
+  SESSION_NOT_ACTIVE: HttpStatus.CONFLICT,
+  SESSION_NOT_FLAGGED: HttpStatus.CONFLICT,
+  ALREADY_REVIEWED: HttpStatus.CONFLICT,
 };
 
 export class ValidationError extends Error {
