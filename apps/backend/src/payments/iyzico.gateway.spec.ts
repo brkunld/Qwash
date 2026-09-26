@@ -151,6 +151,18 @@ describe('IyzicoGateway', () => {
     ).resolves.toMatchObject({ kind: 'FAILURE' });
   });
 
+  it('mesajsiz basarisiz odemede 3DS sonucunu sebep olarak yazar (sandbox yaniti)', async () => {
+    const { gateway } = gatewayReturning({
+      status: 'success',
+      paymentStatus: 'FAILURE',
+      mdStatus: 0,
+    });
+    await expect(gateway.retrieveCheckout('t')).resolves.toEqual({
+      kind: 'FAILURE',
+      reason: '3D Secure dogrulamasi basarisiz (mdStatus=0)',
+    });
+  });
+
   it('odeme FAILURE ise basarisiz, istek hatasi ise beklemede sayilir', async () => {
     await expect(
       gatewayReturning({

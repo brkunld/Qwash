@@ -72,7 +72,7 @@ export class IyzicoGateway extends PaymentGateway {
         registrationAddress: PLACEHOLDER_ADDRESS,
         city: PLACEHOLDER_CITY,
         country: PLACEHOLDER_COUNTRY,
-        ...(input.buyer.ip ? { ip: input.buyer.ip } : {}),
+        ...(buyerIp(input.buyer.ip) ? { ip: buyerIp(input.buyer.ip) } : {}),
       },
       billingAddress: {
         contactName,
@@ -112,7 +112,7 @@ export class IyzicoGateway extends PaymentGateway {
     const paymentStatus = str(res.paymentStatus);
     if (paymentStatus !== 'SUCCESS') {
       return paymentStatus === 'FAILURE'
-        ? { kind: 'FAILURE', reason: describeError(res) }
+        ? { kind: 'FAILURE', reason: describeFailure(res) }
         : { kind: 'PENDING', reason: `paymentStatus=${paymentStatus ?? '-'}` };
     }
 
@@ -141,7 +141,7 @@ export class IyzicoGateway extends PaymentGateway {
       paidKurus: priceToKurus(num(res.paidPrice)),
       currency: str(res.currency) ?? '',
       basketId: str(res.basketId) ?? '',
-      conversationId: str(res.conversationId) ?? '',
+      conversationId: str(res.conversationId) ?? null,
     };
   }
 
@@ -228,11 +228,32 @@ export class IyzicoGateway extends PaymentGateway {
   }
 }
 
+/** "::ffff:1.2.3.4" -> "1.2.3.4"; yerel/loopback adres Iyzico'ya gonderilmez. */
+export function buyerIp(ip: string | null): string | null {
+  if (!ip) return null;
+  const v4 = ip.startsWith('::ffff:') ? ip.slice(7) : ip;
+  if (v4 === '::1' || v4.startsWith('127.') || v4 === 'localhost') return null;
+  return v4;
+}
+
 function splitName(fullName: string | null): { name: string; surname: string } {
   const parts = (fullName ?? '').trim().split(/\s+/).filter(Boolean);
   if (parts.length >= 2) return { name: parts.slice(0, -1).join(' '), surname: parts.at(-1)! };
   if (parts.length === 1) return { name: parts[0]!, surname: '-' };
   return { name: 'Qwash', surname: 'Musteri' };
+}
+
+/**
+ * Basarisiz odemede Iyzico cogu zaman errorMessage vermez; 3DS sonucu mdStatus'tadir
+ * (sandbox'ta goruldu, 2026-09-26: mdStatus 0, mesaj yok). 1 = 3DS basarili.
+ */
+function describeFailure(res: Json): string {
+  if (str(res.errorMessage) || str(res.errorCode)) return describeError(res);
+  const mdStatus = str(res.mdStatus);
+  if (mdStatus !== undefined && mdStatus !== '1') {
+    return `3D Secure dogrulamasi basarisiz (mdStatus=${mdStatus})`;
+  }
+  return 'Odeme banka tarafindan reddedildi';
 }
 
 function describeError(res: Json): string {

@@ -155,7 +155,7 @@ Faz 2 ve Faz 3 birbirinden bagimsizdir; iki kisi veya iki paralel calisma akisi 
 **Hedef:** Gercek musteri akisini uctan uca acmak: QR → giris → bakiye yukle → seans baslat → izle.
 
 - [x] Iyzico Checkout Form entegrasyonu (Faz 5b backend): REST istemcisi (IYZWSv2, yanit imzasi), `CardTopUp`, admin ayarli minimum + kat hazir tutarlar (`TopUpSettings`). Kart verisi sunucuya hic gelmez.
-- [ ] Iyzico sandbox'ta gercek 3D Secure denemesi (Burak'in sandbox anahtarlari gerekli); zorunlu alici alanlari (TCKN yer tutucu, adres, telefon) sandbox'ta dogrulanir.
+- [x] Iyzico sandbox'ta gercek 3D Secure denemesi (2026-09-26): 100 TL yukleme SUCCEEDED, bakiye + tek CARD_TOPUP kaydi, ad muhru, `paymentTransactionId` saklandi; sonuc mutabakat worker'iyla gercek Iyzico'dan alindi. Bulgular: (1) TCKN yer tutucu `11111111111`, yer tutucu adres ve telefonsuz alici kabul ediliyor. (2) Iyzico `.local` uzantili e-postayi reddediyor (`email hatali format`). (3) CF sonuc yanitinda `conversationId` gelmiyor; baglayici alan imzali `basketId`. (4) Basarisiz odemede mesaj yok, sebep `mdStatus`ta. (5) Sandbox 3DS sayfasi sabit 123456 degil, sayfada parantez icinde gosterilen kodu istiyor.
 - [x] Webhook V3 imza dogrulamasi, idempotent isleme, dakikalik mutabakat worker'i (gec basari EXPIRED'dan da islenir).
 - [x] Basarisiz/tekrarlanan/eszamanli callback'in duplicate bakiye olusturmadigi testi (21 servis + 4 HTTP + 7 imza birim testi).
 - [ ] Webhook icin herkese acik adres (sandbox'ta tunel, canlida alan adi) ve Iyzico panelinde bildirim URL'si.

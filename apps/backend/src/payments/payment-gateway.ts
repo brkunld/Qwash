@@ -30,7 +30,8 @@ export type CheckoutOutcome =
       paidKurus: number;
       currency: string;
       basketId: string;
-      conversationId: string;
+      /** Iyzico sonuc yanitinda gelmeyebilir; baglayici alan basketId. */
+      conversationId: string | null;
     }
   /** Odeme kesin olarak basarisiz. */
   | { kind: 'FAILURE'; reason: string }

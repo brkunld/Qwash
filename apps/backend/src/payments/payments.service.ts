@@ -271,7 +271,11 @@ export class PaymentsService {
         `tutar ${outcome.paidKurus} != ${topUp.amountKurus}`,
       outcome.currency !== 'TRY' && `para birimi ${outcome.currency}`,
       outcome.basketId !== topUp.id && `basketId ${outcome.basketId}`,
-      outcome.conversationId !== topUp.id && `conversationId ${outcome.conversationId}`,
+      // Iyzico CF sonuc yanitinda conversationId gelmeyebiliyor (sandbox, 2026-09-26);
+      // baglayici alan imzali basketId'dir. Geldiyse eslesmeli.
+      outcome.conversationId !== null &&
+        outcome.conversationId !== topUp.id &&
+        `conversationId ${outcome.conversationId}`,
     ].filter(Boolean);
     if (mismatch.length > 0) {
       // Para cekilmis ama beklenenle uyusmuyor: bakiye yuklenmez, admin incelemesine kalir.
