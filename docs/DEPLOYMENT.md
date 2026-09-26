@@ -133,3 +133,29 @@ docker service update --image qwash/backend:v1.1.9 qwash_backend
 
 > [!CAUTION]
 > Prisma migration'ları geri alınamaz işlemler içerebilir (column drop vb.). Her migration'da `down` script'i ayrıca hazırlanmalı ve `docs/ADR/` altında belgelenmelidir.
+
+---
+
+## 6. Yedekleme ve Geri Yükleme (Faz 7)
+
+Yedeklenen tek şey PostgreSQL'dir: cüzdanlar, ledger, seanslar, ödemeler ve denetim kaydı orada. Redis (hız sınırı, kuyruk) ve Mosquitto durumu yeniden üretilebilir; kayıp para kaydı doğurmaz.
+
+| Komut | Ne yapar |
+|---|---|
+| `pnpm db:backup` | Docker'daki Postgres'ten `pg_dump -Fc` alır: `backups/qwash-<zaman>.dump` (git dışı). Son `BACKUP_KEEP` (14) yedek tutulur. |
+| `pnpm db:restore-verify [dosya]` | Yedeği (verilmezse en yenisini) **geçici bir veritabanına** geri yükler, doğrular, geçici veritabanını siler. Gerçek veritabanına dokunmaz. |
+
+**Doğrulama neyi kanıtlar:** `pg_restore` hatasız biter; tablo satır sayıları raporlanır; her cüzdanda `bakiye = Σ CREDIT − Σ DEBIT − Σ CAPTURE` ve `bloke = Σ HOLD − Σ RELEASE − Σ CAPTURE` geri yüklenen kopyada tutar. Tutmazsa komut hata koduyla biter. Doğrulayıcının bozuk veriyi yakaladığı elle denendi (bir bakiye +1 ₺ bozulunca 1 uyuşmazlık bildirdi).
+
+**Gerçek felakette geri yükleme (elle, sırayla):**
+1. Backend'i durdur (yeni seans/ödeme yazılmasın).
+2. Bozuk veritabanını sakla (silme, adını değiştir): `ALTER DATABASE qwash RENAME TO qwash_bozuk_<tarih>`.
+3. Boş veritabanı aç: `CREATE DATABASE qwash`.
+4. `docker exec -i <postgres> pg_restore -U <kullanıcı> -d qwash --no-owner < backups/<dosya>.dump`
+5. Backend'i aç, `/api/v1/health` ve admin panelinde kasa raporunu kontrol et.
+6. Yedek ile felaket arasındaki işlemler (Iyzico yüklemeleri, nakit yüklemeler) kayıptır: Iyzico panelinden ve kasa makbuzlarından o aralığı elle karşılaştır.
+
+**Sınırlar (bilerek):**
+- Yedek anlıktır (RPO = son yedekten beri geçen süre). Saatlik/anlık kurtarma (WAL arşivi, PITR) production'da yönetilen PostgreSQL ile gelir; alan adı ve sunucu belli olunca karar verilir.
+- Yedekler aynı makinede durur. Production'da makine dışına (şifreli) kopyalanmalı; ayrıca planlı çalıştırma (cron/Görev Zamanlayıcı) production kurulumunda eklenir.
+- Yedek dosyası kişisel veri ve para kayıtları içerir: paylaşma, repoya koyma.
