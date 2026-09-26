@@ -2,6 +2,14 @@ import { z } from 'zod';
 
 // Kartla bakiye yukleme sozlesmeleri (Faz 5b, API.md "Cuzdan & Odeme").
 
+/** GET /wallet. Kullanilabilir = bakiye - aktif seans blokeleri. */
+export const WalletViewSchema = z.object({
+  balanceKurus: z.number().int(),
+  holdKurus: z.number().int(),
+  availableKurus: z.number().int(),
+});
+export type WalletView = z.infer<typeof WalletViewSchema>;
+
 export const TopUpOptionsSchema = z.object({
   minKurus: z.number().int(),
   maxKurus: z.number().int(),
