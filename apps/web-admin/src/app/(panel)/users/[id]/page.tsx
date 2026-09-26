@@ -39,6 +39,7 @@ const SOURCE_LABEL: Record<string, string> = {
   REFUND: 'İade',
   FORFEIT: 'Feragat',
   CASH_REFUND: 'Kasadan iade',
+  SERVICE_REFUND: 'Teknik hata iadesi',
 };
 
 export default function UserDetailPage() {
@@ -115,6 +116,17 @@ export default function UserDetailPage() {
                         <span className="text-xs text-slate-600">
                           {SOURCE_LABEL[e.source] ?? e.source}
                         </span>
+                        {e.type === 'CAPTURE' && e.source === 'SESSION' && e.referenceId && (
+                          <>
+                            {' '}
+                            <Link
+                              href={`/sessions/${e.referenceId}`}
+                              className="text-xs text-brand-700 underline"
+                            >
+                              seans
+                            </Link>
+                          </>
+                        )}
                       </td>
                       <td className={TD}>{tl(e.amountKurus)}</td>
                       <td className={TD}>{tl(e.balanceAfterKurus)}</td>

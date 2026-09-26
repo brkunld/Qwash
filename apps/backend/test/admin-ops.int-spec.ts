@@ -40,7 +40,7 @@ describe('Admin peron ve seans operasyonlari (gercek PostgreSQL)', () => {
     nowMs = Date.now();
     wallets = new WalletService(prisma);
     sessions = new SessionService(prisma, wallets, new OutboxService(prisma, clock), clock);
-    ops = new OpsService(prisma, sessions);
+    ops = new OpsService(prisma, sessions, wallets);
 
     const station = await prisma.station.create({ data: { code: STATION, name: 'Test' } });
     const program = await prisma.washProgram.create({
@@ -162,6 +162,93 @@ describe('Admin peron ve seans operasyonlari (gercek PostgreSQL)', () => {
 
     await expect(ops.markReviewed(admin, s.id, 'Ikinci kez inceliyorum')).rejects.toMatchObject({
       code: 'ALREADY_REVIEWED',
+    });
+  });
+
+  describe('teknik hata iadesi (bakiyeye)', () => {
+    async function completed(usedSec: number): Promise<WashSession> {
+      const s = await running(60);
+      nowMs += usedSec * 1000;
+      await device({
+        type: 'SESSION_ENDED',
+        sessionId: s.id,
+        reason: 'COMPLETED',
+        remainingSec: 60 - usedSec,
+      });
+      return prisma.washSession.findUniqueOrThrow({ where: { id: s.id } });
+    }
+
+    const balance = async (walletId: string) =>
+      Number((await prisma.wallet.findUniqueOrThrow({ where: { id: walletId } })).balanceKurus);
+
+    it('tahsil edilen tutar cuzdana geri yazilir, denetim kaydi olusur', async () => {
+      const s = await completed(20);
+      const charged = Number(s.chargedKurus);
+      expect(charged).toBe(20 * PRICE);
+      const before = await balance(s.walletId);
+
+      const view = await ops.serviceRefund(admin, s.id, {
+        reason: 'Peron su vermedi, pompa arizasi',
+      });
+      expect(view.serviceRefund).toMatchObject({ amountKurus: charged });
+      expect(await balance(s.walletId)).toBe(before + charged);
+
+      const entry = await prisma.ledgerEntry.findUniqueOrThrow({
+        where: { idempotencyKey: `service-refund:${s.id}` },
+      });
+      expect(entry).toMatchObject({ type: 'CREDIT', source: 'SERVICE_REFUND', referenceId: s.id });
+      const audit = await prisma.adminAuditLog.findFirstOrThrow({
+        where: { action: 'SESSION_SERVICE_REFUND', targetId: s.id },
+      });
+      expect(audit.actorId).toBe(admin.userId);
+    });
+
+    it('kismi iade olur; tahsil edileni asan tutar reddedilir', async () => {
+      const s = await completed(20);
+      await expect(
+        ops.serviceRefund(admin, s.id, {
+          reason: 'Fazla tutar deniyorum',
+          amountKurus: 20 * PRICE + 1,
+        }),
+      ).rejects.toMatchObject({ code: 'REFUND_EXCEEDS_CHARGE' });
+      const view = await ops.serviceRefund(admin, s.id, {
+        reason: 'Son 5 saniye kopuk basinc',
+        amountKurus: 5 * PRICE,
+      });
+      expect(view.serviceRefund?.amountKurus).toBe(5 * PRICE);
+    });
+
+    it('seans basina bir kez; eszamanli iki istekte yalniz biri gecer', async () => {
+      const s = await completed(20);
+      const before = await balance(s.walletId);
+      const results = await Promise.allSettled([
+        ops.serviceRefund(admin, s.id, { reason: 'Ilk operator iade ediyor' }),
+        ops.serviceRefund(admin, s.id, { reason: 'Ikinci operator iade ediyor' }),
+      ]);
+      expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+      const rejected = results.find((r) => r.status === 'rejected') as PromiseRejectedResult;
+      expect(rejected.reason).toMatchObject({ code: 'SESSION_ALREADY_REFUNDED' });
+      expect(await balance(s.walletId)).toBe(before + 20 * PRICE);
+
+      await expect(
+        ops.serviceRefund(admin, s.id, { reason: 'Ucuncu kez deniyorum' }),
+      ).rejects.toMatchObject({ code: 'SESSION_ALREADY_REFUNDED' });
+    });
+
+    it('suren veya ucretsiz seans iade edilemez', async () => {
+      const s = await running(60);
+      await expect(
+        ops.serviceRefund(admin, s.id, { reason: 'Suren seansi iade ediyorum' }),
+      ).rejects.toMatchObject({ code: 'SESSION_NOT_REFUNDABLE' });
+      expect(await prisma.ledgerEntry.count({ where: { source: 'SERVICE_REFUND' } })).toBe(0);
+    });
+
+    it('silinmis hesaba iade yazilmaz', async () => {
+      const s = await completed(20);
+      await prisma.user.update({ where: { id: s.userId }, data: { status: 'DELETED' } });
+      await expect(
+        ops.serviceRefund(admin, s.id, { reason: 'Silinmis hesaba iade deniyorum' }),
+      ).rejects.toMatchObject({ code: 'TARGET_ACCOUNT_NOT_ACTIVE' });
     });
   });
 

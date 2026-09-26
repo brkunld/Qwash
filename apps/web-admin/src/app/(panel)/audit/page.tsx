@@ -20,6 +20,7 @@ const ACTION_LABEL: Record<string, string> = {
   BAY_MAINTENANCE_OFF: 'Bakımdan çıkarıldı',
   SESSION_ADMIN_STOP: 'Acil durdurma',
   SESSION_REVIEWED: 'Seans incelendi',
+  SESSION_SERVICE_REFUND: 'Teknik hata iadesi',
   PROGRAM_CREATED: 'Program eklendi',
   PROGRAM_UPDATED: 'Program güncellendi',
   PROGRAM_DELETED: 'Program silindi',
