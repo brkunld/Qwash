@@ -135,6 +135,19 @@ model AuthToken {
   @@index([userId, type])
 }
 
+// Sifreyle giris denemeleri, e-posta basina (SECURITY.md 2, 8 #5). IP basina sinir
+// cok IP'li saldiriyi durdurmaz; bu tablo tek hesaba yapilan tahmini sinirlar.
+// `key` = normalize e-postanin SHA-256'si: olmayan hesaplara denenen adresler acik saklanmaz.
+// Deneme sifre kontrolunden ONCE sayilir (esazamanli istek yigini sinirdan kacamaz);
+// basarili giris ve sifre sifirlama satiri siler.
+model LoginThrottle {
+  key             String   @id
+  attempts        Int
+  windowStartedAt DateTime
+
+  @@index([windowStartedAt])
+}
+
 // balanceKurus: cuzdandaki toplam para (bloke dahil).
 // holdKurus:    bunun bloke edilen kismi. Kullanilabilir = balance - hold.
 // Kurallar veritabaninda CHECK constraint ile de zorlanir (migration SQL).

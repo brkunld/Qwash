@@ -5,6 +5,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AuthController, COOKIE_SECURE } from './auth.controller';
 import { AccessTokenGuard } from './auth.guard';
 import { AuthService } from './auth.service';
+import { AuthWorker } from './auth.worker';
 import { GoogleTokenVerifier, JoseGoogleTokenVerifier } from './google';
 import { DevConsoleMailer, Mailer } from './mailer';
 import { SmtpMailer } from './smtp-mailer';
@@ -65,6 +66,7 @@ import { SmtpMailer } from './smtp-mailer';
         }),
     },
     AccessTokenGuard,
+    AuthWorker,
   ],
   exports: [AuthService, AccessTokenGuard, COOKIE_SECURE],
 })

@@ -23,6 +23,16 @@ export class InvalidCredentialsError extends AuthError {
   }
 }
 
+/** Hesap var olsun olmasin ayni; hesap varligini sizdirmaz. */
+export class LoginRateLimitedError extends AuthError {
+  constructor() {
+    super(
+      'RATE_LIMITED',
+      'Bu e-posta icin cok fazla giris denemesi yapildi. Biraz bekleyin veya sifrenizi sifirlayin.',
+    );
+  }
+}
+
 export class AccountDisabledError extends AuthError {
   constructor() {
     super('ACCOUNT_DISABLED', 'Hesap kullanima kapali.');

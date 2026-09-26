@@ -5,12 +5,15 @@ import {
   GoogleLoginDisabledError,
   InvalidCredentialsError,
   InvalidTokenError,
+  LoginRateLimitedError,
   UnauthenticatedError,
 } from '../src/auth/auth.errors';
 import {
   ACCESS_TOKEN_TTL_MS,
   AuthService,
   EMAIL_VERIFY_TTL_MS,
+  LOGIN_MAX_ATTEMPTS,
+  LOGIN_WINDOW_MS,
   PASSWORD_RESET_TTL_MS,
   REFRESH_TOKEN_TTL_MS,
 } from '../src/auth/auth.service';
@@ -138,6 +141,83 @@ describe('AuthService (gercek PostgreSQL)', () => {
       await expect(other.verifyAccessToken(accessToken)).rejects.toBeInstanceOf(
         UnauthenticatedError,
       );
+    });
+  });
+
+  describe('e-posta basina giris siniri', () => {
+    const wrong = (email = 'ali@test.local') => auth.login({ email, password: 'yanlis-sifre' });
+    const right = () => auth.login({ email: 'ali@test.local', password: 'gizli-sifre-1' });
+
+    async function exhaust(email = 'ali@test.local') {
+      for (let i = 0; i < LOGIN_MAX_ATTEMPTS; i += 1) {
+        await expect(wrong(email)).rejects.toBeInstanceOf(InvalidCredentialsError);
+      }
+    }
+
+    it('sinir asilinca dogru sifre bile reddedilir; pencere bitince acilir', async () => {
+      await register();
+      await exhaust();
+      await expect(right()).rejects.toBeInstanceOf(LoginRateLimitedError);
+      advance(LOGIN_WINDOW_MS);
+      await expect(right()).resolves.toBeDefined();
+    });
+
+    it('buyuk/kucuk harf ve bosluk farki ayri sayac acmaz', async () => {
+      await register();
+      await exhaust();
+      await expect(wrong('  ALI@test.LOCAL ')).rejects.toBeInstanceOf(LoginRateLimitedError);
+    });
+
+    it('esazamanli istek yigini siniri gecemez', async () => {
+      await register();
+      const results = await Promise.allSettled(
+        Array.from({ length: LOGIN_MAX_ATTEMPTS * 3 }, () => wrong()),
+      );
+      const reasons = results.map((r) => (r.status === 'rejected' ? r.reason : r));
+      // Sifre en fazla LOGIN_MAX_ATTEMPTS kez kontrol edildi; digerleri once reddedildi.
+      expect(reasons.filter((e) => e instanceof InvalidCredentialsError)).toHaveLength(
+        LOGIN_MAX_ATTEMPTS,
+      );
+      expect(reasons.filter((e) => e instanceof LoginRateLimitedError)).toHaveLength(
+        LOGIN_MAX_ATTEMPTS * 2,
+      );
+    });
+
+    it('basarili giris sayaci sifirlar (yazim hatasi yapan kullanici kilitlenmez)', async () => {
+      await register();
+      for (let i = 0; i < LOGIN_MAX_ATTEMPTS - 1; i += 1) {
+        await expect(wrong()).rejects.toBeInstanceOf(InvalidCredentialsError);
+      }
+      await right();
+      await exhaust();
+      await expect(right()).rejects.toBeInstanceOf(LoginRateLimitedError);
+    });
+
+    it('sifre sifirlama kilidi kaldirir', async () => {
+      await register();
+      await exhaust();
+      await auth.forgotPassword('ali@test.local');
+      await auth.resetPassword(mailer.lastToken('PASSWORD_RESET'), 'yeni-sifre-123');
+      await expect(
+        auth.login({ email: 'ali@test.local', password: 'yeni-sifre-123' }),
+      ).resolves.toBeDefined();
+    });
+
+    it('olmayan hesap da ayni sekilde sinirlanir; e-posta acik saklanmaz', async () => {
+      await exhaust('yok@test.local');
+      await expect(wrong('yok@test.local')).rejects.toBeInstanceOf(LoginRateLimitedError);
+      const rows = await prisma.loginThrottle.findMany();
+      expect(rows).toHaveLength(1);
+      expect(rows[0]!.key).toMatch(/^[0-9a-f]{64}$/);
+      expect(JSON.stringify(rows)).not.toContain('yok@test.local');
+    });
+
+    it('temizlik yalniz suresi dolmus pencereleri siler', async () => {
+      await expect(wrong('eski@test.local')).rejects.toBeInstanceOf(InvalidCredentialsError);
+      advance(LOGIN_WINDOW_MS);
+      await expect(wrong('yeni@test.local')).rejects.toBeInstanceOf(InvalidCredentialsError);
+      expect(await auth.purgeLoginThrottles()).toBe(1);
+      expect(await prisma.loginThrottle.count()).toBe(1);
     });
   });
 
