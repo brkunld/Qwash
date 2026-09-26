@@ -93,6 +93,7 @@ export class AdminController {
 
   @Post('users/:id/adjustments')
   @HttpCode(200)
+  @SuperAdminOnly()
   adjust(
     @CurrentAdmin() actor: AdminActor,
     @Param('id', ParseUUIDPipe) id: string,
