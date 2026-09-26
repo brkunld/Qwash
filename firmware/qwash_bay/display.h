@@ -183,7 +183,9 @@ static void uiFooterMessage(const char* msg, uint16_t color) {
 
 static void uiMessage(const char* text, uint16_t color) {
   gfx.fillScreen(TFT_BLACK);
-  uiCenterText(text, gfx.height() / 2 - 20, 4, color);
+  // Font0 karakteri 6 px * boyut; 320 px'e sigmayan metin kucuk boyutla yazilir.
+  int size = strlen(text) * 6 * 4 <= gfx.width() - 10 ? 4 : 3;
+  uiCenterText(text, gfx.height() / 2 - 20, size, color);
 }
 
 // Seans: kalan sure (buyuk) + durum + DURDUR. Saniyelik guncelleme yalniz sureyi boyar (titreme olmasin).
