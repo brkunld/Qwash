@@ -360,6 +360,9 @@ importers:
       react-dom:
         specifier: ^19.3.0
         version: 19.3.0(react@19.3.0)
+      socket.io-client:
+        specifier: ^4.8.3
+        version: 4.8.3(supports-color@8.1.1)
     devDependencies:
       '@qwash/tsconfig':
         specifier: workspace:*

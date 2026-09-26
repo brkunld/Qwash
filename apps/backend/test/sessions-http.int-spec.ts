@@ -20,6 +20,8 @@ import { SessionGateway } from '../src/realtime/session.gateway';
 import { BayController, SessionController } from '../src/session/session.controller';
 import { SessionQueries } from '../src/session/session.queries';
 import { SessionService } from '../src/session/session.service';
+import { PrismaService } from '../src/prisma/prisma.service';
+import { WalletController } from '../src/wallet/wallet.controller';
 import { WalletService } from '../src/wallet/wallet.service';
 import { resetDatabase, testPrisma } from './db';
 
@@ -58,8 +60,9 @@ describe('Peron/seans HTTP + Socket.IO (gercek PostgreSQL)', () => {
     const queries = new SessionQueries(prisma, sessions);
     const moduleRef = await Test.createTestingModule({
       imports: [ThrottlerModule.forRoot([{ ttl: 60_000, limit: 120 }])],
-      controllers: [BayController, SessionController],
+      controllers: [BayController, SessionController, WalletController],
       providers: [
+        { provide: PrismaService, useValue: prisma },
         { provide: AuthService, useValue: auth },
         { provide: SessionService, useValue: sessions },
         { provide: SessionQueries, useValue: queries },
@@ -292,6 +295,30 @@ describe('Peron/seans HTTP + Socket.IO (gercek PostgreSQL)', () => {
     // Ayni IP (127.0.0.1), farkli kullanici: kendi kotasi var (peron dolu oldugu icin 422)
     const other = await startSession(calm.token).expect(422);
     expect(other.body).toMatchObject({ error: { code: 'BAY_BUSY' } });
+  });
+
+  it('bakiye: giris ister; seans blokesi kullanilabilir bakiyeden duser', async () => {
+    await http().get('/api/v1/wallet').expect(401);
+    const { token } = await customer(10_000);
+    const before = await http()
+      .get('/api/v1/wallet')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+    expect(before.body.data).toEqual({
+      balanceKurus: 10_000,
+      holdKurus: 0,
+      availableKurus: 10_000,
+    });
+    await startSession(token).expect(201);
+    const after = await http()
+      .get('/api/v1/wallet')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+    expect(after.body.data).toEqual({
+      balanceKurus: 10_000,
+      holdKurus: 60 * PRICE,
+      availableKurus: 10_000 - 60 * PRICE,
+    });
   });
 
   it('baska kullanicinin seansi gorulemez ve durdurulamaz', async () => {
