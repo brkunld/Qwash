@@ -102,8 +102,13 @@ Sözleşmeler: `packages/contracts/src/auth.ts`. Uygulama: `apps/backend/src/aut
 ### 💳 Cüzdan & Ödeme (`/api/v1/wallet` & `/api/v1/payments`)
 * `GET /api/v1/wallet` — Kullanıcı bakiyesi (`balanceKurus`, `holdKurus` - Tek TL cüzdanı).
 * `GET /api/v1/wallet/transactions` — Cüzdan hareket geçmişi (Ledger dökümü: hangi program için ne kadar harcandı).
-* `POST /api/v1/payments/topup` — İyzico 3D Secure ile cüzdana TL yükleme başlatma.
-* `POST /api/v1/payments/webhook` — İyzico 3D Secure dönüş webhook'u.
+* `GET /api/v1/payments/topup-options` — (Giriş gerekli) `{ minKurus, maxKurus, presetsKurus }`. Minimumu admin belirler; hazır tutarlar minimumun katlarıdır (min, 2×min, 4×min; max'ı aşanlar çıkarılır).
+* `POST /api/v1/payments/topup` — (Giriş + doğrulanmış e-posta + `Idempotency-Key` zorunlu) Body `{ "amountKurus": 10000 }`. İyzico Checkout Form'u açar, `{ topUpId, status: "PENDING", paymentPageUrl }` döner; istemci `paymentPageUrl`'e yönlendirir. Aynı anahtar aynı yüklemeyi döndürür, farklı tutarla `409 IDEMPOTENCY_CONFLICT`. Kullanıcı başına dakikada 5 istek.
+* `GET /api/v1/payments/topups/:id` — Yükleme durumu (`PENDING` / `SUCCEEDED` / `FAILED` / `EXPIRED`); sonuç sayfası bunu okur.
+* `POST /api/v1/payments/iyzico/callback` — İyzico ödeme sayfası müşterinin tarayıcısını buraya form POST (`token`) ile döndürür. Gövdeye güvenilmez: sonuç İyzico'dan sorulur (imzalı yanıt), sonra `303` ile `CUSTOMER_APP_URL/wallet/topup-result?id=<topUpId>`'e yönlendirilir.
+* `POST /api/v1/payments/webhook` — İyzico bildirimi (bkz. §7). Geçerli imzada sonuç yine İyzico'dan sorulur.
+
+Kart yüklemesi, callback + webhook + dakikalık mutabakat worker'ı üzerinden üç yoldan sonuçlanır; hangisi önce gelirse gelsin tek `CREDIT` oluşur (`CardTopUp` durum geçişi ve ledger aynı transaction'da, anahtar `card-topup:<id>`). Uygulama: `apps/backend/src/payments/` (Faz 5b).
 
 ### 🛠️ Admin Uç Noktaları (`/api/v1/admin`)
 * `GET /api/v1/admin/dashboard` — Anlık telemetri, aktif seanslar ve ciro metrikleri.
@@ -163,31 +168,12 @@ Uygulama: **Redis** üzerinde `sliding window` algoritması ile.
 `POST /api/v1/payments/webhook` endpoint’i, İyzico tarafından erişilebilir olmalı ancak sahte isteklere karşı iki katmanlı korunmalıdır:
 
 ### 7.1 HMAC İmza Doğrulaması
-İyzico her webhook isteğine `X-IYZ-SIGNATURE` header’ı ekler. Backend bu imzayı doğrulamadan hiçbir işlem yapmaz:
+İyzico Checkout Form bildirimlerine `X-IYZ-SIGNATURE-V3` header’ı ekler ([iyzico webhook](https://docs.iyzico.com/en/advanced/webhook)). İmza: `HMAC-SHA256(secretKey, secretKey + iyziEventType + iyziPaymentId + token + paymentConversationId + status)`, hex. Doğrulama sabit zamanlı karşılaştırmayla yapılır (`apps/backend/src/payments/iyzico.gateway.ts`); imzasız/yanlış imzalı istek `403` alır.
 
-```typescript
-// packages/contracts/src/utils/webhook.ts
-import * as crypto from 'crypto';
-
-export function verifyIyzicoSignature(
-  rawBody: Buffer,
-  signature: string,
-  secretKey: string,
-): boolean {
-  const computed = crypto
-    .createHmac('sha256', secretKey)
-    .update(rawBody)
-    .digest('base64');
-  // Timing-safe compare — string karşılaştırmasının timing attack’a açık olmaması için
-  return crypto.timingSafeEqual(
-    Buffer.from(computed),
-    Buffer.from(signature),
-  );
-}
-```
+İmza doğru olsa bile bildirimdeki `status` kullanılmaz: backend sonucu İyzico'dan sorar ve yanıtın kendi imzasını (`paymentStatus:paymentId:currency:basketId:conversationId:paidPrice:price:token`) doğrular. Böylece bakiye yalnız İyzico'nun imzalı yanıtıyla yüklenir. İyzico bildirimi 3 kez (15 dk arayla) dener; kaçan bildirimleri mutabakat worker'ı yakalar.
 
 ### 7.2 IP Allowlist
 Production Nginx / API Gateway katmanında yalnızca [https://developer.iyzico.com/docs/webhooks](https://developer.iyzico.com/docs/webhooks) adresinde yayınlanan İyzico IP aralıklarına izin verilir. Diğer IP'lerden gelen istekler `403` ile reddedilir.
 
 ### 7.3 Idempotency
-Webhook isteklerinde de `paymentId` benzersiz kimlik üzerinden `InboxMessage` tablosuna kaydedilerek mükerrer işleme (double-processing) engellenir.
+Mükerrer bildirim, callback ve mutabakat aynı `CardTopUp` satırında koşullu durum geçişiyle (`PENDING/EXPIRED → SUCCEEDED`) tekilleştirilir; ledger anahtarı `card-topup:<id>` benzersizdir. Ayrı bir `InboxMessage` kaydı gerekmez.

@@ -87,28 +87,7 @@ export class WalletService {
     if (existing) return assertSameCredit(existing, input, amount);
 
     try {
-      return await this.prisma.$transaction(async (tx) => {
-        const [row] = await tx.$queryRaw<WalletRow[]>`
-          UPDATE "Wallet"
-          SET "balanceKurus" = "balanceKurus" + ${amount}, "updatedAt" = now()
-          WHERE "id" = ${input.walletId}
-          RETURNING "balanceKurus", "holdKurus"`;
-        if (!row) throw new WalletNotFoundError(input.walletId);
-
-        return tx.ledgerEntry.create({
-          data: {
-            walletId: input.walletId,
-            type: LedgerType.CREDIT,
-            source: input.source,
-            amountKurus: amount,
-            balanceAfterKurus: row.balanceKurus,
-            holdAfterKurus: row.holdKurus,
-            referenceId: input.referenceId ?? null,
-            idempotencyKey: input.idempotencyKey,
-            note: input.note ?? null,
-          },
-        });
-      });
+      return await this.prisma.$transaction((tx) => this.creditTx(tx, input));
     } catch (error) {
       // Ayni anahtarla eszamanli iki istek: kaybeden transaction geri alinir,
       // kazananin kaydi dondurulur.
@@ -118,6 +97,34 @@ export class WalletService {
       }
       throw error;
     }
+  }
+
+  /**
+   * `credit`'in transaction icinde calisan hali (ornegin kart yuklemesinin durumu ile
+   * ayni transaction'da). Ayni anahtarla ikinci cagri unique ihlaliyle geri alinir.
+   */
+  async creditTx(tx: Tx, input: CreditInput): Promise<LedgerEntry> {
+    const amount = toAmount(input.amountKurus);
+    const [row] = await tx.$queryRaw<WalletRow[]>`
+      UPDATE "Wallet"
+      SET "balanceKurus" = "balanceKurus" + ${amount}, "updatedAt" = now()
+      WHERE "id" = ${input.walletId}
+      RETURNING "balanceKurus", "holdKurus"`;
+    if (!row) throw new WalletNotFoundError(input.walletId);
+
+    return tx.ledgerEntry.create({
+      data: {
+        walletId: input.walletId,
+        type: LedgerType.CREDIT,
+        source: input.source,
+        amountKurus: amount,
+        balanceAfterKurus: row.balanceKurus,
+        holdAfterKurus: row.holdKurus,
+        referenceId: input.referenceId ?? null,
+        idempotencyKey: input.idempotencyKey,
+        note: input.note ?? null,
+      },
+    });
   }
 
   /** Kullanilabilir bakiyeden tutar bloke eder (seans baslangici). */

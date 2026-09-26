@@ -6,6 +6,7 @@ import { LoggerModule } from 'nestjs-pino';
 import { AuthModule } from './auth/auth.module';
 import { Env, validateEnv } from './config/env';
 import { HealthController } from './health/health.controller';
+import { PaymentsModule } from './payments/payments.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { SessionModule } from './session/session.module';
 import { WalletModule } from './wallet/wallet.module';
@@ -37,6 +38,7 @@ import { WalletModule } from './wallet/wallet.module';
     WalletModule,
     SessionModule,
     AuthModule,
+    PaymentsModule,
   ],
   controllers: [HealthController],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],

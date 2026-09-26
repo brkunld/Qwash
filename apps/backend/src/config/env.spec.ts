@@ -15,6 +15,8 @@ describe('validateEnv', () => {
       JWT_ACCESS_SECRET,
       CUSTOMER_APP_URL: 'http://localhost:3000',
       CORS_ORIGINS: 'http://localhost:3000',
+      API_PUBLIC_URL: 'http://localhost:3001',
+      IYZICO_BASE_URL: 'https://sandbox-api.iyzipay.com',
     });
   });
 

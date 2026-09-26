@@ -15,6 +15,12 @@ export const EnvSchema = z.object({
   CUSTOMER_APP_URL: z.url().default('http://localhost:3000'),
   // Tarayicidan API'ye cookie ile istek atabilecek kaynaklar (virgulle ayrilir).
   CORS_ORIGINS: z.string().default('http://localhost:3000'),
+  // Iyzico odeme formunun donecegi API adresi (callback: <API_PUBLIC_URL>/api/v1/payments/iyzico/callback).
+  API_PUBLIC_URL: z.url().default('http://localhost:3001'),
+  // Iyzico anahtarlari; tanimli degilse kart yukleme kapali (ADR-0003).
+  IYZICO_API_KEY: z.preprocess((v) => (v === '' ? undefined : v), z.string().optional()),
+  IYZICO_SECRET_KEY: z.preprocess((v) => (v === '' ? undefined : v), z.string().optional()),
+  IYZICO_BASE_URL: z.url().default('https://sandbox-api.iyzipay.com'),
 });
 
 export type Env = z.infer<typeof EnvSchema>;
