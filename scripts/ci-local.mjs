@@ -19,7 +19,9 @@ const steps = [
     ? []
     : [
         ['test:integration', 'pnpm', ['test:integration']],
-        ['build', 'pnpm', ['build']],
+        // GitHub'daki `pnpm build` ile ayni derleme; yalniz backend ciktisi dist-ci/'ye gider
+        // ki acik `pnpm dev`'in dist/ klasoru silinip backend cokmesin.
+        ['build', 'pnpm', ['exec', 'turbo', 'run', 'build:ci']],
       ]),
   ['infra:check', 'pnpm', ['infra:check']],
   ...(quick

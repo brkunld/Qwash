@@ -5,6 +5,7 @@
   "description": "QWASH NestJS API",
   "scripts": {
     "build": "prisma generate && nest build",
+    "build:ci": "prisma generate && nest build -p tsconfig.ci.json",
     "dev": "prisma generate && nest start --watch",
     "start": "node dist/main.js",
     "typecheck": "prisma generate && tsc -p tsconfig.json --noEmit",
