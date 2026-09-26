@@ -14,6 +14,7 @@ import {
   GoogleLoginDisabledError,
   InvalidCredentialsError,
   InvalidTokenError,
+  LoginRateLimitedError,
   NameLockedError,
   UnauthenticatedError,
 } from './auth.errors';
@@ -31,6 +32,9 @@ export const ACCESS_TOKEN_TTL_MS = 15 * 60 * 1000;
 export const REFRESH_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 export const EMAIL_VERIFY_TTL_MS = 24 * 60 * 60 * 1000;
 export const PASSWORD_RESET_TTL_MS = 60 * 60 * 1000;
+/** E-posta basina sifreli giris: pencere basina en fazla bu kadar deneme (SECURITY.md 2). */
+export const LOGIN_MAX_ATTEMPTS = 10;
+export const LOGIN_WINDOW_MS = 15 * 60 * 1000;
 
 const JWT_ISSUER = 'qwash';
 const JWT_AUDIENCE = 'qwash-api';
@@ -98,6 +102,9 @@ export class AuthService {
   }
 
   async login(input: { email: string; password: string }): Promise<IssuedSession> {
+    // Sinir, hesap var olsun olmasin ve sifre kontrolunden once uygulanir: yanit hesap
+    // varligini sizdirmaz, esazamanli istek yigini sayaci gecemez.
+    await this.countLoginAttempt(input.email);
     const user = await this.prisma.user.findUnique({ where: { email: input.email } });
     if (!user?.passwordHash) {
       await verifyPassword(input.password, await getDummyHash());
@@ -107,7 +114,39 @@ export class AuthService {
       throw new InvalidCredentialsError();
     }
     assertActive(user);
+    await this.clearLoginAttempts(user.email);
     return this.issueSession(user);
+  }
+
+  /** Suresi dolmus deneme pencerelerini siler (AuthWorker, saatlik). */
+  async purgeLoginThrottles(): Promise<number> {
+    const { count } = await this.prisma.loginThrottle.deleteMany({
+      where: { windowStartedAt: { lte: new Date(this.now().getTime() - LOGIN_WINDOW_MS) } },
+    });
+    return count;
+  }
+
+  /**
+   * Denemeyi tek atomik UPSERT ile sayar (satir kilidi: esazamanli istekler sirayla artirir).
+   * Pencere doldugunda sayac 1'den yeniden baslar. Sinir asildiysa sifre kontrol edilmez.
+   */
+  private async countLoginAttempt(email: string): Promise<void> {
+    const now = this.now();
+    const cutoff = new Date(now.getTime() - LOGIN_WINDOW_MS);
+    const [row] = await this.prisma.$queryRaw<{ attempts: number }[]>`
+      INSERT INTO "LoginThrottle" ("key", "attempts", "windowStartedAt")
+      VALUES (${loginKey(email)}, 1, ${now})
+      ON CONFLICT ("key") DO UPDATE SET
+        "attempts" = CASE WHEN "LoginThrottle"."windowStartedAt" <= ${cutoff}
+                          THEN 1 ELSE "LoginThrottle"."attempts" + 1 END,
+        "windowStartedAt" = CASE WHEN "LoginThrottle"."windowStartedAt" <= ${cutoff}
+                                 THEN ${now} ELSE "LoginThrottle"."windowStartedAt" END
+      RETURNING "attempts"`;
+    if (row && row.attempts > LOGIN_MAX_ATTEMPTS) throw new LoginRateLimitedError();
+  }
+
+  private async clearLoginAttempts(email: string): Promise<void> {
+    await this.prisma.loginThrottle.deleteMany({ where: { key: loginKey(email) } });
   }
 
   async loginWithGoogle(idToken: string): Promise<IssuedSession> {
@@ -122,14 +161,16 @@ export class AuthService {
     const email = profile.email.trim().toLowerCase();
 
     // Ilk giriste ayni kullanici icin iki istek yarisirsa unique ihlali olur; bir kez yeniden dene.
+    let user: User;
     try {
-      return await this.issueSession(
-        await this.findOrCreateGoogleUser(profile.sub, email, profile.name),
-      );
+      user = await this.findOrCreateGoogleUser(profile.sub, email, profile.name);
     } catch (error) {
       if (!isUniqueViolation(error)) throw error;
-      return this.issueSession(await this.findOrCreateGoogleUser(profile.sub, email, profile.name));
+      user = await this.findOrCreateGoogleUser(profile.sub, email, profile.name);
     }
+    // Google e-postanin sahibini kanitladi: sifre denemesi kilidi de kalkar.
+    await this.clearLoginAttempts(user.email);
+    return this.issueSession(user);
   }
 
   private async findOrCreateGoogleUser(
@@ -260,6 +301,8 @@ export class AuthService {
         where: { userId, type: AuthTokenType.PASSWORD_RESET, usedAt: null },
         data: { usedAt: this.now() },
       });
+      // Saldirgan hesabi deneme siniriyla kilitlediyse sahibi sifirlamayla hemen girebilir.
+      await tx.loginThrottle.deleteMany({ where: { key: loginKey(user.email) } });
     });
   }
 
@@ -388,6 +431,11 @@ export class AuthService {
     url.searchParams.set('token', token);
     return url.toString();
   }
+}
+
+/** E-posta tabloya acik yazilmaz; normalize edilip ozeti anahtar olur. */
+function loginKey(email: string): string {
+  return sha256(email.trim().toLowerCase());
 }
 
 function assertActive(user: User): void {

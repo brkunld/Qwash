@@ -56,7 +56,8 @@ Uygulama ([ADR-0011](adr/0011-admin-operations.md)): `AdminGuard` rolü ve hesap
 * **Algoritma:** `scrypt` (Node yerleşik; N=2^15, r=8, p=1, 16 bayt tuz). Parametreler özetin içinde saklanır (`scrypt$N$r$p$tuz$özet`), ileride artırılabilir. Önceki plan `bcrypt` idi; native bağımlılık gerektirmediği ve 72 bayt kesme sorunu olmadığı için scrypt seçildi (2026-09-26).
 * **Şifre kuralı:** En az 8, en fazla 72 karakter; karmaşıklık kuralı yok (NIST 800-63B).
 * **Kural:** Kullanıcı şifresi asla loglanmaz, asla düz metin olarak DB'ye yazılmaz. Olmayan hesaba giriş denemesinde de scrypt çalıştırılır; yanıt süresi hesabın varlığını sızdırmaz.
-* **Brute-force:** Giriş/kayıt/sıfırlama uçları IP başına 15 dakikada 10 istekle sınırlı (`@nestjs/throttler`). Ters vekil arkasında gerçek istemci IP'si için `trust proxy` ayarı canlıya çıkmadan yapılmalıdır.
+* **Brute-force:** Giriş/kayıt/sıfırlama uçları IP başına 15 dakikada 10 istekle sınırlı (`@nestjs/throttler`). Ters vekil arkasında gerçek istemci IP'si için `TRUST_PROXY` canlıda ayarlanmalıdır.
+* **E-posta başına sınır:** Şifreyle girişte ayrıca e-posta başına 15 dakikada 10 deneme (`LoginThrottle`, çok IP'li saldırıya karşı). Deneme şifre kontrolünden **önce**, tek atomik UPSERT ile sayılır; eşzamanlı istek yığını sınırı geçemez. Sınır aşılınca doğru şifre de reddedilir (`429 RATE_LIMITED`); hesap olsun olmasın aynı davranış, e-posta tabloda yalnız SHA-256 özetiyle durur. Başarılı giriş, Google girişi ve şifre sıfırlama sayacı siler: saldırgan bir hesabı kilitlerse sahibi sıfırlamayla hemen girer. Süresi dolan kayıtlar saatlik temizlenir (`AuthWorker`).
 * **Google girişi:** ID token sunucuda doğrulanır (imza, `aud`, `iss`, `exp`, `email_verified`). Aynı e-postada doğrulanmış yerel hesap varsa ona bağlanır. Doğrulanmamış yerel hesap varsa (şifreyi başkası koymuş olabilir) şifre silinir, açık oturumlar kapatılır ve hesap Google kimliğine bağlanır ([ADR-0009](adr/0009-customer-authentication.md) madde 5).
 * **E-posta/sıfırlama token'ları:** 32 bayt rastgele, DB'de yalnız SHA-256 özeti (`AuthToken`), tek kullanımlık. E-posta doğrulama 24 saat, şifre sıfırlama 1 saat geçerli; yeni sıfırlama sonrası kullanılmamış eski bağlantılar iptal olur. Şifremi unuttum ucu hesap olsun olmasın aynı yanıtı verir.
 * **E-posta gönderimi:** Sağlayıcı henüz seçilmedi. Geliştirmede bağlantı konsola yazılır; production'da sağlayıcı tanımlanmadan uygulama başlamaz (`auth/mailer.ts`).
@@ -180,7 +181,7 @@ Kapsam: kimlik doğrulama, yetkilendirme, sır yönetimi, MQTT, ödeme, hız sı
 
 | # | Önem | Bulgu | Öneri |
 |---|---|---|---|
-| 5 | Orta | Hesap bazlı deneme sınırı yok. Sınır IP başına; çok IP'li (dağıtık) saldırıda tek hesaba tahmin sınırsızdır. | Giriş ucuna ek olarak e-posta başına sınır (ör. 15 dk'da 10), aşımda aynı genel hata. |
+| 5 | ~~Orta~~ | ~~Hesap bazlı deneme sınırı yok; çok IP'li saldırıda tek hesaba tahmin sınırsız.~~ **Kapatıldı (2026-09-26):** e-posta başına sınır, bkz. 2. bölüm. | — |
 | 6 | Orta | Admin için MFA yok; admin hesabı müşteri PWA'sıyla aynı giriş ve aynı refresh cookie'yi kullanır. | Canlıdan önce admin için TOTP. Yönetici ayrı tarayıcı profili kullanmalı. |
 | 7 | Orta | Hız sınırı sayaçları bellekte: yeniden başlatmada sıfırlanır, birden fazla backend sürecinde paylaşılmaz. | Pilot tek süreçle kabul edilebilir; ölçeklenirken Redis depolaması. |
 | 8 | Düşük | Müşteri `AccessTokenGuard`'ı hesap durumunu DB'den okumaz: silinen/askıya alınan hesabın token'ı 15 dk okuma uçlarında geçer. Para hareket ettiren uçlar (seans, yükleme, hesap silme) durumu ayrıca kontrol ediyor. | Kabul edilebilir (1.1'deki bilinen risk). |

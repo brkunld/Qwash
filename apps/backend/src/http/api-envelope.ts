@@ -52,6 +52,7 @@ export class EnvelopeInterceptor implements NestInterceptor {
 const DOMAIN_STATUS: Record<string, HttpStatus> = {
   EMAIL_TAKEN: HttpStatus.CONFLICT,
   INVALID_CREDENTIALS: HttpStatus.UNAUTHORIZED,
+  RATE_LIMITED: HttpStatus.TOO_MANY_REQUESTS,
   UNAUTHENTICATED: HttpStatus.UNAUTHORIZED,
   ACCOUNT_DISABLED: HttpStatus.FORBIDDEN,
   INVALID_TOKEN: HttpStatus.BAD_REQUEST,

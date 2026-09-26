@@ -12,7 +12,7 @@ export async function resetDatabase(prisma: PrismaClient): Promise<void> {
   await prisma.$executeRawUnsafe(`
     TRUNCATE "AdminAuditLog", "CashTopUp", "RefundPayout", "SessionTransition", "WashSession", "OutboxEvent", "InboxMessage", "Device",
              "LedgerEntry", "RefundRequest", "WalletHold", "CardTopUp", "TopUpSettings", "Wallet",
-             "RefreshToken", "AuthToken", "AuthIdentity", "User",
+             "RefreshToken", "AuthToken", "AuthIdentity", "User", "LoginThrottle",
              "BayProgram", "WashProgram", "Bay", "Station"
     RESTART IDENTITY CASCADE`);
 }
