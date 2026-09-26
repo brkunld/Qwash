@@ -64,6 +64,17 @@ function RegisterForm() {
           onChange={(e) => setPassword(e.target.value)}
           hint="En az 8 karakter."
         />
+        <p className="text-xs text-slate-500">
+          Hesap oluşturarak{' '}
+          <Link href="/legal/terms" className="underline">
+            Kullanım Şartları
+          </Link>
+          &apos;nı kabul etmiş, kişisel verilerinizin{' '}
+          <Link href="/legal/kvkk" className="underline">
+            Aydınlatma Metni
+          </Link>{' '}
+          kapsamında işlenmesini okumuş olursunuz.
+        </p>
         <Button type="submit" busy={busy}>
           Hesap oluştur
         </Button>
@@ -71,7 +82,7 @@ function RegisterForm() {
           Hesabınız var mı?{' '}
           <Link
             href={`/login?next=${encodeURIComponent(next)}`}
-            className="font-semibold text-sky-700"
+            className="font-semibold text-brand-700"
           >
             Giriş yapın
           </Link>

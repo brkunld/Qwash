@@ -3,16 +3,16 @@ import { AuthBootstrap } from '@/components/auth-bootstrap';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'QWASH',
+  title: 'QWash',
   description: 'Self-servis oto yıkama',
-  applicationName: 'QWASH',
-  appleWebApp: { capable: true, title: 'QWASH', statusBarStyle: 'default' },
+  applicationName: 'QWash',
+  appleWebApp: { capable: true, title: 'QWash', statusBarStyle: 'default' },
 };
 
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
-  themeColor: '#0284c7',
+  themeColor: '#fa9a09',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

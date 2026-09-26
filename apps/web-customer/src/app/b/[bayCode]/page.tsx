@@ -166,7 +166,7 @@ export default function BayPage() {
                   aria-pressed={p.code === program}
                   className={`min-h-16 rounded-xl border p-3 text-left ${
                     p.code === program
-                      ? 'border-sky-600 bg-sky-50 ring-2 ring-sky-200'
+                      ? 'border-brand-500 bg-brand-50 ring-2 ring-brand-200'
                       : 'border-slate-300 bg-white'
                   }`}
                 >
@@ -190,7 +190,7 @@ export default function BayPage() {
                   aria-pressed={d === duration}
                   className={`min-h-12 min-w-16 rounded-xl border px-3 font-semibold ${
                     d === duration
-                      ? 'border-sky-600 bg-sky-600 text-white'
+                      ? 'border-brand-500 bg-brand-500 text-slate-900'
                       : 'border-slate-300 bg-white'
                   }`}
                 >

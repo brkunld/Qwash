@@ -60,7 +60,7 @@ export default function HomePage() {
             </div>
             <Link
               href="/wallet"
-              className="rounded-xl bg-sky-600 px-4 py-3 font-semibold text-white hover:bg-sky-700"
+              className="rounded-xl bg-brand-500 px-4 py-3 font-semibold text-slate-900 hover:bg-brand-600"
             >
               Yükle
             </Link>

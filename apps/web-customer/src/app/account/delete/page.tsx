@@ -114,7 +114,7 @@ function DeleteAccount({ me }: { me: Me }) {
               <label
                 key={c}
                 className={`flex min-h-12 cursor-pointer items-center gap-3 rounded-xl border p-3 ${
-                  choice === c ? 'border-sky-600 bg-sky-50' : 'border-slate-300'
+                  choice === c ? 'border-brand-500 bg-brand-50' : 'border-slate-300'
                 }`}
               >
                 <input
