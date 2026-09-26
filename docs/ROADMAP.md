@@ -161,7 +161,7 @@ Faz 2 ve Faz 3 birbirinden bagimsizdir; iki kisi veya iki paralel calisma akisi 
 - [ ] Webhook icin herkese acik adres (sandbox'ta tunel, canlida alan adi) ve Iyzico panelinde bildirim URL'si.
 - [x] Kimlik dogrulama backend'i (ADR-0009, Faz 5a): e-posta/sifre + e-posta dogrulama, Google girisi, sifre sifirlama, refresh rotasyonu + reuse tespiti, rate limit, API yanit zarfi. 30 test (servis + HTTP).
 - [ ] Google OAuth client/consent ekrani (Google Cloud Console; Burak) ve `GOOGLE_CLIENT_ID`.
-- [ ] E-posta saglayicisi secimi ve `Mailer` uygulamasi (production icin zorunlu).
+- [x] E-posta: saglayicidan bagimsiz SMTP `Mailer` (Faz 5, 2026-09-26; `docs/DEVELOPMENT.md`). Gonderim arka planda (hesap sizdirma/500 riski), STARTTLS zorunlu. Gmail ile gercek gonderim Burak tarafindan denenecek; canlida kendi alan adindan (SPF/DKIM).
 - [ ] Iyzico zorunlu alici alanlari sandbox'ta dogrulanir; telefon gerekirse profilden istenir.
 - [x] Hesap silme backend'i: anonimlestirme, feragat (`FORFEIT`), FIFO dagilimli iade talebi (`RefundRequest` + bloke), IBAN kontrolu, ad muhru (`nameLockedAt`). 13 entegrasyon + 6 FIFO + 2 IBAN testi.
 - [ ] KVKK: aydinlatma metni, kullanim sartlari (iade politikasi metni dahil), hesap silme ekrani (PWA, 5d).

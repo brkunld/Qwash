@@ -17,7 +17,25 @@ describe('validateEnv', () => {
       CORS_ORIGINS: 'http://localhost:3000',
       API_PUBLIC_URL: 'http://localhost:3001',
       IYZICO_BASE_URL: 'https://sandbox-api.iyzipay.com',
+      SMTP_PORT: 587,
+      SMTP_SECURE: false,
     });
+  });
+
+  it('SMTP: host verilirse gonderen zorunlu, kullanici ve sifre birlikte verilir', () => {
+    const smtp = { ...base, SMTP_HOST: 'smtp.gmail.com' };
+    expect(() => validateEnv(smtp)).toThrow(/MAIL_FROM/);
+    const ok = validateEnv({
+      ...smtp,
+      MAIL_FROM: 'QWash <a@b.com>',
+      SMTP_PORT: '465',
+      SMTP_SECURE: 'true',
+    });
+    expect(ok).toMatchObject({ SMTP_HOST: 'smtp.gmail.com', SMTP_PORT: 465, SMTP_SECURE: true });
+    expect(() => validateEnv({ ...smtp, MAIL_FROM: 'a@b.com', SMTP_USER: 'u' })).toThrow(
+      /SMTP_PASSWORD/,
+    );
+    expect(validateEnv({ ...base, SMTP_HOST: '' }).SMTP_HOST).toBeUndefined();
   });
 
   it('MQTT_URL yalnizca mqtt/mqtts olabilir', () => {
