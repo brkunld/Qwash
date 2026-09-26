@@ -49,7 +49,23 @@ export abstract class PaymentGateway {
    * Basarisizsa PaymentProviderError firlatir (cagiran daha sonra yeniden dener).
    */
   abstract reversePayment(input: ReversePaymentInput): Promise<'CANCELLED' | 'REFUNDED'>;
+  /**
+   * Kart islemine kismi iade (admin iade isleme, ADR-0011 madde 5).
+   * Iyzico acikca reddederse REJECTED doner. Sonuc belirsizse (ag, zaman asimi, okunamayan
+   * yanit) PaymentProviderError firlatir: iade yapilmis olabilir, cagiran yeniden DENEMEZ.
+   */
+  abstract refundPayment(input: RefundPaymentInput): Promise<RefundOutcome>;
 }
+
+export interface RefundPaymentInput {
+  /** Bizim RefundPayout.id'miz; Iyzico'da conversationId olarak gider. */
+  payoutId: string;
+  paymentTransactionId: string;
+  amountKurus: number;
+}
+
+export type RefundOutcome =
+  { kind: 'REFUNDED'; providerRef: string } | { kind: 'REJECTED'; reason: string };
 
 export interface ReversePaymentInput {
   topUpId: string;

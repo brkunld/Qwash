@@ -78,6 +78,7 @@ model User {
   refreshTokens   RefreshToken[]
   authTokens      AuthToken[]
   cardTopUps      CardTopUp[]
+  cashTopUps      CashTopUp[]
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
 }
@@ -214,6 +215,9 @@ model RefundRequest {
   allocation   Json
   createdAt    DateTime            @default(now())
   resolvedAt   DateTime?
+  resolvedBy   String? // Admin kullanici id
+  rejectReason String?
+  payouts      RefundPayout[]
 
   @@index([status, createdAt])
 }
@@ -268,12 +272,13 @@ model WalletHold {
 }
 
 model Station {
-  id        String        @id @default(uuid())
-  code      String        @unique // Orn: "STATION-01"
-  name      String
-  bays      Bay[]
-  programs  WashProgram[]
-  createdAt DateTime      @default(now())
+  id         String        @id @default(uuid())
+  code       String        @unique // Orn: "STATION-01"
+  name       String
+  bays       Bay[]
+  programs   WashProgram[]
+  cashTopUps CashTopUp[]
+  createdAt  DateTime      @default(now())
 }
 
 model Bay {
@@ -438,4 +443,70 @@ model BayProgram {
 
   @@unique([bayId, programId])
   @@unique([bayId, relayIndex])
+}
+
+// ---------------------------------------------------------------------------
+// Faz 6: admin operasyonlari (ADR-0011)
+// ---------------------------------------------------------------------------
+
+// Degistirilemez admin denetim kaydi. UPDATE/DELETE trigger ile reddedilir.
+// Para hareket ettiren islemlerde ledger kaydiyla ayni transaction'da yazilir.
+model AdminAuditLog {
+  id         String   @id @default(uuid())
+  actorId    String? // null: komut satiri betigi (admin:grant)
+  action     String // CASH_TOPUP, BALANCE_ADJUSTMENT, REFUND_PAYOUT, ...
+  targetType String // USER, REFUND_REQUEST, TOPUP_SETTINGS, ...
+  targetId   String?
+  reason     String?
+  details    Json?
+  createdAt  DateTime @default(now())
+
+  @@index([targetType, targetId])
+  @@index([actorId, createdAt])
+}
+
+// Kasada nakit yukleme. Bakiye `cash-topup:<idempotencyKey>` anahtarli CREDIT ile,
+// bu kayit ve denetim kaydiyla ayni transaction'da yuklenir.
+model CashTopUp {
+  id             String   @id @default(uuid())
+  receiptNo      Int      @unique @default(autoincrement()) // Makbuz numarasi; bosluk olabilir, tekrar olamaz
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Restrict)
+  walletId       String
+  stationId      String
+  station        Station  @relation(fields: [stationId], references: [id], onDelete: Restrict)
+  operatorId     String
+  amountKurus    Int
+  idempotencyKey String   @unique
+  createdAt      DateTime @default(now())
+
+  @@index([stationId, createdAt])
+}
+
+enum RefundPayoutStatus {
+  PENDING // Henuz odenmedi
+  IN_FLIGHT // Iyzico'ya gonderildi, sonuc kaydedilmedi; otomatik yeniden denenmez
+  DONE // Odendi
+  FAILED // Iyzico reddetti; yeniden denenebilir
+}
+
+// Iade talebinin FIFO dagilimindaki her parca (ADR-0011 madde 5).
+model RefundPayout {
+  id              String             @id @default(uuid())
+  refundRequestId String
+  refundRequest   RefundRequest      @relation(fields: [refundRequestId], references: [id], onDelete: Restrict)
+  partIndex       Int
+  method          String // CARD | IBAN | CASH_AT_STATION
+  amountKurus     Int
+  cardTopUpId     String?
+  status          RefundPayoutStatus @default(PENDING)
+  reference       String? // Iyzico iade kimligi, EFT dekont no veya kasa notu
+  failureReason   String?
+  operatorId      String?
+  stationId       String? // Kasadan odemede kasa raporu icin
+  updatedAt       DateTime           @updatedAt
+  completedAt     DateTime?
+
+  @@unique([refundRequestId, partIndex])
+  @@index([method, status, completedAt])
 }

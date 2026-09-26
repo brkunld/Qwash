@@ -16,6 +16,7 @@ import type { Request, Response } from 'express';
 import { map, Observable } from 'rxjs';
 import { z } from 'zod';
 import { AccountError } from '../account/account.errors';
+import { AdminError } from '../admin/admin.errors';
 import { AuthError } from '../auth/auth.errors';
 import { PaymentError } from '../payments/payments.errors';
 import { SessionError } from '../session/session.errors';
@@ -79,6 +80,19 @@ const DOMAIN_STATUS: Record<string, HttpStatus> = {
   BAY_UNAVAILABLE: HttpStatus.UNPROCESSABLE_ENTITY,
   BAY_BUSY: HttpStatus.UNPROCESSABLE_ENTITY,
   INVALID_DURATION: HttpStatus.BAD_REQUEST,
+  ADMIN_FORBIDDEN: HttpStatus.FORBIDDEN,
+  USER_NOT_FOUND: HttpStatus.NOT_FOUND,
+  STATION_NOT_FOUND: HttpStatus.NOT_FOUND,
+  TARGET_ACCOUNT_NOT_ACTIVE: HttpStatus.CONFLICT,
+  CASH_AMOUNT_OUT_OF_RANGE: HttpStatus.BAD_REQUEST,
+  INSUFFICIENT_AVAILABLE: HttpStatus.UNPROCESSABLE_ENTITY,
+  INVALID_DATE: HttpStatus.BAD_REQUEST,
+  REFUND_REQUEST_NOT_FOUND: HttpStatus.NOT_FOUND,
+  REFUND_REQUEST_CLOSED: HttpStatus.CONFLICT,
+  PAYOUT_NOT_FOUND: HttpStatus.NOT_FOUND,
+  PAYOUT_STATE: HttpStatus.CONFLICT,
+  REFUND_HAS_PAID_PARTS: HttpStatus.CONFLICT,
+  STATION_REQUIRED: HttpStatus.BAD_REQUEST,
 };
 
 export class ValidationError extends Error {
@@ -112,13 +126,17 @@ export class ApiErrorFilter implements ExceptionFilter {
     if (
       exception instanceof AuthError ||
       exception instanceof PaymentError ||
-      exception instanceof AccountError
+      exception instanceof AccountError ||
+      exception instanceof AdminError
     ) {
       return {
         status: DOMAIN_STATUS[exception.code] ?? HttpStatus.BAD_REQUEST,
         code: exception.code,
         message: exception.message,
-        details: exception instanceof PaymentError ? exception.details : undefined,
+        details:
+          exception instanceof PaymentError || exception instanceof AdminError
+            ? exception.details
+            : undefined,
       };
     }
     if (exception instanceof SessionError) {

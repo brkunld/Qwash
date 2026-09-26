@@ -196,3 +196,13 @@ Iyzico bildirimi (webhook) herkese açık bir adrese gelir; yerel backend'i inte
 **Bulgu (2026-09-26): sandbox hesabı V3 imzasını göndermiyor.** Gerçek bir ödemeden sonra Iyzico webhook'u geldi ama `X-IYZ-SIGNATURE-V3` yerine, kullanımdan kalkmış `X-Iyz-Signature` başlığı **boş değerle** geldi; imza doğrulaması bu yüzden `403` verdi. Iyzico dokümanına göre yalnız V3 desteklenir ve bunun için hesapta webhook imzası özelliğinin açılması gerekir; talep **entegrasyon@iyzico.com** adresine yapılır ve ayar **sandbox ve canlı ortam için ayrıdır**, ikisi için de istenmelidir (<https://docs.iyzico.com/ek-servisler/webhook>). Bildirim adresi panelde "Ayarlar > Firma Ayarları > İşyeri Bildirimleri" altından girilir (yalnız HTTPS). Bakiye yine de doğru yüklenir: callback ve dakikalık mutabakat sonucu Iyzico'dan sorar, webhook yalnız hızlandırıcıdır. Canlıya geçmeden önce sandbox ve canlı hesap için V3 imzasının açılması Iyzico'dan talep edilmelidir. İmzasız webhook bilerek kabul edilmez. Reddedilen isteklerde backend hangi `x-iyz*` başlıklarının geldiğini ve gövde alanlarını (değerler değil) loglar. Iyzico başarısız bildirimi 15 dakikada bir, en fazla 3 kez tekrarlar.
 
 Tünel yalnız sandbox içindir: backend'in tamamı bu adresten erişilebilir olur (hız sınırı ve kimlik doğrulama geçerlidir). Canlıda sabit alan adı ve Nginx üzerinden yalnız Iyzico IP aralıkları kabul edilir (API.md § 7.2).
+
+## Admin hesabı (Faz 6)
+
+Admin, müşteriyle aynı giriş akışını kullanır; yetki `User.role` alanındadır ([ADR-0011](adr/0011-admin-operations.md)). API üzerinden kimse kendini yükseltemez, ilk yönetici komut satırından atanır:
+
+1. PWA'dan (`http://localhost:3000`) normal bir hesap aç ve e-postasını doğrula (ya da Google ile gir).
+2. `pnpm admin:grant <e-posta> SUPER_ADMIN` — rolü verir ve `AdminAuditLog`'a yazar. Geri almak için aynı komut `USER` ile.
+3. Admin paneli `http://localhost:3002`'den API'ye çağrı yapar; kök `.env`'de `CORS_ORIGINS` içinde `http://localhost:3002` olmalı (`.env.example`'daki gibi, virgülle).
+
+Rol değişikliği anında etkilidir: `AdminGuard` rolü her istekte veritabanından okur, yeniden giriş gerekmez.

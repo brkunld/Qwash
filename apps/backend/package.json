@@ -16,7 +16,8 @@
     "db:migrate:deploy": "prisma migrate deploy",
     "db:seed": "prisma db seed",
     "db:studio": "prisma studio",
-    "demo:session": "tsx scripts/demo-session.ts"
+    "demo:session": "tsx scripts/demo-session.ts",
+    "admin:grant": "tsx scripts/admin-grant.ts"
   },
   "dependencies": {
     "@nestjs/common": "^12.1.0",

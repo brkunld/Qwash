@@ -20,6 +20,7 @@
     "db:migrate:deploy": "pnpm --filter @qwash/backend db:migrate:deploy",
     "db:seed": "pnpm --filter @qwash/backend db:seed",
     "db:studio": "pnpm --filter @qwash/backend db:studio",
+    "admin:grant": "pnpm --filter @qwash/backend admin:grant",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "mqtt:credentials": "node scripts/mqtt-credentials.mjs",

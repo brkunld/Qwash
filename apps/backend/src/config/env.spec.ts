@@ -14,7 +14,7 @@ describe('validateEnv', () => {
       MQTT_URL: 'mqtt://localhost:11883',
       JWT_ACCESS_SECRET,
       CUSTOMER_APP_URL: 'http://localhost:3000',
-      CORS_ORIGINS: 'http://localhost:3000',
+      CORS_ORIGINS: 'http://localhost:3000,http://localhost:3002',
       API_PUBLIC_URL: 'http://localhost:3001',
       IYZICO_BASE_URL: 'https://sandbox-api.iyzipay.com',
       SMTP_PORT: 587,
