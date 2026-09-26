@@ -128,20 +128,20 @@ Bkz. [API.md § 7. Webhook Güvenliği](./API.md) — HMAC imza doğrulaması ve
 | **Rotasyon politikası** | JWT secret: 90 günde bir. DB şifresi: 180 günde bir. İyzico API key: Sızdırılma şüphesinde derhal. |
 | **Loglama yasağı** | Hiçbir logger çağrısı şifre, API key veya token içeremez. |
 
-### Zorunlu Sır Değişkenleri
+### Sır Değişkenleri
 
-```bash
-# .env.example
-DATABASE_URL="postgresql://USER:PASSWORD@localhost:5432/qwash_dev"
-REDIS_URL="redis://localhost:6379"
-MQTT_BROKER_URL="mqtt://localhost:1883"
-JWT_ACCESS_SECRET="YOUR_32_BYTE_RANDOM_SECRET"
-JWT_REFRESH_SECRET="YOUR_ANOTHER_32_BYTE_RANDOM_SECRET"
-IYZICO_API_KEY="YOUR_IYZICO_API_KEY"
-IYZICO_SECRET_KEY="YOUR_IYZICO_SECRET_KEY"
-IYZICO_BASE_URL="https://sandbox-api.iyzipay.com"
-IYZICO_WEBHOOK_SECRET="YOUR_IYZICO_WEBHOOK_HMAC_SECRET"
-```
+Tam liste ve açıklamalar `.env.example`'da, doğrulama `apps/backend/src/config/env.ts`'te (eksik/yanlış değerde uygulama başlamaz). Sır niteliğinde olanlar:
+
+| Değişken | Not |
+|---|---|
+| `DATABASE_URL` | Canlıda `?sslmode=require` |
+| `MQTT_URL` | Backend'in broker kullanıcısı (`qwash-backend`) şifresi içinde; loglarda gizlenir |
+| `JWT_ACCESS_SECRET` | En az 32 karakter rastgele. Refresh token opak olduğu için ayrı refresh anahtarı yok |
+| `IYZICO_API_KEY`, `IYZICO_SECRET_KEY` | Webhook V3 imzası da `IYZICO_SECRET_KEY` ile doğrulanır; ayrı webhook anahtarı yok |
+| `SMTP_PASSWORD` | Gmail uygulama şifresi |
+| `MQTT_*_PASSWORD` | `pnpm mqtt:credentials` ile broker `passwd` dosyasına işlenir (git dışı) |
+
+Redis henüz kullanılmıyor (hız sınırı bellekte, bkz. 8. bölüm).
 
 ---
 
@@ -152,8 +152,41 @@ Prod deploy öncesinde aşağıdaki maddeler manuel olarak doğrulanmalıdır:
 - [ ] TLS 1.2 altı protokoller devre dışı (Nginx `ssl_protocols TLSv1.2 TLSv1.3`)
 - [ ] MQTTS portu `8883` açık, `1883` kapalı
 - [x] Tüm Admin endpoint'leri `AdminGuard` ile korumalı (rol veritabanından, Faz 6a)
-- [ ] `POST /payments/webhook` HMAC doğrulaması aktif
-- [ ] Rate limiting Redis'te aktif ve `429` doğru dönüyor
-- [ ] `X-Frame-Options: DENY` yanıtlarda mevcut
+- [x] `POST /payments/webhook` HMAC (V3) doğrulaması kodda aktif; imzasız bildirim 403. Iyzico V3 imzalı gönderimi açınca uçtan uca denenecek
+- [ ] Rate limiting `429` dönüyor (test var); birden fazla backend süreci çalışacaksa depolama Redis'e taşınmalı
+- [x] `X-Frame-Options: DENY` ve diğer başlıklar yanıtlarda (helmet, test var)
+- [ ] `TRUST_PROXY=1` (Nginx arkasında) ayarlı
+- [ ] `NODE_ENV=production` (Swagger kapalı, cookie `Secure`, SMTP zorunlu)
+- [ ] `CORS_ORIGINS` canlı alan adlarıyla açıkça ayarlı (varsayılan localhost'tur)
 - [ ] DB bağlantısı SSL zorunlu (`?sslmode=require`)
-- [ ] `.env` git diff'inde görünmüyor
+- [x] `.env`, broker `passwd` ve sertifika anahtarları git dışı (2026-09-26 kontrol edildi)
+
+---
+
+## 8. Güvenlik Gözden Geçirmesi (2026-09-26, Faz 7)
+
+Kapsam: kimlik doğrulama, yetkilendirme, sır yönetimi, MQTT, ödeme, hız sınırı. Yöntem: kod okuması + bulguların testle doğrulanması + `pnpm audit --prod`.
+
+### Düzeltilenler
+
+| # | Önem | Bulgu | Düzeltme |
+|---|---|---|---|
+| 1 | **Kritik** | Hız sınırı atlatılabiliyordu: `UserThrottlerGuard`, `Authorization: Bearer` başlığının özetini **doğrulamadan** kova anahtarı yapıyordu. Giriş ucuna her istekte farklı uydurma bir `Bearer` eklenerek her seferinde yeni kova alınıyor, "15 dk'da 10 deneme" sınırı hiç devreye girmiyordu (şifre kaba kuvvete açık). Mevcut test üretimdeki guard yerine düz `ThrottlerGuard` kullandığı için yakalanmamıştı. | Kullanıcı kovası yalnız imzası doğrulanan token'a verilir, geçersiz token IP'ye sayılır. HTTP testi artık uygulamanın kendi guard'ını kullanır; atlatma testi eski kodda kırmızı, yenide yeşil. |
+| 2 | Orta | `trust proxy` yoktu: Nginx arkasında tüm istekler vekilin IP'sinden gelir, IP başına sınır bütün müşterileri birlikte keser (ve saldırgan herkesi kilitleyebilir). | `TRUST_PROXY` ortam değişkeni (canlıda 1). |
+| 3 | Orta | Güvenlik başlıkları (4. bölüm) belgede vardı, kodda yoktu. | `helmet`: CSP `default-src 'none'`, `frame-ancestors 'none'`, `X-Frame-Options: DENY`, `nosniff`, HSTS. |
+| 4 | Düşük | Swagger (`/api/docs`) production'da da açıktı; API haritasını dışarı veriyordu. | Yalnız production dışında kurulur. |
+
+### Açık kalanlar (karar/iş bekliyor)
+
+| # | Önem | Bulgu | Öneri |
+|---|---|---|---|
+| 5 | Orta | Hesap bazlı deneme sınırı yok. Sınır IP başına; çok IP'li (dağıtık) saldırıda tek hesaba tahmin sınırsızdır. | Giriş ucuna ek olarak e-posta başına sınır (ör. 15 dk'da 10), aşımda aynı genel hata. |
+| 6 | Orta | Admin için MFA yok; admin hesabı müşteri PWA'sıyla aynı giriş ve aynı refresh cookie'yi kullanır. | Canlıdan önce admin için TOTP. Yönetici ayrı tarayıcı profili kullanmalı. |
+| 7 | Orta | Hız sınırı sayaçları bellekte: yeniden başlatmada sıfırlanır, birden fazla backend sürecinde paylaşılmaz. | Pilot tek süreçle kabul edilebilir; ölçeklenirken Redis depolaması. |
+| 8 | Düşük | Müşteri `AccessTokenGuard`'ı hesap durumunu DB'den okumaz: silinen/askıya alınan hesabın token'ı 15 dk okuma uçlarında geçer. Para hareket ettiren uçlar (seans, yükleme, hesap silme) durumu ayrıca kontrol ediyor. | Kabul edilebilir (1.1'deki bilinen risk). |
+| 9 | Düşük | Backend–broker bağlantısı düz MQTT (yalnız `127.0.0.1`). Cihazlar TLS + kullanıcı/şifre + ACL kullanıyor; 3.1'deki mTLS/cihaz sertifikası planı henüz uygulanmadı. | Broker ile backend aynı sunucudaysa kabul; ayrı sunucuya çıkarsa backend de TLS. mTLS pilot sonrası. |
+| 10 | Düşük | `pnpm audit --prod`: 2 yüksek + 1 orta, hepsi Prisma CLI'nin geçişli bağımlılıkları (`mysql2`, `deepmerge-ts`). PostgreSQL kullanıldığı ve bu yollar çalışma anında yüklenmediği için etkisi yok. | Prisma güncellemesiyle kapanır; takipte. |
+
+### Sağlam bulunanlar
+
+Şifre özeti (scrypt, zamanlama sızıntısı yok), refresh rotasyonu ve tekrar kullanım tespiti, tek kullanımlık e-posta/sıfırlama token'ları, Google ID token doğrulaması ve doğrulanmamış hesap ele geçirme savunması, `AdminGuard`'ın rolü her istekte DB'den okuması, ödeme sonucunun gövdeye güvenmeden Iyzico'dan sorulması (yanıt imzası, tutar, para birimi, `basketId` eşleşmesi, tek CREDIT), webhook imzasının sabit zamanlı karşılaştırılması, callback'te açık yönlendirme olmaması, MQTT'de anonim erişimin kapalı olması ve cihazın ACL ile yalnız kendi peronuna yazabilmesi (backend de mesajın peronunu seansla karşılaştırıyor), Socket.IO odasının token'dan belirlenmesi, loglarda `authorization`/`cookie`/MQTT şifresinin gizlenmesi.

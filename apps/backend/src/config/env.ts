@@ -14,6 +14,9 @@ export const EnvSchema = z
     GOOGLE_CLIENT_ID: z.preprocess((v) => (v === '' ? undefined : v), z.string().optional()),
     // E-postadaki dogrulama/sifirlama baglantilarinin acilacagi musteri PWA adresi.
     CUSTOMER_APP_URL: z.url().default('http://localhost:3000'),
+    // Ters vekil (Nginx) sayisi. 0: dogrudan erisim. Canlida Nginx arkasinda 1 olmali;
+    // yoksa tum istekler vekilin IP'sinden gelir ve IP basina hiz siniri herkesi birlikte keser.
+    TRUST_PROXY: z.coerce.number().int().min(0).max(5).default(0),
     // Tarayicidan API'ye cookie ile istek atabilecek kaynaklar (virgulle ayrilir).
     CORS_ORIGINS: z.string().default('http://localhost:3000,http://localhost:3002'),
     // Iyzico odeme formunun donecegi API adresi (callback: <API_PUBLIC_URL>/api/v1/payments/iyzico/callback).

@@ -1,7 +1,7 @@
 import { INestApplication } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import { Test } from '@nestjs/testing';
-import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { ThrottlerModule } from '@nestjs/throttler';
 import request from 'supertest';
 import { AuthController, COOKIE_SECURE, REFRESH_COOKIE } from '../src/auth/auth.controller';
 import { AccessTokenGuard } from '../src/auth/auth.guard';
@@ -9,6 +9,7 @@ import { AuthService } from '../src/auth/auth.service';
 import { CapturingMailer } from '../src/auth/mailer';
 import { PrismaClient } from '../src/generated/prisma/client';
 import { configureApp } from '../src/http/configure-app';
+import { UserThrottlerGuard } from '../src/http/user-throttler.guard';
 import { resetDatabase, testPrisma } from './db';
 
 describe('Auth HTTP (gercek PostgreSQL)', () => {
@@ -39,7 +40,8 @@ describe('Auth HTTP (gercek PostgreSQL)', () => {
       providers: [
         { provide: AuthService, useValue: auth },
         { provide: COOKIE_SECURE, useValue: true },
-        { provide: APP_GUARD, useClass: ThrottlerGuard },
+        // Uygulamadaki guard'in kendisi (AppModule): kova secimi de test edilir.
+        { provide: APP_GUARD, useClass: UserThrottlerGuard },
         AccessTokenGuard,
       ],
     }).compile();
@@ -78,6 +80,11 @@ describe('Auth HTTP (gercek PostgreSQL)', () => {
     expect(cookie).toMatch(/Secure/);
     expect(cookie).toMatch(/SameSite=Strict/);
     expect(cookie).toMatch(/Path=\/api\/v1\/auth/);
+    // Guvenlik basliklari (helmet, SECURITY.md 4).
+    expect(res.headers['x-content-type-options']).toBe('nosniff');
+    expect(res.headers['x-frame-options']).toBe('DENY');
+    expect(res.headers['content-security-policy']).toContain("frame-ancestors 'none'");
+    expect(res.headers['strict-transport-security']).toBeDefined();
   });
 
   it('/me token ister; access token ile profil doner', async () => {
@@ -136,5 +143,38 @@ describe('Auth HTTP (gercek PostgreSQL)', () => {
       .send({ email: 'yok@test.local', password: 'x' })
       .expect(429);
     expect(res.body).toMatchObject({ success: false, error: { code: 'RATE_LIMITED' } });
+  });
+
+  it('uydurma Bearer basligi giris sinirini atlatamaz', async () => {
+    for (let i = 0; i < 10; i += 1) {
+      await http()
+        .post('/api/v1/auth/login')
+        .set('Authorization', `Bearer sahte-${i}`)
+        .send({ email: 'yok@test.local', password: 'x' })
+        .expect(401);
+    }
+    await http()
+      .post('/api/v1/auth/login')
+      .set('Authorization', 'Bearer sahte-yeni')
+      .send({ email: 'yok@test.local', password: 'x' })
+      .expect(429);
+  });
+
+  it('gecerli token kullanici kovasini kullanir (IP kovasini tuketmez)', async () => {
+    const reg = await http()
+      .post('/api/v1/auth/register')
+      .send({ email: 'ali@test.local', password: 'gizli-sifre-1', fullName: 'Ali Veli' });
+    const token = (reg.body as { data: { accessToken: string } }).data.accessToken;
+    // resend-verification: 15 dk'da 3. Kullanici kovasi dolunca 429.
+    for (let i = 0; i < 3; i += 1) {
+      await http()
+        .post('/api/v1/auth/resend-verification')
+        .set('Authorization', `Bearer ${token}`)
+        .expect(204);
+    }
+    await http()
+      .post('/api/v1/auth/resend-verification')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(429);
   });
 });
