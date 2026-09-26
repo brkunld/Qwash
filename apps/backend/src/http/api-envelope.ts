@@ -18,6 +18,7 @@ import { z } from 'zod';
 import { AccountError } from '../account/account.errors';
 import { AdminError } from '../admin/admin.errors';
 import { AuthError } from '../auth/auth.errors';
+import { Prisma } from '../generated/prisma/client';
 import { PaymentError } from '../payments/payments.errors';
 import { SessionError } from '../session/session.errors';
 import { InsufficientFundsError } from '../wallet/wallet.errors';
@@ -120,7 +121,13 @@ export class ApiErrorFilter implements ExceptionFilter {
     const req = host.switchToHttp().getRequest<Request>();
     const res = host.switchToHttp().getResponse<Response>();
     const { status, code, message, details } = this.describe(exception);
-    if (status >= 500) this.logger.error(exception);
+    if (code === 'SERVICE_BUSY') {
+      // Beklenen asiri yuk: yigin izi yerine tek satir; istemci tekrar dener.
+      this.logger.warn(`Asiri yuk: ${req.method} ${req.url} (islem baslatilamadi)`);
+      res.setHeader('Retry-After', '1');
+    } else if (status >= 500) {
+      this.logger.error(exception);
+    }
     res.status(status).json({
       success: false,
       error: { code, message, ...(details ? { details } : {}) },
@@ -183,6 +190,15 @@ export class ApiErrorFilter implements ExceptionFilter {
         message: 'Cok fazla deneme. Biraz sonra tekrar deneyin.',
       };
     }
+    if (isTransactionUnavailable(exception)) {
+      // Havuz dolu, islem suresinde baslayamadi ya da zaman asimiyla geri alindi: hicbir
+      // degisiklik kalici olmadi. Para uclari Idempotency-Key ile ayni istegi guvenle tekrarlar.
+      return {
+        status: HttpStatus.SERVICE_UNAVAILABLE,
+        code: 'SERVICE_BUSY',
+        message: 'Sistem su an yogun. Birkac saniye sonra tekrar deneyin.',
+      };
+    }
     if (exception instanceof HttpException) {
       const status = exception.getStatus();
       return { status, code: HttpStatus[status] ?? 'HTTP_ERROR', message: exception.message };
@@ -193,6 +209,11 @@ export class ApiErrorFilter implements ExceptionFilter {
       message: 'Beklenmeyen bir hata olustu.',
     };
   }
+}
+
+/** Prisma P2028: etkilesimli islem baslatilamadi veya zaman asimiyla kapandi (geri alindi). */
+function isTransactionUnavailable(exception: unknown): boolean {
+  return exception instanceof Prisma.PrismaClientKnownRequestError && exception.code === 'P2028';
 }
 
 /** Istek govdesini bir Zod semasiyla dogrular ve donusturur. */

@@ -5,6 +5,7 @@ import { ApiError } from './api';
 const MESSAGES: Record<string, string> = {
   NETWORK_ERROR: 'Sunucuya ulaşılamadı. İnternet bağlantınızı kontrol edin.',
   RATE_LIMITED: 'Çok fazla deneme yapıldı. Biraz bekleyip tekrar deneyin.',
+  SERVICE_BUSY: 'Sistem şu an yoğun. Birkaç saniye sonra tekrar deneyin.',
   INVALID_CREDENTIALS: 'E-posta veya şifre hatalı.',
   EMAIL_TAKEN: 'Bu e-posta ile zaten bir hesap var. Giriş yapmayı deneyin.',
   ACCOUNT_DISABLED: 'Hesabınız kullanıma kapalı. Destek ile iletişime geçin.',

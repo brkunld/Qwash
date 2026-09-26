@@ -11,6 +11,7 @@
     "lint": "prisma generate && eslint .",
     "test": "prisma generate && node --experimental-vm-modules ./node_modules/jest/bin/jest.js",
     "test:integration": "prisma generate && node --experimental-vm-modules ./node_modules/jest/bin/jest.js --config jest.integration.config.js",
+    "test:load": "prisma generate && node --experimental-vm-modules ./node_modules/jest/bin/jest.js --config jest.load.config.js",
     "db:generate": "prisma generate",
     "db:migrate:dev": "prisma migrate dev",
     "db:migrate:deploy": "prisma migrate deploy",

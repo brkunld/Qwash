@@ -3,7 +3,12 @@ import base from '@qwash/eslint-config/base';
 export default [
   ...base,
   {
-    ignores: ['jest.config.js', 'jest.integration.config.js', 'src/generated/**'],
+    ignores: [
+      'jest.config.js',
+      'jest.integration.config.js',
+      'jest.load.config.js',
+      'src/generated/**',
+    ],
   },
   {
     rules: {
