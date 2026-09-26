@@ -20,10 +20,18 @@ for (const key of ['NEXT_PUBLIC_API_URL', 'NEXT_PUBLIC_GOOGLE_CLIENT_ID']) {
   if (value) publicEnv[key] = value;
 }
 
+// Telefondan ayni agdan deneme (Orn: http://192.168.1.7:3000): Next gelistirme sunucusu baska
+// adresten gelen istekleri varsayilan olarak engeller. Yalniz gelistirmede; kok .env DEV_LAN_HOSTS.
+const devLanHosts = (process.env.DEV_LAN_HOSTS ?? '')
+  .split(',')
+  .map((h) => h.trim())
+  .filter(Boolean);
+
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
   env: publicEnv,
+  ...(devLanHosts.length > 0 ? { allowedDevOrigins: devLanHosts } : {}),
 };
 
 export default nextConfig;

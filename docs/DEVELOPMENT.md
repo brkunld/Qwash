@@ -184,6 +184,21 @@ Backend `POST /auth/google` ile Google ID token'ını sunucuda doğrular (imza, 
 5. Backend ve PWA'yı yeniden başlat. `GOOGLE_CLIENT_ID` boşsa Google girişi kapalıdır ve düğme çizilmez.
 
 **Davranış:** Google hesabındaki e-posta doğrulanmışsa QWash hesabı otomatik açılır (e-posta doğrulaması gerekmez, kart yükleme açılır). Aynı e-postayla önceki bir hesap varsa Google kimliği o hesaba bağlanır (ADR-0009 madde 5). Önceki hesabın e-postası doğrulanmamışsa şifresi silinir ve açık oturumları kapatılır: birinin başkasının e-postasıyla önceden kayıt olup sonradan hesabı ele geçirmesi engellenir. Doğrulanmışsa şifre ve oturumlar korunur. Canlıda: gerçek alan adı `Authorized JavaScript origins`'e eklenir, onay ekranına gizlilik ve kullanım şartları bağlantıları (`/legal/kvkk`, `/legal/terms`) yazılır ve yayın durumu "In production" yapılır; yalnız `openid email profile` istendiği için genellikle ayrıca Google doğrulaması gerekmez (güncel şartları Console'da kontrol et).
+## Telefondan deneme (aynı Wi-Fi)
+
+Telefon bilgisayarın `localhost`'una ulaşamaz; LAN IP'si kullanılır (`ipconfig`, Örn: `192.168.1.7`). Kök `.env`'de:
+
+```
+NEXT_PUBLIC_API_URL=http://192.168.1.7:3001/api/v1
+CUSTOMER_APP_URL=http://192.168.1.7:3000
+CORS_ORIGINS=http://localhost:3000,http://localhost:3002,http://192.168.1.7:3000
+DEV_LAN_HOSTS=192.168.1.7
+```
+
+`NEXT_PUBLIC_*` derlemeye gömüldüğü için `pnpm dev`'i yeniden başlat. Windows Güvenlik Duvarı'nda TCP 3000 ve 3001 girişine (yalnız Özel ağ) izin ver. Telefonda `http://192.168.1.7:3000/b/BAY-001` aç. Google ile giriş yalnız `localhost` kaynağına kayıtlı olduğu için telefonda e-posta/şifre kullan. İş bitince `.env`'i `localhost`'a geri al.
+
+Peron ekranındaki QR, cihazın portalında girilen "QR taban adresi"ni kullanır (varsayılan `https://qwash.example/b/`). Telefonla QR okutarak denemek için bu adres `http://192.168.1.7:3000/b/` olmalı; portal yalnız cihaz Wi-Fi'a bağlanamazsa açılır.
+
 ## Iyzico webhook için geçici tünel (sandbox)
 
 Iyzico bildirimi (webhook) herkese açık bir adrese gelir; yerel backend'i internete `cloudflared` hızlı tüneliyle açarız. Hesap gerekmez, adres her çalıştırmada değişir.
