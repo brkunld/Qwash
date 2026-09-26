@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { Logger } from '@nestjs/common';
 import { Prisma, PrismaClient } from '../generated/prisma/client';
 import type { Bay, WashSession } from '../generated/prisma/client';
-import { BayStatus, LedgerSource, SessionStatus } from '../generated/prisma/enums';
+import { BayStatus, LedgerSource, SessionStatus, UserStatus } from '../generated/prisma/enums';
 import {
   commandTopic,
   DeviceMessageSchema,
@@ -22,6 +22,7 @@ import {
   BayUnavailableError,
   InvalidDurationError,
   ProgramNotAvailableError,
+  SessionAccountNotActiveError,
   SessionIdempotencyConflictError,
   SessionNotFoundError,
 } from './session.errors';
@@ -118,6 +119,11 @@ type HeartbeatPayload = Extract<DeviceMessage['payload'], { type: 'HEARTBEAT' }>
 
 type SessionWithBay = WashSession & { bay: Bay & { station: { code: string } } };
 
+export type BayWithDevice = Bay & { device: { reportedStatus: string; lastSeenAt: Date } | null };
+
+/** Seans durum degisikliklerinin yayinlandigi PostgreSQL LISTEN/NOTIFY kanali. */
+export const SESSION_CHANNEL = 'qwash_session_changed';
+
 const ACTIVE: SessionStatus[] = [
   SessionStatus.STARTING,
   SessionStatus.RUNNING,
@@ -184,8 +190,13 @@ export class SessionService {
     });
     if (!bayProgram) throw new ProgramNotAvailableError(input.bayCode, input.programCode);
 
-    const wallet = await this.prisma.wallet.findUnique({ where: { userId: input.userId } });
+    const wallet = await this.prisma.wallet.findUnique({
+      where: { userId: input.userId },
+      include: { user: { select: { status: true } } },
+    });
     if (!wallet) throw new WalletNotFoundError(`user:${input.userId}`);
+    // Silinen hesabin bakiyesi zaten sifir/bloke (cuzdan kilidi); bu net hata icin.
+    if (wallet.user.status !== UserStatus.ACTIVE) throw new SessionAccountNotActiveError();
 
     const price = bayProgram.program.pricePerSecondKurus;
     const sessionId = randomUUID();
@@ -857,18 +868,22 @@ export class SessionService {
     }
   }
 
-  private assertBayUsable(
-    bay: Bay & { device: { reportedStatus: string; lastSeenAt: Date } | null },
-  ): void {
-    if (bay.status === BayStatus.MAINTENANCE)
-      throw new BayUnavailableError(bay.bayCode, 'MAINTENANCE');
-    if (!bay.device) throw new BayUnavailableError(bay.bayCode, 'NO_DEVICE');
-    if (bay.device.reportedStatus !== 'ONLINE') {
-      throw new BayUnavailableError(bay.bayCode, `DEVICE_${bay.device.reportedStatus}`);
-    }
+  private assertBayUsable(bay: BayWithDevice): void {
+    const reason = this.bayProblem(bay);
+    if (reason) throw new BayUnavailableError(bay.bayCode, reason);
+  }
+
+  /**
+   * Peronun cihaz/bakim durumu. null: baslatilabilir. Seans baslatma ve QR onay ekrani
+   * ayni kurali kullanir (onay ekraninda "uygun" gorunen peron baslatmada reddedilmesin).
+   */
+  bayProblem(bay: BayWithDevice): string | null {
+    if (bay.status === BayStatus.MAINTENANCE) return 'MAINTENANCE';
+    if (!bay.device) return 'NO_DEVICE';
+    if (bay.device.reportedStatus !== 'ONLINE') return `DEVICE_${bay.device.reportedStatus}`;
     const age = this.clock().getTime() - bay.device.lastSeenAt.getTime();
-    if (age > this.timings.deviceStaleMs)
-      throw new BayUnavailableError(bay.bayCode, 'DEVICE_STALE');
+    if (age > this.timings.deviceStaleMs) return 'DEVICE_STALE';
+    return null;
   }
 
   private async findReplay(input: StartSessionInput): Promise<WashSession | null> {
@@ -937,6 +952,9 @@ export class SessionService {
         createdAt: this.clock(),
       },
     });
+    // Anlik bildirim (Faz 5c). PostgreSQL NOTIFY'i yalniz commit'te iletir: geri alinan
+    // transaction musteriye hic gorunmez. Ayni transaction'daki tekrarlar tek bildirime iner.
+    await tx.$queryRaw`SELECT pg_notify(${SESSION_CHANNEL}, ${sessionId})::text`;
   }
 
   private bayMismatch(s: SessionWithBay, topic: ParsedTopic): DeviceMessageOutcome {

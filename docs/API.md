@@ -88,18 +88,19 @@ Sözleşmeler: `packages/contracts/src/auth.ts`. Uygulama: `apps/backend/src/aut
 
 ### 🚗 Peron & Program Yönetimi (`/api/v1/bays`)
 * `GET /api/v1/bays` — Tüm peronların genel durum listesi (IDLE, RUNNING, MAINTENANCE).
-* `GET /api/v1/bays/:bayCode` — QR okutulduğunda peron detayını ve seans hazırlığını getirme.
+* `GET /api/v1/bays/:bayCode` — **(Uygulandı, 5c; giriş gerekmez, dakikada 30 istek)** QR onay ekranı ("Peron X'e bağlanıyorsunuz"): `{ bayCode, bayName, stationName, available, unavailableReason, programs[], maxDurationSec }`. `unavailableReason`: `MAINTENANCE` / `NO_DEVICE` / `DEVICE_OFFLINE` / `DEVICE_STALE` / `BUSY`; seans başlatma ile aynı kural. Yalnız etkin programlar döner. Bilinmeyen veya biçimsiz kod `404 BAY_NOT_FOUND`.
 * `GET /api/v1/bays/:bayCode/programs` — Yalnızca bu perona atanmış ve etkin (`BayProgram.isEnabled`) yıkama programları ve saniyelik kuruş tarifeleri (Örn: Su: 50 kr/sn, Köpük: 100 kr/sn, Cila: 150 kr/sn, Hava: 75 kr/sn).
 * `POST /api/v1/bays/:id/prepare` — Peronu 30 saniyeliğine kullanıcıya rezerve etme (`WAITING`).
 * `POST /api/v1/bays/:id/cancel-waiting` — Rezervasyonu iptal edip peronu boşa çıkarma.
 
 ### ⏱️ Seans & Program Başlatma (`/api/v1/sessions`)
-* `POST /api/v1/sessions` — Belirli bir program için yıkama başlatma isteği:
-  * Body: `{ "bayId": "uuid", "programCode": "WATER", "durationSeconds": 120 }`
-  * Tutar: `durationSeconds * ratePerSecondKurus` hesaplanır (120 sn * 50 kr = 60.00 TL).
-  * Tek TL bakiyesinden tutar kadar HOLD edilir, ilgili röle için Two-Phase ACK başlar.
-* `GET /api/v1/sessions/active` — Kullanıcının aktif devam eden seansı, aktif programı ve kalan süresi.
-* `POST /api/v1/sessions/:id/stop` — Aktif programı erken durdurma isteği (Kullanılmayan saniyeler hesaplanıp TL bakiyesine anında iade/release edilir).
+Uygulandı (Faz 5c, 2026-09-26). Tümü giriş ister; yanıt `SessionView` (`packages/contracts/src/sessions.ts`).
+* `POST /api/v1/sessions` — `Idempotency-Key` zorunlu. Body `{ "bayCode": "BAY-001", "programCode": "WATER", "durationSec": 120 }`. `durationSec × fiyat` bloke edilir, START outbox'a yazılır, `201` ile `STARTING` seans döner; sonuç (`RUNNING` / `FAILED`) Socket.IO'dan gelir. Aynı anahtar aynı seansı döner (anahtar kullanıcıya bağlıdır). Hatalar: `422 INSUFFICIENT_FUNDS` (`details: { requiredKurus, currentKurus }`), `422 BAY_BUSY`, `422 BAY_UNAVAILABLE`, `422 PROGRAM_NOT_AVAILABLE`, `400 INVALID_DURATION`, `404 BAY_NOT_FOUND`, `403 ACCOUNT_NOT_ACTIVE`, `409 IDEMPOTENCY_CONFLICT`.
+* `GET /api/v1/sessions/active` — Aktif (`STARTING` / `RUNNING` / `RECONCILING`) seans veya `null`. PWA açılışta ve `session.resync` sonrası durumu buradan geri yükler.
+* `GET /api/v1/sessions/:id` — Seans durumu (bitmiş seansın özeti dahil). Başkasının seansı `404`.
+* `POST /api/v1/sessions/:id/stop` — Erken durdurma, `200`. Tahsilat cihaz bitişi bildirince yapılır; üst sınır durdurma anı + 5 sn (ADR-0010 #9).
+
+**Anlık durum (Socket.IO):** `io(API_URL, { auth: { token } })`. Sunucu → istemci: `session.updated` (`SessionView`), `session.resync` (tazele), `auth.error`. Ayrıntı: [ARCHITECTURE.md § 6](ARCHITECTURE.md).
 
 ### 💳 Cüzdan & Ödeme (`/api/v1/wallet` & `/api/v1/payments`)
 * `GET /api/v1/wallet` — Kullanıcı bakiyesi (`balanceKurus`, `holdKurus` - Tek TL cüzdanı).
@@ -159,6 +160,8 @@ Sunucu kaynak korum ve kaba kuvvet (brute-force) saldırılarına karşı endpoi
 | `POST /auth/login` & `/auth/register` | 10 istek | 15 dakika / IP | Brute-force koruması |
 | `POST /payments/topup` | 5 istek | 1 dakika / kullanıcı | Ödeme spam koruması |
 | `POST /sessions` | 3 istek | 30 saniye / kullanıcı | Çoklu seans açma engeli |
+
+Girişli isteklerde sayaç kullanıcı (token özeti), girişsizde IP başınadır (`apps/backend/src/http/user-throttler.guard.ts`). İstasyondaki müşteriler mobil operatör NAT'ı arkasında aynı IP'yi paylaşabilir; IP başına sayaç birinin denemesini diğerine yazardı.
 | Admin endpoint'leri | 60 istek | 1 dakika / IP | Admin panel koruması |
 | Diğer tüm endpoint'ler | 100 istek | 1 dakika / IP | Genel koruma |
 

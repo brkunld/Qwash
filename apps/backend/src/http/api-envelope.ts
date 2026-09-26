@@ -18,6 +18,8 @@ import { z } from 'zod';
 import { AccountError } from '../account/account.errors';
 import { AuthError } from '../auth/auth.errors';
 import { PaymentError } from '../payments/payments.errors';
+import { SessionError } from '../session/session.errors';
+import { InsufficientFundsError } from '../wallet/wallet.errors';
 
 // API.md 2: tum yanitlar { success, data | error, metadata } zarfinda doner.
 
@@ -71,6 +73,12 @@ const DOMAIN_STATUS: Record<string, HttpStatus> = {
   IBAN_REQUIRED: HttpStatus.BAD_REQUEST,
   PASSWORD_REQUIRED: HttpStatus.BAD_REQUEST,
   HOLDER_NAME_REQUIRED: HttpStatus.BAD_REQUEST,
+  BAY_NOT_FOUND: HttpStatus.NOT_FOUND,
+  SESSION_NOT_FOUND: HttpStatus.NOT_FOUND,
+  PROGRAM_NOT_AVAILABLE: HttpStatus.UNPROCESSABLE_ENTITY,
+  BAY_UNAVAILABLE: HttpStatus.UNPROCESSABLE_ENTITY,
+  BAY_BUSY: HttpStatus.UNPROCESSABLE_ENTITY,
+  INVALID_DURATION: HttpStatus.BAD_REQUEST,
 };
 
 export class ValidationError extends Error {
@@ -111,6 +119,24 @@ export class ApiErrorFilter implements ExceptionFilter {
         code: exception.code,
         message: exception.message,
         details: exception instanceof PaymentError ? exception.details : undefined,
+      };
+    }
+    if (exception instanceof SessionError) {
+      return {
+        status: DOMAIN_STATUS[exception.code] ?? HttpStatus.UNPROCESSABLE_ENTITY,
+        code: exception.code,
+        message: exception.message,
+      };
+    }
+    if (exception instanceof InsufficientFundsError) {
+      return {
+        status: HttpStatus.UNPROCESSABLE_ENTITY,
+        code: exception.code,
+        message: 'Seans baslatmak icin bakiyeniz yetersiz.',
+        details: {
+          requiredKurus: exception.requestedKurus,
+          currentKurus: exception.availableKurus,
+        },
       };
     }
     if (exception instanceof ValidationError) {

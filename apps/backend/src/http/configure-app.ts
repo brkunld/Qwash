@@ -1,5 +1,6 @@
 import { INestApplication } from '@nestjs/common';
 import cookieParser from 'cookie-parser';
+import { CorsIoAdapter } from '../realtime/cors-io.adapter';
 import { ApiErrorFilter, EnvelopeInterceptor } from './api-envelope';
 
 /** main.ts ve HTTP testleri ayni ayarla calissin diye ortak kurulum. */
@@ -10,4 +11,5 @@ export function configureApp(app: INestApplication, corsOrigins: string[]): void
   app.enableCors({ origin: corsOrigins, credentials: true });
   app.useGlobalFilters(new ApiErrorFilter());
   app.useGlobalInterceptors(new EnvelopeInterceptor());
+  app.useWebSocketAdapter(new CorsIoAdapter(app, corsOrigins));
 }

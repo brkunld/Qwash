@@ -185,28 +185,33 @@ Desired State != Reported State (Tolerans süresi aşıldığında)
 
 Müşteri ve Admin arayüzlerinin sunucuyu sürekli yoklamasını (polling) engellemek için **Socket.IO Gateway** kullanılır:
 
-| Room | Katılan Kim | Tetiklenir Ne Zaman | Yayınlanan Event'ler |
+**Uygulanan (Faz 5c, 2026-09-26):** `apps/backend/src/realtime/`, sözleşme `packages/contracts/src/sessions.ts`.
+
+| Room | Katılan Kim | Ne Zaman | Event'ler |
 |---|---|---|---|
-| `room:bays:public` | Sayfayı açan tüm kullanıcılar | Sayfa yüklenince otomatik | `BAY_STATUS_CHANGED` (durum: IDLE/RUNNING/MAINTENANCE) |
-| `room:bay:{bayId}` | QR okutan kullanıcı | `/bays/:bayCode` endpoint'ine GET yapılınca | `BAY_PREPARED` (30sn rezervasyon başladı), `BAY_EXPIRED` |
-| `room:session:{sessionId}` | Aktif seans sahibi kullanıcı | Seans `RUNNING` durumuna geçince | `SESSION_TICK` (her saniye kalan süre), `SESSION_COMPLETED`, `SESSION_FAILED` |
-| `room:admin:telemetry` | Auth’lu admin kullanıcılar | Admin panel açılınca | `DEVICE_HEARTBEAT` (RSSI/voltaj), `SESSION_STARTED`, `REVENUE_UPDATE` |
+| `user:{userId}` | Doğrulanmış müşteri soketi | Bağlanınca otomatik; istemci oda seçemez | `session.updated` (`SessionView`), `session.resync` |
+
+- **Kaynak:** Her seans durum geçişi (`SessionTransition` yazımı) aynı transaction içinde `pg_notify('qwash_session_changed', sessionId)` çağırır. PostgreSQL bildirimi yalnız commit'te iletir: geri alınan değişiklik müşteriye hiç görünmez. Değişiklik API'den, MQTT işleyicisinden, taramadan veya başka bir backend kopyasından gelse de tüm dinleyicilere ulaşır (çoklu instance için Redis adapter gerekmez; soket hangi kopyadaysa o kopya yayınlar).
+- **Sıra:** Aynı seansın bildirimleri sırayla işlenir; eski okuma yeni durumun üstüne yazamaz.
+- **Geri sayım:** Sunucu saniyelik tick göndermez. İstemci `startedAt + plannedDurationSec` ile hesaplar, saat farkını `serverTime` ile düzeltir. Cihaz ekranı zaten yerel sayaçla sayar (IOT.md).
+- **Kopma:** LISTEN bağlantısı koparsa 2 sn'de yeniden kurulur ve tüm istemcilere `session.resync` gider; aradaki bildirimler kaybolmuş olabilir, istemci `GET /sessions/active` ile tazelenir. PWA arka plandan dönünce de aynı yolu izler (ADR-0008).
+
+Sonraya bırakılanlar: `BAY_STATUS_CHANGED` genel peron odası ve admin telemetri odası (Faz 6). QR sonrası 30 sn rezervasyon (`BAY_PREPARED`) uygulanmadı; peron seans başlatılınca `WAITING` olur, tek aktif seans kısıtı çakışmayı engeller.
 
 ### Bağlantı Yaşam Döngüsü
 
 ```text
-Client connect (JWT Bearer token)
+io(url, { auth: { token: <access token> } })
     │
-    ├── [Başarılı] → Socket.IO Guards JWT'yi doğrular
-    │         → socket.data.userId atanır
-    │         → Client istediği room'lara JOIN olur
+    ├── [Başarılı] → handleConnection token'ı doğrular
+    │         → socket.data.userId atanır, user:{userId} odasına girer
     │
-    ├── [Başarısız] → socket.disconnect() — 4401 hatası
+    ├── [Başarısız] → auth.error { code: 'UNAUTHENTICATED' } + disconnect
     │
     └── [Disconnect]
-              → Aktif seans varsa session timer arka planda devam eder
-              → Kullanıcı yeniden bağlanırsa kalan süreyi çeker
+              → Seans cihazda ve sunucuda devam eder
+              → İstemci yeniden bağlanınca GET /sessions/active ile durumu geri yükler
 ```
 
 > [!NOTE]
-> Socket.IO JWT doğrulaması `@nestjs/websockets` `WsGuard` üzerinden yapılır. Websocket bağlantısı JWT'siz başlatılamaz. Token yenileme (refresh) için istemci bekleme süresince eski token ile bağlı kalır, sonra yeni tokenla `reconnect` yapar.
+> Token yalnız bağlantı anında doğrulanır; süresi dolsa da açık bağlantı sürer. İstemci token'ı yenileyince yeni token'la yeniden bağlanır.
