@@ -101,9 +101,25 @@ export class PaymentsController {
   async webhook(
     @Body() body: unknown,
     @Headers('x-iyz-signature-v3') signature: string | undefined,
+    @Headers() headers: Record<string, string | undefined>,
     @Res() res: Response,
   ): Promise<void> {
     if (!this.gateway?.verifyWebhook(body, signature)) {
+      // Teshis: hangi imza basligi geldi, govdede hangi alanlar var (degerler/gizli anahtar yok).
+      this.logger.warn(
+        {
+          signatureHeaders: Object.entries(headers)
+            .filter(([name]) => name.startsWith('x-iyz'))
+            .map(([name, value]) => `${name}(${value?.length ?? 0})`),
+          bodyFields:
+            typeof body === 'object' && body !== null
+              ? Object.entries(body).map(([k, v]) => `${k}:${typeof v}`)
+              : typeof body,
+          eventType: (body as { iyziEventType?: unknown } | null)?.iyziEventType,
+          status: (body as { status?: unknown } | null)?.status,
+        },
+        'Iyzico webhook imzasi dogrulanamadi',
+      );
       res.status(403).json({ success: false, error: { code: 'INVALID_SIGNATURE' } });
       return;
     }
