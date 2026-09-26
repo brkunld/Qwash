@@ -1,15 +1,20 @@
 import type { MetadataRoute } from 'next';
 
-// PWA manifest'i (ADR-0008). Ikonlar Faz 5'te marka calismasiyla eklenecek.
+// PWA manifest'i (ADR-0008). Ikonlar assets/ altindaki marka dosyalarindan uretilir.
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: 'QWASH Self-Servis Oto Yikama',
-    short_name: 'QWASH',
-    description: 'QR okut, bakiye yukle, yikamaya basla.',
+    name: 'QWash Self-Servis Oto Yıkama',
+    short_name: 'QWash',
+    description: 'QR okut, bakiye yükle, yıkamaya başla.',
     start_url: '/',
     display: 'standalone',
     background_color: '#f8fafc',
-    theme_color: '#0284c7',
+    theme_color: '#fa9a09',
     lang: 'tr',
+    icons: [
+      { src: '/icons/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+      { src: '/icons/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+      { src: '/icons/maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+    ],
   };
 }

@@ -90,7 +90,7 @@ function Wallet({ me }: { me: Me }) {
                   aria-pressed={p === amount}
                   className={`min-h-12 rounded-xl border font-semibold ${
                     p === amount
-                      ? 'border-sky-600 bg-sky-600 text-white'
+                      ? 'border-brand-500 bg-brand-500 text-slate-900'
                       : 'border-slate-300 bg-white'
                   }`}
                 >

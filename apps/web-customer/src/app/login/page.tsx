@@ -62,12 +62,12 @@ function LoginForm() {
           Giriş yap
         </Button>
         <div className="flex justify-between text-sm">
-          <Link href="/forgot-password" className="text-sky-700">
+          <Link href="/forgot-password" className="text-brand-700">
             Şifremi unuttum
           </Link>
           <Link
             href={`/register?next=${encodeURIComponent(next)}`}
-            className="font-semibold text-sky-700"
+            className="font-semibold text-brand-700"
           >
             Hesap oluştur
           </Link>
