@@ -4,6 +4,7 @@ import {
   InitializedCheckout,
   PaymentGateway,
   PaymentProviderError,
+  ReversePaymentInput,
 } from '../src/payments/payment-gateway';
 
 /** Testlerde Iyzico yerine: her token icin sonuc elle belirlenir. */
@@ -32,6 +33,15 @@ export class FakePaymentGateway extends PaymentGateway {
 
   verifyWebhook(_body: unknown, signature: string | undefined): boolean {
     return signature === this.webhookSecret;
+  }
+
+  readonly reversed: ReversePaymentInput[] = [];
+  failReverse = false;
+
+  reversePayment(input: ReversePaymentInput): Promise<'CANCELLED' | 'REFUNDED'> {
+    if (this.failReverse) return Promise.reject(new PaymentProviderError('Iyzico iade kapali'));
+    this.reversed.push(input);
+    return Promise.resolve('CANCELLED');
   }
 
   /** topUpId icin basarili odeme sonucu kurar. */

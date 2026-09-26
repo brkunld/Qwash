@@ -19,7 +19,9 @@ export class PaymentsWorker implements OnApplicationBootstrap, OnApplicationShut
       this.payments
         .reconcile()
         .then((r) => {
-          if (r.checked || r.abandoned) this.logger.log(r, 'Kart yukleme mutabakati');
+          if (r.checked || r.abandoned || r.reversalsRetried) {
+            this.logger.log(r, 'Kart yukleme mutabakati');
+          }
         })
         .catch((err: unknown) => this.logger.error({ err }, 'Kart yukleme mutabakati basarisiz'))
         .finally(() => {

@@ -54,6 +54,6 @@ import { DevConsoleMailer, Mailer } from './mailer';
     },
     AccessTokenGuard,
   ],
-  exports: [AuthService, AccessTokenGuard],
+  exports: [AuthService, AccessTokenGuard, COOKIE_SECURE],
 })
 export class AuthModule {}

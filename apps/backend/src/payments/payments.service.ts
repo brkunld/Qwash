@@ -8,7 +8,9 @@ import { PrismaService } from '../prisma/prisma.service';
 import { WalletService } from '../wallet/wallet.service';
 import { CheckoutOutcome, PaymentGateway } from './payment-gateway';
 import {
+  AccountNotActiveError,
   EmailNotVerifiedError,
+  FullNameRequiredError,
   PaymentProviderUnavailableError,
   PaymentsDisabledError,
   TopUpAmountOutOfRangeError,
@@ -75,8 +77,11 @@ export class PaymentsService {
     if (!gateway) throw new PaymentsDisabledError();
 
     const user = await this.prisma.user.findUnique({ where: { id: input.userId } });
-    if (!user || user.status !== UserStatus.ACTIVE) throw new UnauthenticatedError();
+    if (!user) throw new UnauthenticatedError();
+    if (user.status !== UserStatus.ACTIVE) throw new AccountNotActiveError();
     if (!user.emailVerifiedAt) throw new EmailNotVerifiedError();
+    // Muhurlenecek ad bos olamaz (Google'dan ad gelmeyebilir).
+    if (!user.fullName?.trim()) throw new FullNameRequiredError();
 
     const { minTopUpKurus, maxTopUpKurus } = await this.settings();
     if (
@@ -90,16 +95,24 @@ export class PaymentsService {
     const replay = await this.findByKey(input.userId, input.idempotencyKey);
     if (replay) return this.replay(replay, input.amountKurus);
 
-    const wallet = await this.prisma.wallet.findUniqueOrThrow({ where: { userId: user.id } });
     let topUp: CardTopUp;
     try {
-      topUp = await this.prisma.cardTopUp.create({
-        data: {
-          userId: user.id,
-          walletId: wallet.id,
-          amountKurus: input.amountKurus,
-          idempotencyKey: input.idempotencyKey,
-        },
+      // Hesap silme ile ayni cuzdan kilidi: ikisi sirayla calisir. Yukleme once
+      // kaydedilirse silme onu gorup durur; silme once biterse burada durum ACTIVE degildir.
+      // Boylece silinmis hesaba "sahipsiz" bakiye yuklenecek bir odeme formu acilamaz.
+      topUp = await this.prisma.$transaction(async (tx) => {
+        const [wallet] = await tx.$queryRaw<{ id: string }[]>`
+          SELECT "id" FROM "Wallet" WHERE "userId" = ${user.id} FOR UPDATE`;
+        const current = await tx.user.findUniqueOrThrow({ where: { id: user.id } });
+        if (!wallet || current.status !== UserStatus.ACTIVE) throw new AccountNotActiveError();
+        return tx.cardTopUp.create({
+          data: {
+            userId: user.id,
+            walletId: wallet.id,
+            amountKurus: input.amountKurus,
+            idempotencyKey: input.idempotencyKey,
+          },
+        });
       });
     } catch (error) {
       if (!isUniqueViolation(error)) throw error;
@@ -164,8 +177,17 @@ export class PaymentsService {
   }
 
   /** Mutabakat turu: sonucu gelmemis yuklemeleri Iyzico'ya sorar, suresi dolanlari isaretler. */
-  async reconcile(limit = 50): Promise<{ checked: number; expired: number; abandoned: number }> {
+  async reconcile(
+    limit = 50,
+  ): Promise<{ checked: number; expired: number; abandoned: number; reversalsRetried: number }> {
     const now = this.now().getTime();
+
+    const pendingReversals = await this.prisma.cardTopUp.findMany({
+      where: { status: CardTopUpStatus.REVERSAL_PENDING },
+      orderBy: { createdAt: 'asc' },
+      take: limit,
+    });
+    for (const row of pendingReversals) await this.reverse(row);
 
     const abandoned = await this.prisma.cardTopUp.updateMany({
       where: {
@@ -220,7 +242,12 @@ export class PaymentsService {
         expired += count;
       }
     }
-    return { checked: candidates.length, expired, abandoned: abandoned.count };
+    return {
+      checked: candidates.length,
+      expired,
+      abandoned: abandoned.count,
+      reversalsRetried: pendingReversals.length,
+    };
   }
 
   private async apply(topUp: CardTopUp, outcome: CheckoutOutcome): Promise<CardTopUp> {
@@ -244,7 +271,11 @@ export class PaymentsService {
         `tutar ${outcome.paidKurus} != ${topUp.amountKurus}`,
       outcome.currency !== 'TRY' && `para birimi ${outcome.currency}`,
       outcome.basketId !== topUp.id && `basketId ${outcome.basketId}`,
-      outcome.conversationId !== topUp.id && `conversationId ${outcome.conversationId}`,
+      // Iyzico CF sonuc yanitinda conversationId gelmeyebiliyor (sandbox, 2026-09-26);
+      // baglayici alan imzali basketId'dir. Geldiyse eslesmeli.
+      outcome.conversationId !== null &&
+        outcome.conversationId !== topUp.id &&
+        `conversationId ${outcome.conversationId}`,
     ].filter(Boolean);
     if (mismatch.length > 0) {
       // Para cekilmis ama beklenenle uyusmuyor: bakiye yuklenmez, admin incelemesine kalir.
@@ -265,7 +296,25 @@ export class PaymentsService {
       return this.prisma.cardTopUp.findUniqueOrThrow({ where: { id: topUp.id } });
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    const settled = await this.prisma.$transaction(async (tx) => {
+      // Hesap silme ile ayni cuzdan kilidi. Hesap bu arada kapandiysa bakiye YAZILMAZ:
+      // odeme iade icin isaretlenir, Iyzico cagrisi transaction disinda yapilir.
+      await tx.$queryRaw`SELECT "id" FROM "Wallet" WHERE "id" = ${topUp.walletId} FOR UPDATE`;
+      const owner = await tx.user.findUniqueOrThrow({ where: { id: topUp.userId } });
+      if (owner.status !== UserStatus.ACTIVE) {
+        await tx.cardTopUp.updateMany({
+          where: { id: topUp.id, status: { in: SETTLEABLE } },
+          data: {
+            status: CardTopUpStatus.REVERSAL_PENDING,
+            iyzicoPaymentId: outcome.paymentId,
+            paymentTransactionId: outcome.paymentTransactionId,
+            failureReason: 'Hesap aktif degil; odeme iade ediliyor',
+            completedAt: this.now(),
+          },
+        });
+        return tx.cardTopUp.findUniqueOrThrow({ where: { id: topUp.id } });
+      }
+
       const { count } = await tx.cardTopUp.updateMany({
         where: { id: topUp.id, status: { in: SETTLEABLE } },
         data: {
@@ -277,6 +326,11 @@ export class PaymentsService {
         },
       });
       if (count === 1) {
+        // Ilk basarili yuklemede ad muhurlenir (IBAN iadesinde alici adi karsilastirmasi).
+        await tx.user.updateMany({
+          where: { id: topUp.userId, nameLockedAt: null },
+          data: { nameLockedAt: this.now() },
+        });
         await this.wallets.creditTx(tx, {
           walletId: topUp.walletId,
           amountKurus: topUp.amountKurus,
@@ -287,6 +341,41 @@ export class PaymentsService {
       }
       return tx.cardTopUp.findUniqueOrThrow({ where: { id: topUp.id } });
     });
+
+    if (settled.status === CardTopUpStatus.REVERSAL_PENDING) return this.reverse(settled);
+    return settled;
+  }
+
+  /**
+   * Hesap kapaliyken alinmis odemeyi Iyzico'da geri verir. Basarisizsa kayit
+   * REVERSAL_PENDING kalir; mutabakat her turda yeniden dener.
+   */
+  private async reverse(topUp: CardTopUp): Promise<CardTopUp> {
+    if (!this.options.gateway || !topUp.iyzicoPaymentId) return topUp;
+    try {
+      const result = await this.options.gateway.reversePayment({
+        topUpId: topUp.id,
+        paymentId: topUp.iyzicoPaymentId,
+        paymentTransactionId: topUp.paymentTransactionId,
+        amountKurus: topUp.amountKurus,
+      });
+      await this.prisma.cardTopUp.updateMany({
+        where: { id: topUp.id, status: CardTopUpStatus.REVERSAL_PENDING },
+        data: {
+          status: CardTopUpStatus.REVERSED,
+          failureReason:
+            result === 'CANCELLED'
+              ? 'Hesap kapali; odeme iptal edildi'
+              : 'Hesap kapali; odeme karta iade edildi',
+        },
+      });
+    } catch (error) {
+      this.logger.error(
+        { err: error, topUpId: topUp.id },
+        'Kapali hesaba gelen odeme iade edilemedi',
+      );
+    }
+    return this.prisma.cardTopUp.findUniqueOrThrow({ where: { id: topUp.id } });
   }
 
   private replay(existing: CardTopUp, amountKurus: number): TopUpView {

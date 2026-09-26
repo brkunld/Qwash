@@ -13,6 +13,7 @@ import {
   GoogleLoginDisabledError,
   InvalidCredentialsError,
   InvalidTokenError,
+  NameLockedError,
   UnauthenticatedError,
 } from './auth.errors';
 import { GoogleTokenVerifier } from './google';
@@ -264,11 +265,16 @@ export class AuthService {
     return toMe(user);
   }
 
+  /** Ad, ilk basarili kart yuklemesinden sonra muhurludur; yalniz destek degistirir. */
   async updateProfile(userId: string, input: { fullName: string }): Promise<Me> {
-    const user = await this.prisma.user.update({
-      where: { id: userId },
+    // Kosullu guncelleme: ayni anda sonuclanan bir yuklemenin muhruyle yarismaz.
+    const { count } = await this.prisma.user.updateMany({
+      where: { id: userId, status: UserStatus.ACTIVE, nameLockedAt: null },
       data: { fullName: input.fullName },
     });
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user || user.status !== UserStatus.ACTIVE) throw new UnauthenticatedError();
+    if (count === 0) throw new NameLockedError();
     return toMe(user);
   }
 
@@ -380,6 +386,7 @@ function toMe(user: User): Me {
     phoneNumber: user.phoneNumber,
     emailVerified: user.emailVerifiedAt !== null,
     hasPassword: user.passwordHash !== null,
+    nameLocked: user.nameLockedAt !== null,
     role: user.role,
   };
 }

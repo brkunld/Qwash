@@ -77,8 +77,10 @@ Ağ kopması nedeniyle aynı istek tekrar gönderilirse backend işlemi yeniden 
 * `POST /api/v1/auth/verify-email` — E-posta doğrulama token'ı ile hesabı doğrulama. Doğrulanmamış hesap bakiye yükleyemez.
 * `POST /api/v1/auth/forgot-password` / `POST /api/v1/auth/reset-password` — Tek kullanımlık token ile şifre sıfırlama.
 * `POST /api/v1/auth/resend-verification` — (Giriş gerekli) Doğrulama e-postasını tekrar gönderir; 15 dakikada 3 istek.
-* `GET /api/v1/me` — Giriş yapmış kullanıcının profili (`emailVerified`, `hasPassword` dahil).
-* `PATCH /api/v1/me/profile` — Ad güncelleme. Telefon numarası Iyzico zorunlu alanları netleşince eklenecek.
+* `GET /api/v1/me` — Giriş yapmış kullanıcının profili (`emailVerified`, `hasPassword`, `nameLocked` dahil).
+* `PATCH /api/v1/me/profile` — Ad güncelleme. İlk başarılı kart yüklemesinden sonra ad mühürlüdür: `409 NAME_LOCKED` (yalnız destek değiştirir). Telefon numarası Iyzico zorunlu alanları netleşince eklenecek.
+* `GET /api/v1/me/deletion-preview` — Hesap silme ekranı: kullanılabilir bakiye, FIFO iade dağılımı (`CARD` / `IBAN` / `CASH_AT_STATION`), `ibanRequired`, `hasCashPart`, engeller (`ACTIVE_HOLD`, `TOPUP_IN_PROGRESS`).
+* `POST /api/v1/me/delete` — Body `{ balanceChoice?: "FORFEIT" | "REFUND", confirmForfeit?: true, iban?: "TR..", password? }`. Hesabı KVKK m.7'ye göre anonimleştirir (mali kayıtlar kalır). Bakiye varsa seçim zorunlu: `FORFEIT` bakiyeyi `FORFEIT` ledger kaydıyla sıfırlar; `REFUND` tutarı bloke edip `RefundRequest` açar (admin Faz 6'da işler). 365 günü aşan kart kısmı için `IBAN_REQUIRED`. Şifreli hesapta şifre zorunlu. "Bakiyemi kullanmak istiyorum" istemcide silmeyi iptal etmektir.
 * `POST /api/v1/auth/refresh` — Cookie'deki refresh token ile yeni access token; refresh token döndürülür.
 * `POST /api/v1/auth/logout` — Refresh token'ı iptal eder ve cookie'yi siler.
 
@@ -104,7 +106,9 @@ Sözleşmeler: `packages/contracts/src/auth.ts`. Uygulama: `apps/backend/src/aut
 * `GET /api/v1/wallet/transactions` — Cüzdan hareket geçmişi (Ledger dökümü: hangi program için ne kadar harcandı).
 * `GET /api/v1/payments/topup-options` — (Giriş gerekli) `{ minKurus, maxKurus, presetsKurus }`. Minimumu admin belirler; hazır tutarlar minimumun katlarıdır (min, 2×min, 4×min; max'ı aşanlar çıkarılır).
 * `POST /api/v1/payments/topup` — (Giriş + doğrulanmış e-posta + `Idempotency-Key` zorunlu) Body `{ "amountKurus": 10000 }`. İyzico Checkout Form'u açar, `{ topUpId, status: "PENDING", paymentPageUrl }` döner; istemci `paymentPageUrl`'e yönlendirir. Aynı anahtar aynı yüklemeyi döndürür, farklı tutarla `409 IDEMPOTENCY_CONFLICT`. Kullanıcı başına dakikada 5 istek.
-* `GET /api/v1/payments/topups/:id` — Yükleme durumu (`PENDING` / `SUCCEEDED` / `FAILED` / `EXPIRED`); sonuç sayfası bunu okur.
+* `GET /api/v1/payments/topups/:id` — Yükleme durumu (`PENDING` / `SUCCEEDED` / `FAILED` / `EXPIRED` / `REVERSAL_PENDING` / `REVERSED`); sonuç sayfası bunu okur.
+
+**Sahipsiz bakiye önlemi (Burak, 2026-09-26):** Yükleme başlatma ve hesap silme aynı cüzdan satır kilidini alır; aktif olmayan hesap yükleme başlatamaz (`403 ACCOUNT_NOT_ACTIVE`). Yine de kapanmış hesaba başarılı ödeme gelirse bakiye yazılmaz: kayıt `REVERSAL_PENDING` olur, ödeme İyzico'da önce iptal (aynı gün), olmazsa tam iade ile geri verilir (`REVERSED`); İyzico'ya ulaşılamazsa mutabakat her dakika yeniden dener.
 * `POST /api/v1/payments/iyzico/callback` — İyzico ödeme sayfası müşterinin tarayıcısını buraya form POST (`token`) ile döndürür. Gövdeye güvenilmez: sonuç İyzico'dan sorulur (imzalı yanıt), sonra `303` ile `CUSTOMER_APP_URL/wallet/topup-result?id=<topUpId>`'e yönlendirilir.
 * `POST /api/v1/payments/webhook` — İyzico bildirimi (bkz. §7). Geçerli imzada sonuç yine İyzico'dan sorulur.
 

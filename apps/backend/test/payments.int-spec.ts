@@ -240,6 +240,16 @@ describe('PaymentsService kart yukleme (gercek PostgreSQL)', () => {
       });
     });
 
+    it('conversationId gelmeyen basari yaniti basketId ile kabul edilir (gercek sandbox yaniti)', async () => {
+      const { userId, walletId } = await customer();
+      const { topUpId } = await start(userId, 10000);
+      const token = gateway.succeed(topUpId, 10000, { conversationId: null });
+      await expect(payments.completeByToken(token)).resolves.toMatchObject({
+        status: CardTopUpStatus.SUCCEEDED,
+      });
+      expect(await balance(walletId)).toBe(10000);
+    });
+
     it('baska yuklemenin sepetine ait basari kabul edilmez', async () => {
       const { userId, walletId } = await customer();
       const { topUpId } = await start(userId, 10000);

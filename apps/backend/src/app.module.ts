@@ -3,6 +3,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { LoggerModule } from 'nestjs-pino';
+import { AccountModule } from './account/account.module';
 import { AuthModule } from './auth/auth.module';
 import { Env, validateEnv } from './config/env';
 import { HealthController } from './health/health.controller';
@@ -39,6 +40,7 @@ import { WalletModule } from './wallet/wallet.module';
     SessionModule,
     AuthModule,
     PaymentsModule,
+    AccountModule,
   ],
   controllers: [HealthController],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],

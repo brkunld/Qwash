@@ -15,6 +15,7 @@ import { ThrottlerException } from '@nestjs/throttler';
 import type { Request, Response } from 'express';
 import { map, Observable } from 'rxjs';
 import { z } from 'zod';
+import { AccountError } from '../account/account.errors';
 import { AuthError } from '../auth/auth.errors';
 import { PaymentError } from '../payments/payments.errors';
 
@@ -60,6 +61,16 @@ const DOMAIN_STATUS: Record<string, HttpStatus> = {
   IDEMPOTENCY_KEY_REQUIRED: HttpStatus.BAD_REQUEST,
   IDEMPOTENCY_CONFLICT: HttpStatus.CONFLICT,
   PAYMENT_PROVIDER_UNAVAILABLE: HttpStatus.BAD_GATEWAY,
+  FULL_NAME_REQUIRED: HttpStatus.BAD_REQUEST,
+  ACCOUNT_NOT_ACTIVE: HttpStatus.FORBIDDEN,
+  NAME_LOCKED: HttpStatus.CONFLICT,
+  ACTIVE_HOLD: HttpStatus.CONFLICT,
+  TOPUP_IN_PROGRESS: HttpStatus.CONFLICT,
+  BALANCE_DECISION_REQUIRED: HttpStatus.BAD_REQUEST,
+  FORFEIT_CONFIRMATION_REQUIRED: HttpStatus.BAD_REQUEST,
+  IBAN_REQUIRED: HttpStatus.BAD_REQUEST,
+  PASSWORD_REQUIRED: HttpStatus.BAD_REQUEST,
+  HOLDER_NAME_REQUIRED: HttpStatus.BAD_REQUEST,
 };
 
 export class ValidationError extends Error {
@@ -90,7 +101,11 @@ export class ApiErrorFilter implements ExceptionFilter {
     message: string;
     details?: unknown;
   } {
-    if (exception instanceof AuthError || exception instanceof PaymentError) {
+    if (
+      exception instanceof AuthError ||
+      exception instanceof PaymentError ||
+      exception instanceof AccountError
+    ) {
       return {
         status: DOMAIN_STATUS[exception.code] ?? HttpStatus.BAD_REQUEST,
         code: exception.code,

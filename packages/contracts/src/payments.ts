@@ -15,7 +15,15 @@ export const StartTopUpRequestSchema = z.object({
 });
 export type StartTopUpRequest = z.infer<typeof StartTopUpRequestSchema>;
 
-export const TopUpStatusSchema = z.enum(['PENDING', 'SUCCEEDED', 'FAILED', 'EXPIRED']);
+// REVERSAL_PENDING / REVERSED: odeme alindi ama hesap kapaliydi; bakiye yazilmadi, karta geri verildi.
+export const TopUpStatusSchema = z.enum([
+  'PENDING',
+  'SUCCEEDED',
+  'FAILED',
+  'EXPIRED',
+  'REVERSAL_PENDING',
+  'REVERSED',
+]);
 export type TopUpStatus = z.infer<typeof TopUpStatusSchema>;
 
 export const TopUpViewSchema = z.object({

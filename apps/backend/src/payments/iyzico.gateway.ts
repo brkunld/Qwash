@@ -6,6 +6,7 @@ import {
   InitializedCheckout,
   PaymentGateway,
   PaymentProviderError,
+  ReversePaymentInput,
 } from './payment-gateway';
 
 // Iyzico REST istemcisi (Checkout Form). Resmi SDK yerine dogrudan REST: bagimlilik yok,
@@ -17,6 +18,9 @@ import {
 
 const INITIALIZE_PATH = '/payment/iyzipos/checkoutform/initialize/auth/ecom';
 const RETRIEVE_PATH = '/payment/iyzipos/checkoutform/auth/ecom/detail';
+// https://docs.iyzico.com/en/advanced/refund-and-cancel
+const CANCEL_PATH = '/payment/cancel';
+const REFUND_PATH = '/payment/refund';
 const REQUEST_TIMEOUT_MS = 15_000;
 
 // Iyzico alici icin TC kimlik no, adres ve sehir ister. Bakiye yuklemesinde fatura/kargo
@@ -68,7 +72,7 @@ export class IyzicoGateway extends PaymentGateway {
         registrationAddress: PLACEHOLDER_ADDRESS,
         city: PLACEHOLDER_CITY,
         country: PLACEHOLDER_COUNTRY,
-        ...(input.buyer.ip ? { ip: input.buyer.ip } : {}),
+        ...(buyerIp(input.buyer.ip) ? { ip: buyerIp(input.buyer.ip) } : {}),
       },
       billingAddress: {
         contactName,
@@ -108,7 +112,7 @@ export class IyzicoGateway extends PaymentGateway {
     const paymentStatus = str(res.paymentStatus);
     if (paymentStatus !== 'SUCCESS') {
       return paymentStatus === 'FAILURE'
-        ? { kind: 'FAILURE', reason: describeError(res) }
+        ? { kind: 'FAILURE', reason: describeFailure(res) }
         : { kind: 'PENDING', reason: `paymentStatus=${paymentStatus ?? '-'}` };
     }
 
@@ -137,8 +141,35 @@ export class IyzicoGateway extends PaymentGateway {
       paidKurus: priceToKurus(num(res.paidPrice)),
       currency: str(res.currency) ?? '',
       basketId: str(res.basketId) ?? '',
-      conversationId: str(res.conversationId) ?? '',
+      conversationId: str(res.conversationId) ?? null,
     };
+  }
+
+  async reversePayment(input: ReversePaymentInput): Promise<'CANCELLED' | 'REFUNDED'> {
+    // Iptal yalniz odeme gunu mumkun ve ekstrede iz birakmaz; olmazsa iade.
+    const cancel = await this.post(CANCEL_PATH, {
+      locale: 'tr',
+      conversationId: input.topUpId,
+      paymentId: input.paymentId,
+    });
+    if (cancel.status === 'success') return 'CANCELLED';
+
+    if (!input.paymentTransactionId) {
+      throw new PaymentProviderError(
+        `Iyzico iptal edilemedi, iade kimligi yok: ${describeError(cancel)}`,
+      );
+    }
+    const refund = await this.post(REFUND_PATH, {
+      locale: 'tr',
+      conversationId: input.topUpId,
+      paymentTransactionId: input.paymentTransactionId,
+      price: kurusToPrice(input.amountKurus),
+      currency: 'TRY',
+    });
+    if (refund.status === 'success') return 'REFUNDED';
+    throw new PaymentProviderError(
+      `Iyzico iptal/iade basarisiz: iptal=${describeError(cancel)}; iade=${describeError(refund)}`,
+    );
   }
 
   /** V3: HMAC-SHA256(secretKey, secretKey + iyziEventType + iyziPaymentId + token + paymentConversationId + status), hex. */
@@ -197,11 +228,32 @@ export class IyzicoGateway extends PaymentGateway {
   }
 }
 
+/** "::ffff:1.2.3.4" -> "1.2.3.4"; yerel/loopback adres Iyzico'ya gonderilmez. */
+export function buyerIp(ip: string | null): string | null {
+  if (!ip) return null;
+  const v4 = ip.startsWith('::ffff:') ? ip.slice(7) : ip;
+  if (v4 === '::1' || v4.startsWith('127.') || v4 === 'localhost') return null;
+  return v4;
+}
+
 function splitName(fullName: string | null): { name: string; surname: string } {
   const parts = (fullName ?? '').trim().split(/\s+/).filter(Boolean);
   if (parts.length >= 2) return { name: parts.slice(0, -1).join(' '), surname: parts.at(-1)! };
   if (parts.length === 1) return { name: parts[0]!, surname: '-' };
   return { name: 'Qwash', surname: 'Musteri' };
+}
+
+/**
+ * Basarisiz odemede Iyzico cogu zaman errorMessage vermez; 3DS sonucu mdStatus'tadir
+ * (sandbox'ta goruldu, 2026-09-26: mdStatus 0, mesaj yok). 1 = 3DS basarili.
+ */
+function describeFailure(res: Json): string {
+  if (str(res.errorMessage) || str(res.errorCode)) return describeError(res);
+  const mdStatus = str(res.mdStatus);
+  if (mdStatus !== undefined && mdStatus !== '1') {
+    return `3D Secure dogrulamasi basarisiz (mdStatus=${mdStatus})`;
+  }
+  return 'Odeme banka tarafindan reddedildi';
 }
 
 function describeError(res: Json): string {

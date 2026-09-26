@@ -41,6 +41,15 @@ export class UnauthenticatedError extends AuthError {
   }
 }
 
+export class NameLockedError extends AuthError {
+  constructor() {
+    super(
+      'NAME_LOCKED',
+      'Ad soyad ilk bakiye yuklemesinden sonra degistirilemez. Degisiklik icin destekle iletisime gecin.',
+    );
+  }
+}
+
 export class GoogleLoginDisabledError extends AuthError {
   constructor() {
     super('GOOGLE_LOGIN_DISABLED', 'Google ile giris su an kullanilamiyor.');

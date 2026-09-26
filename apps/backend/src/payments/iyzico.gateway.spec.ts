@@ -151,6 +151,18 @@ describe('IyzicoGateway', () => {
     ).resolves.toMatchObject({ kind: 'FAILURE' });
   });
 
+  it('mesajsiz basarisiz odemede 3DS sonucunu sebep olarak yazar (sandbox yaniti)', async () => {
+    const { gateway } = gatewayReturning({
+      status: 'success',
+      paymentStatus: 'FAILURE',
+      mdStatus: 0,
+    });
+    await expect(gateway.retrieveCheckout('t')).resolves.toEqual({
+      kind: 'FAILURE',
+      reason: '3D Secure dogrulamasi basarisiz (mdStatus=0)',
+    });
+  });
+
   it('odeme FAILURE ise basarisiz, istek hatasi ise beklemede sayilir', async () => {
     await expect(
       gatewayReturning({
@@ -166,6 +178,58 @@ describe('IyzicoGateway', () => {
         errorMessage: 'token bulunamadi',
       }).gateway.retrieveCheckout('t'),
     ).resolves.toMatchObject({ kind: 'PENDING' });
+  });
+
+  it('odemeyi once iptal etmeyi dener; iptal olmazsa tam iade yapar', async () => {
+    const input = {
+      topUpId: 't1',
+      paymentId: 'p1',
+      paymentTransactionId: 'ptx1',
+      amountKurus: 5050,
+    };
+    await expect(
+      gatewayReturning({ status: 'success' }).gateway.reversePayment(input),
+    ).resolves.toBe('CANCELLED');
+
+    const responses = [
+      { status: 'failure', errorMessage: 'gun sonu gecti' },
+      { status: 'success' },
+    ];
+    const calls: { url: string; body: Record<string, unknown> }[] = [];
+    const gateway = new IyzicoGateway({
+      apiKey: 'k',
+      secretKey: SECRET,
+      baseUrl: 'https://sandbox-api.iyzipay.com',
+      fetch: ((url: URL, init: RequestInit) => {
+        calls.push({
+          url: url.toString(),
+          body: JSON.parse(String(init.body)) as Record<string, unknown>,
+        });
+        return Promise.resolve(new Response(JSON.stringify(responses.shift())));
+      }) as unknown as typeof fetch,
+    });
+    await expect(gateway.reversePayment(input)).resolves.toBe('REFUNDED');
+    expect(calls.map((c) => c.url)).toEqual([
+      'https://sandbox-api.iyzipay.com/payment/cancel',
+      'https://sandbox-api.iyzipay.com/payment/refund',
+    ]);
+    expect(calls[1]?.body).toMatchObject({
+      paymentTransactionId: 'ptx1',
+      price: '50.5',
+      currency: 'TRY',
+    });
+  });
+
+  it('iptal ve iade ikisi de basarisizsa hata verir', async () => {
+    const { gateway } = gatewayReturning({ status: 'failure', errorMessage: 'hata' });
+    await expect(
+      gateway.reversePayment({
+        topUpId: 't',
+        paymentId: 'p',
+        paymentTransactionId: 'x',
+        amountKurus: 100,
+      }),
+    ).rejects.toBeInstanceOf(PaymentProviderError);
   });
 
   it('webhook V3 imzasini dogrular', () => {

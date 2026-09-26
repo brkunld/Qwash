@@ -62,6 +62,8 @@ export const MeSchema = z.object({
   phoneNumber: z.string().nullable(),
   emailVerified: z.boolean(),
   hasPassword: z.boolean(),
+  /** Ilk basarili kart yuklemesinden sonra true; ad artik profilden degismez. */
+  nameLocked: z.boolean(),
   role: z.enum(['USER', 'ADMIN', 'SUPER_ADMIN']),
 });
 export type Me = z.infer<typeof MeSchema>;
