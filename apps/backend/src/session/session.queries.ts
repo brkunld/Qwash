@@ -1,7 +1,7 @@
 import type { BayUnavailableReason, BayView, SessionView } from '@qwash/contracts';
 import { PrismaClient } from '../generated/prisma/client';
 import type { Bay, WashProgram, WashSession } from '../generated/prisma/client';
-import { SessionStatus } from '../generated/prisma/enums';
+import { BayClaimStatus, SessionStatus } from '../generated/prisma/enums';
 import { MAX_SESSION_SEC } from '../iot/iot.contract';
 import { BayNotFoundError, SessionNotFoundError } from './session.errors';
 import type { SessionService } from './session.service';
@@ -44,6 +44,12 @@ export class SessionQueries {
         where: { bayId: bay.id, status: { in: ACTIVE } },
       });
       if (busy > 0) reason = 'BUSY';
+    }
+    if (!reason) {
+      const claimed = await this.prisma.bayClaim.count({
+        where: { bayId: bay.id, status: BayClaimStatus.ACTIVE, expiresAt: { gt: this.clock() } },
+      });
+      if (claimed > 0) reason = 'CLAIMED';
     }
 
     return {

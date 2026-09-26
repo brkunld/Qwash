@@ -46,13 +46,52 @@ export interface StopCommandPayload {
   reason: 'USER_STOP' | 'ACK_TIMEOUT' | 'LATE_ACK' | 'ADMIN_OVERRIDE' | 'DRIFT';
 }
 
+/** Musteri adina peron ekraninda gosterilen paket (ASCII; ekran fontunda Turkce harf yok). */
+export interface MenuProgram {
+  code: string;
+  label: string;
+  pricePerSecondKurus: number;
+}
+
+/**
+ * Peron ekranini musterinin hesabina bagli menuye alir. Cihaz saati senkron olmayabilir,
+ * bu yuzden sure goreli verilir (timeoutSec); son karar backend'dedir.
+ */
+export interface ShowMenuCommandPayload {
+  type: 'SHOW_MENU';
+  claimId: string;
+  timeoutSec: number;
+  /** true: seans yeni bitti, "tekrar sec" ekrani (Burak: ~30 sn). */
+  afterSession: boolean;
+  /** Maskeli hesap etiketi (Orn: "BU***@GMAIL.COM"), musteri dogru hesap oldugunu gorsun. */
+  holder: string;
+  availableKurus: number;
+  programs: MenuProgram[];
+  durationsSec: number[];
+}
+
+export interface ShowQrCommandPayload {
+  type: 'SHOW_QR';
+  claimId: string;
+}
+
+export interface MenuErrorCommandPayload {
+  type: 'MENU_ERROR';
+  claimId: string;
+  /** Ekranda gosterilecek kisa ASCII mesaj. */
+  message: string;
+}
+
+export type ScreenCommandPayload =
+  ShowMenuCommandPayload | ShowQrCommandPayload | MenuErrorCommandPayload;
+
 export interface CommandEnvelope {
   commandId: string;
   sessionId: string;
   deviceId?: string;
   timestamp: string;
   expiresAt?: string;
-  payload: StartCommandPayload | StopCommandPayload;
+  payload: StartCommandPayload | StopCommandPayload | ScreenCommandPayload;
 }
 
 // ---- Cihaz -> backend olaylari ----
@@ -115,6 +154,25 @@ export const HeartbeatSchema = z.object({
   relayIndex: z.number().int().optional(),
 });
 
+// Dokunmatik ekran olaylari (events topic'i). Ekrandaki DURDUR ayri olay degildir: cihaz roleyi
+// hemen kapatir ve SESSION_ENDED (reason SCREEN_STOP) ile kalan sureyi bildirir. Cihaz yalniz kendi peronunun topic'ine yazabilir
+// (ACL); backend ayrica bagin o perona ait oldugunu dogrular.
+export const MenuStartSchema = z.object({
+  type: z.literal('MENU_START'),
+  claimId: z.string().min(1).max(64),
+  programCode: z.string().min(1).max(64),
+  durationSec: z.number().int().positive(),
+  /** Dokunus basina cihazin urettigi anahtar: tekrar eden mesaj ikinci seans acmaz. */
+  requestId: z.string().min(1).max(64),
+});
+
+export const MenuExitSchema = z.object({
+  type: z.literal('MENU_EXIT'),
+  claimId: z.string().min(1).max(64),
+});
+
+export type MenuEventPayload = z.infer<typeof MenuStartSchema> | z.infer<typeof MenuExitSchema>;
+
 export const DeviceMessageSchema = z.object({
   ...envelopeBase,
   payload: z.discriminatedUnion('type', [
@@ -124,6 +182,8 @@ export const DeviceMessageSchema = z.object({
     SessionRecoveredSchema,
     DeviceStatusSchema,
     HeartbeatSchema,
+    MenuStartSchema,
+    MenuExitSchema,
   ]),
 });
 

@@ -80,6 +80,7 @@ model User {
   authTokens      AuthToken[]
   cardTopUps      CardTopUp[]
   cashTopUps      CashTopUp[]
+  bayClaims       BayClaim[]
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
 }
@@ -309,6 +310,7 @@ model Bay {
   station           Station       @relation(fields: [stationId], references: [id], onDelete: Restrict)
   programs          BayProgram[]
   sessions          WashSession[]
+  claims            BayClaim[]
   device            Device?
   createdAt         DateTime      @default(now())
 }
@@ -531,4 +533,30 @@ model RefundPayout {
 
   @@unique([refundRequestId, partIndex])
   @@index([method, status, completedAt])
+}
+
+enum BayClaimStatus {
+  ACTIVE // Peron ekrani bu musterinin hesabina bagli
+  RELEASED // Musteri (telefon veya ekran) birakti
+  EXPIRED // Sure doldu, ekran QR'a dondu
+}
+
+// Dokunmatik ekrandan seans (2026-09-27): musteri QR'i okutup telefonda onaylar, peron
+// ekrani kisa bir sure onun hesabina baglanir. Ekrandan secilen paket bu hesaptan odenir.
+// Bir peronda ayni anda tek ACTIVE bag olur (BayClaim_one_active_per_bay).
+model BayClaim {
+  id        String         @id @default(uuid())
+  bayId     String
+  bay       Bay            @relation(fields: [bayId], references: [id], onDelete: Restrict)
+  userId    String
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status    BayClaimStatus @default(ACTIVE)
+  // Bu anda seans yoksa bag sona erer. Seans surerken tarama bagi kapatmaz.
+  expiresAt DateTime
+  endedAt   DateTime?
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  @@index([bayId, status])
+  @@index([status, expiresAt])
 }

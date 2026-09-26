@@ -1,6 +1,12 @@
 'use client';
 
-import type { BayUnavailableReason, BayView, SessionView, WalletView } from '@qwash/contracts';
+import type {
+  BayClaimView,
+  BayUnavailableReason,
+  BayView,
+  SessionView,
+  WalletView,
+} from '@qwash/contracts';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -19,6 +25,7 @@ const UNAVAILABLE: Record<BayUnavailableReason, string> = {
   DEVICE_OFFLINE: 'Peron cihazı şu an çevrimdışı.',
   DEVICE_STALE: 'Peron cihazından bir süredir haber alınamıyor.',
   BUSY: 'Bu peronda şu an başka bir yıkama sürüyor.',
+  CLAIMED: 'Peron ekranı şu an başka bir müşteride. Birazdan tekrar deneyin.',
 };
 
 export default function BayPage() {
@@ -37,6 +44,21 @@ export default function BayPage() {
   // Ayni secim icin ayni anahtar: cift dokunma veya ag hatasi sonrasi tekrar ikinci seans
   // acmaz. Secim degisince yeni anahtar (farkli parametreyle eski anahtar 409 verir).
   const idemKey = useRef(newIdempotencyKey());
+  // Dokunmatik ekrandan secim: peron ekrani bu hesaba bagli (paket ekrandan secilir).
+  const [claim, setClaim] = useState<BayClaimView | null>(null);
+  const [claimBusy, setClaimBusy] = useState(false);
+  const [claimError, setClaimError] = useState<unknown>(null);
+  const [now, setNow] = useState(() => Date.now());
+  // Bagin bitisi bu cihazin saatiyle (sunucu saat farki duzeltilmis).
+  const [claimDeadline, setClaimDeadline] = useState(0);
+  // Musteri telefondan secmeyi secerse otomatik baglama bir daha denenmez.
+  const [phoneMode, setPhoneMode] = useState(false);
+  const autoClaimTried = useRef(false);
+
+  const applyClaim = useCallback((c: BayClaimView | null) => {
+    if (c) setClaimDeadline(Date.now() + Date.parse(c.expiresAt) - Date.parse(c.serverTime));
+    setClaim(c);
+  }, []);
 
   const loadBay = useCallback(() => {
     api<BayView>(`/bays/${encodeURIComponent(bayCode)}`, { auth: false })
@@ -58,7 +80,40 @@ export default function BayPage() {
     api<SessionView | null>('/sessions/active')
       .then(setActive)
       .catch(() => undefined);
-  }, [auth.status]);
+    api<BayClaimView | null>(`/bays/${encodeURIComponent(bayCode)}/claim`)
+      .then(applyClaim)
+      .catch(() => undefined);
+  }, [auth.status, bayCode, applyClaim]);
+
+  // QR okutulup peron onaylaninca ekran otomatik bu hesaba baglanir: paketler peron ekranina gelir.
+  useEffect(() => {
+    if (!confirmed || auth.status !== 'authenticated' || !bay?.available) return;
+    if (claim || active || phoneMode || autoClaimTried.current) return;
+    autoClaimTried.current = true;
+    api<BayClaimView>(`/bays/${encodeURIComponent(bayCode)}/claim`, { method: 'POST' })
+      .then(applyClaim)
+      .catch((err: unknown) => setClaimError(err));
+  }, [confirmed, auth.status, bay, claim, active, phoneMode, bayCode, applyClaim]);
+
+  // Bag acikken: geri sayim ve ekrandan baslatilan seansi yakalama (telefon acik kaldiysa).
+  useEffect(() => {
+    if (!claim) return;
+    const tick = setInterval(() => setNow(Date.now()), 1000);
+    const poll = setInterval(() => {
+      api<SessionView | null>('/sessions/active')
+        .then((s) => {
+          if (s && s.bayCode === claim.bayCode) router.push(`/session/${s.sessionId}`);
+        })
+        .catch(() => undefined);
+      api<BayClaimView | null>(`/bays/${encodeURIComponent(claim.bayCode)}/claim`)
+        .then(applyClaim)
+        .catch(() => undefined);
+    }, 3000);
+    return () => {
+      clearInterval(tick);
+      clearInterval(poll);
+    };
+  }, [claim, router, applyClaim]);
 
   useEffect(() => {
     idemKey.current = newIdempotencyKey();
@@ -86,6 +141,40 @@ export default function BayPage() {
   const cost = selected ? selected.pricePerSecondKurus * duration : 0;
   const shortBy = wallet ? Math.max(0, cost - wallet.availableKurus) : 0;
   const here = `/b/${encodeURIComponent(bay.bayCode)}`;
+  // Ekran bana bagliysa "baska musteride" uyarisi bana gosterilmez.
+  const usable = bay.available || (claim !== null && bay.unavailableReason === 'CLAIMED');
+  const claimLeftSec = claim ? Math.max(0, Math.ceil((claimDeadline - now) / 1000)) : 0;
+
+  async function claimScreen() {
+    setClaimBusy(true);
+    setClaimError(null);
+    try {
+      applyClaim(
+        await api<BayClaimView>(`/bays/${encodeURIComponent(bay!.bayCode)}/claim`, {
+          method: 'POST',
+        }),
+      );
+    } catch (err) {
+      setClaimError(err);
+      loadBay();
+    } finally {
+      setClaimBusy(false);
+    }
+  }
+
+  async function releaseScreen() {
+    setClaimBusy(true);
+    try {
+      await api(`/bays/${encodeURIComponent(bay!.bayCode)}/claim/release`, { method: 'POST' });
+      setClaim(null);
+      setPhoneMode(true);
+      loadBay();
+    } catch (err) {
+      setClaimError(err);
+    } finally {
+      setClaimBusy(false);
+    }
+  }
 
   async function start() {
     if (!selected) return;
@@ -134,7 +223,7 @@ export default function BayPage() {
         </Alert>
       )}
 
-      {!bay.available ? (
+      {!usable ? (
         <>
           <Alert tone="warning">{UNAVAILABLE[bay.unavailableReason ?? 'DEVICE_OFFLINE']}</Alert>
           <Button variant="secondary" onClick={loadBay}>
@@ -153,8 +242,46 @@ export default function BayPage() {
             Hesap oluştur
           </LinkButton>
         </>
+      ) : claim ? (
+        <>
+          <Card className="text-center">
+            <p className="text-lg font-semibold">Peron ekranı hesabınıza bağlandı</p>
+            <p className="mt-2 text-sm text-slate-600">
+              Paketi ve süreyi peronun dokunmatik ekranından seçin; ücret bakiyenizden düşer.
+              Telefona tekrar gerek yok. Yıkama sürerken ekrandaki <strong>DURDUR</strong> ile erken
+              bitirebilirsiniz.
+            </p>
+            {claimLeftSec > 0 && (
+              <p className="mt-3 text-sm text-slate-600">
+                {claimLeftSec} sn içinde seçim yapılmazsa bağlantı kapanır.
+              </p>
+            )}
+            {wallet && (
+              <p className="mt-1 text-sm text-slate-600">
+                Kullanılabilir bakiye: {tl(wallet.availableKurus)}
+              </p>
+            )}
+          </Card>
+          {claimError !== null && <Alert>{errorMessage(claimError)}</Alert>}
+          <Button variant="secondary" onClick={releaseScreen} busy={claimBusy}>
+            Bırak ve telefondan seç
+          </Button>
+        </>
       ) : (
         <>
+          <Card className="text-center">
+            <p className="font-semibold">Paketi peron ekranından seçin</p>
+            <p className="mt-1 text-sm text-slate-600">
+              Ekran hesabınıza bağlanır, paketi dokunarak seçersiniz. Ücret bakiyenizden düşer.
+            </p>
+            <div className="mt-3">
+              <Button onClick={claimScreen} busy={claimBusy} disabled={active !== null}>
+                Ekrandan seçeceğim
+              </Button>
+            </div>
+          </Card>
+          {claimError !== null && <Alert>{errorMessage(claimError)}</Alert>}
+          <p className="text-center text-sm text-slate-500">veya buradan seçin</p>
           <Card>
             <h2 className="mb-3 font-semibold">Program</h2>
             <div className="grid grid-cols-2 gap-2">
