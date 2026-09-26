@@ -409,7 +409,10 @@ model Device {
   driftSince       DateTime?
   driftConfirmedAt DateTime?
   lastDriftStopAt  DateTime?
+  // Cihazin bildirdigi QR taban adresi; backend istenenden farkliysa SET_CONFIG gonderir.
+  qrBase           String?
   updatedAt        DateTime  @updatedAt
+  firmwareUpdates  FirmwareUpdate[]
 }
 
 // MQTT'ye gidecek komutlar; is kaydiyla ayni transaction'da yazilir (ADR-0005).
@@ -559,4 +562,47 @@ model BayClaim {
 
   @@index([bayId, status])
   @@index([status, expiresAt])
+}
+
+// Imzali firmware surumu (ADR-0013). Imza operatorun bilgisayarindaki ozel anahtarla atilir;
+// backend ve cihaz yalniz acik anahtarla dogrular. Dosya FIRMWARE_DIR altindadir (git disi).
+model FirmwareRelease {
+  id        String           @id @default(uuid())
+  version   String           @unique // FW_VERSION ile ayni
+  sha256    String // hex
+  sizeBytes Int
+  signature String // ECDSA P-256, DER, base64
+  fileName  String
+  createdAt DateTime         @default(now())
+  updates   FirmwareUpdate[]
+}
+
+enum FirmwareUpdateStatus {
+  PENDING // Komut outbox'ta
+  DOWNLOADING // Cihaz imaji indiriyor
+  REBOOTING // Imaj yazildi ve dogrulandi, cihaz yeni surumle aciliyor
+  SUCCEEDED // Yeni surum acildi ve saglikli (cihaz bildirdi)
+  FAILED // Cihaz reddetti / indirme veya dogrulama basarisiz / zaman asimi
+}
+
+// Bir cihaza bir surumun gonderilmesi. Indirme baglantisi tek seferlik ve kisa omurludur:
+// imajda derleme sirasindaki sirlar olabilecegi icin herkese acik indirilemez.
+model FirmwareUpdate {
+  id             String               @id @default(uuid())
+  deviceId       String
+  device         Device               @relation(fields: [deviceId], references: [deviceId], onDelete: Cascade)
+  releaseId      String
+  release        FirmwareRelease      @relation(fields: [releaseId], references: [id], onDelete: Restrict)
+  fromVersion    String?
+  status         FirmwareUpdateStatus @default(PENDING)
+  tokenHash      String               @unique // sha256(indirme anahtari)
+  tokenExpiresAt DateTime
+  downloadedAt   DateTime?
+  detail         String?
+  finishedAt     DateTime?
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+
+  @@index([deviceId, status])
+  @@index([status, createdAt])
 }

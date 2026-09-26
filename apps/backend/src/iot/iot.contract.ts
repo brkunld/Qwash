@@ -82,6 +82,26 @@ export interface MenuErrorCommandPayload {
   message: string;
 }
 
+/** Cihaz ayari (ADR-0013). Yalniz verilen alanlar degisir; cihaz NVS'e yazar ve durumunu yeniden bildirir. */
+export interface SetConfigCommandPayload {
+  type: 'SET_CONFIG';
+  qrBase: string;
+}
+
+/**
+ * Imzali firmware guncellemesi (ADR-0013). Cihaz seans/ekran bagi yokken kabul eder, imaji
+ * url'den indirir, sha256 ve imzayi (gomulu acik anahtar) dogrular, sonra yeniden baslar.
+ */
+export interface OtaCommandPayload {
+  type: 'OTA';
+  updateId: string;
+  version: string;
+  url: string;
+  sha256: string;
+  sizeBytes: number;
+  signature: string;
+}
+
 export type ScreenCommandPayload =
   ShowMenuCommandPayload | ShowQrCommandPayload | MenuErrorCommandPayload;
 
@@ -91,7 +111,12 @@ export interface CommandEnvelope {
   deviceId?: string;
   timestamp: string;
   expiresAt?: string;
-  payload: StartCommandPayload | StopCommandPayload | ScreenCommandPayload;
+  payload:
+    | StartCommandPayload
+    | StopCommandPayload
+    | ScreenCommandPayload
+    | SetConfigCommandPayload
+    | OtaCommandPayload;
 }
 
 // ---- Cihaz -> backend olaylari ----
@@ -141,6 +166,8 @@ export const DeviceStatusSchema = z.object({
   status: z.string(),
   firmwareVersion: z.string().optional(),
   resetReason: z.number().int().optional(),
+  // Firmware 0.7.0+: cihazin kullandigi QR taban adresi (SET_CONFIG karsilastirmasi).
+  qrBase: z.string().max(200).optional(),
 });
 
 export const HeartbeatSchema = z.object({
@@ -171,6 +198,14 @@ export const MenuExitSchema = z.object({
   claimId: z.string().min(1).max(64),
 });
 
+export const OtaStatusSchema = z.object({
+  type: z.literal('OTA_STATUS'),
+  updateId: z.string().min(1).max(64),
+  status: z.enum(['DOWNLOADING', 'REBOOTING', 'SUCCEEDED', 'FAILED']),
+  detail: z.string().max(120).optional(),
+});
+export type OtaStatusPayload = z.infer<typeof OtaStatusSchema>;
+
 export type MenuEventPayload = z.infer<typeof MenuStartSchema> | z.infer<typeof MenuExitSchema>;
 
 export const DeviceMessageSchema = z.object({
@@ -184,6 +219,7 @@ export const DeviceMessageSchema = z.object({
     HeartbeatSchema,
     MenuStartSchema,
     MenuExitSchema,
+    OtaStatusSchema,
   ]),
 });
 

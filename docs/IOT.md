@@ -127,6 +127,16 @@ Süreler: ilk seçim 90 sn, seans bitince 30 sn, sonra ekran QR'a döner (backen
 
 ---
 
+### E. Uzaktan Ayar ve Firmware Güncellemesi (ADR-0013)
+
+- **`DEVICE_STATUS.qrBase`** (0.7.0+): cihazın kullandığı QR taban adresi.
+- **`SET_CONFIG`** (Backend ➔ ESP32): `qrBase`. Backend, bildirilen adres istenenden (`DEVICE_QR_BASE` / `<CUSTOMER_APP_URL>/b/`) farklıysa gönderir; cihaz doğrular, NVS'e yazar, durumunu yeniden bildirir.
+- **`OTA`** (Backend ➔ ESP32): `updateId`, `version`, `url` (tek seferlik indirme anahtarı içerir), `sha256`, `sizeBytes`, `signature` (ECDSA P-256, DER, base64). Seans veya ekran bağı varken reddedilir (`BUSY`). Aynı sürüm tekrar gelirse yok sayılır.
+- **`OTA_STATUS`** (ESP32 ➔ Backend, `events`): `updateId`, `status` (`DOWNLOADING` / `REBOOTING` / `SUCCEEDED` / `FAILED`), `detail` (Örn: `SIGNATURE`, `SHA256`, `BUSY`, `ROLLED_BACK`, `HTTP_404`).
+- Güncelleme sırasında cihaz `DEVICE_STATUS: UPDATING` bildirir; peron kullanılamaz görünür. Yeni sürüm 60 sn MQTT'ye bağlı çalışınca `SUCCEEDED`; 3 açılışta bu sağlanamazsa eski sürüme döner.
+
+---
+
 ## 5. Two-Phase ACK Protokolü (İki Aşamalı Başlatma)
 
 > [!NOTE]

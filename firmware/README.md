@@ -2,7 +2,7 @@
 
 Arduino IDE sketch'i: `firmware/qwash_bay/`. Kontrat `docs/IOT.md` ile birebir. Donanim: ESP32-32E, 3.2" ST7789 240x320 dirençli dokunmatik ekran modulu (SKU E32R32P).
 
-> **Durum:** 0.5.0 gercek cihazda (E32R32P, `4CC382C3CC1C`) calisti. **0.6.0 (dokunmatik menu, ADR-0012) arduino-cli 1.5.1 + esp32 3.3.8 ile derlendi, cihazda henuz denenmedi.**
+> **Durum:** 0.6.0 (dokunmatik menu, ADR-0012) gercek cihazda (E32R32P, `4CC382C3CC1C`) calisti. 0.7.0 (uzaktan ayar + OTA, ADR-0013) arduino-cli 1.5.1 + esp32 3.3.8 ile derlendi.
 
 ## Kurulum (Arduino IDE)
 
@@ -21,6 +21,21 @@ Musteri QR'i okutup telefonda peronu onaylayinca ekran onun hesabina baglanir: p
 - **Dokunmatik:** XPT2046, ekranla ayni SPI hatti, CS 33 (`config.h` `PIN_TOUCH_CS`; Burak'in TFT_eSPI ayariyla ayni). IRQ kullanilmaz (yoklama).
 - **Kalibrasyon:** ilk yuklemeden sonra (ve dokunuslar kaymissa) cihazi ekrana **basili tutarak** ac; "BASILI TUTUN" -> "BIRAKIN" -> ekrandaki oklarin ucuna sirayla dokun. Sonuc NVS'e (`tcal`) yazilir. Seans kurtarilarak acilista kalibrasyon yapilmaz (role acikken sayac durmasin).
 - Seri monitorde her dokunus `[touch] x,y` olarak gorunur; dugme konumlari `display.h`'teki `programBtn/durationBtn/BTN_*`.
+
+## Uzaktan guncelleme (OTA) ve QR adresi (0.7.0, ADR-0013)
+
+**Bir kere (imza anahtari):** depo kokunde `pnpm firmware:keys`. `firmware/keys/ota_private.pem` **ozel anahtardir: yedekle, paylasma, sunucuya koyma.** Kaybolursa sahadaki cihazlar uzaktan guncellenemez. Komut ayrica `qwash_bay/ota_pubkey.h`'i uretir (firmware'e gomulu acik anahtar); bu dosya olmadan sketch derlenmez. Anahtar uretildikten sonraki ilk yukleme USB ile yapilir.
+
+**Her yeni surum:**
+1. `config.h`'te `FW_VERSION`'i artir (Orn: `0.7.1`).
+2. Derle ve imaji al: Arduino IDE > Sketch > **Export Compiled Binary** (`build/.../qwash_bay.ino.bin`) veya `arduino-cli compile --fqbn esp32:esp32:esp32:PartitionScheme=min_spiffs --output-dir <klasor> firmware/qwash_bay`.
+3. `pnpm firmware:sign <klasor>/qwash_bay.ino.bin` (imza: `.bin.sig`).
+4. `pnpm firmware:publish <klasor>/qwash_bay.ino.bin 0.7.1` (imzayi ve surum metnini dogrular).
+5. `pnpm firmware:rollout BAY-001 0.7.1` (backend calisiyor olmali; sonucu izler). Gecmis: `pnpm firmware:rollout --status`.
+
+Cihaz imaji `DEVICE_API_URL` (`.env`; bossa `API_PUBLIC_URL`) uzerinden indirir: **cihazin agindan erisilebilir** olmali, `localhost` olmaz (gelistirmede `http://<bilgisayar LAN IP>:3001`). Peronda seans veya ekran bagi varken guncelleme reddedilir. Yeni surum 3 acilista saglikli olamazsa cihaz eski surume doner.
+
+**QR adresi:** cihaz baglaninca kullandigi adresi bildirir; `.env`'deki `DEVICE_QR_BASE` (bossa `CUSTOMER_APP_URL/b/`) farkliysa backend duzeltir. Alan adi gelince yalniz `.env` degisir.
 
 ## Wi-Fi ve ayar (Captive Portal)
 

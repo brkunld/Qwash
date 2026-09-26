@@ -2,7 +2,7 @@
 // QWASH peron firmware'i (Faz 3 SPIKE). Kontrat: docs/IOT.md
 // Donanim: ESP32-32E 3.2" ST7789 240x320 (SKU E32R32P).
 
-#define FW_VERSION "0.6.0-touch"
+#define FW_VERSION "0.7.0"
 
 // ---- Ekran pinleri (E32R32P uretici semasi; kartinla dogrula) ----
 constexpr int PIN_TFT_SCLK = 14;
@@ -26,6 +26,11 @@ constexpr uint32_t AFTER_SESSION_MENU_SEC = 30;  // Seans bitince "tekrar sec" (
 constexpr uint32_t MENU_WAIT_TIMEOUT_MS = 15000; // Secimden sonra backend cevabi bu surede gelmezse
 constexpr uint32_t MENU_MESSAGE_MS = 4000;       // Alt satirdaki hata mesajinin suresi
 constexpr uint32_t TOUCH_CALIBRATE_HOLD_MS = 2000; // Acilista bu kadar basili tutulursa kalibrasyon
+
+// ---- Uzaktan guncelleme (OTA, ADR-0013) ----
+constexpr uint8_t OTA_MAX_BOOT_TRIES = 3;          // Yeni surum bu kadar acilista saglikli olamazsa eskiye don
+constexpr uint32_t OTA_HEALTHY_AFTER_MS = 60000;    // MQTT bagliyken bu sure calisirsa yeni surum saglikli sayilir
+constexpr uint32_t OTA_STALL_MS = 15000;            // Indirmede bu kadar veri gelmezse vazgec
 
 // ---- Role pinleri ----
 // GUVENLI VARSAYILAN: -1 = role baglanmamis (kuru calisma, yalniz log/ekran/MQTT).
