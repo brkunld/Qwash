@@ -3,15 +3,18 @@ import type {
   AdminBayView,
   AdminSessionView,
   ServiceRefundRequest,
-  SetMaintenanceRequest,
+  SetBayAvailabilityRequest,
+  SetStationAvailabilityRequest,
+  StationAvailabilityResult,
 } from '@qwash/contracts';
 import { PrismaClient } from '../generated/prisma/client';
-import type { LedgerEntry, Prisma } from '../generated/prisma/client';
+import type { Bay, LedgerEntry, Prisma } from '../generated/prisma/client';
 import { LedgerSource, SessionStatus, UserStatus } from '../generated/prisma/enums';
 import { PrismaService } from '../prisma/prisma.service';
+import type { DeviceOpsService } from '../session/device-ops.service';
 import { SessionNotFoundError } from '../session/session.errors';
 import { SessionService } from '../session/session.service';
-import { WalletService } from '../wallet/wallet.service';
+import { type Tx, WalletService } from '../wallet/wallet.service';
 import { AdminError, TargetAccountNotActiveError } from './admin.errors';
 import type { AdminActor } from './admin.guard';
 import { isUniqueViolation, lockUserWallet } from './admin.service';
@@ -21,6 +24,12 @@ import { writeAudit } from './audit';
 const serviceRefundKey = (sessionId: string) => `service-refund:${sessionId}`;
 
 const ACTIVE = [SessionStatus.STARTING, SessionStatus.RUNNING, SessionStatus.RECONCILING];
+
+const AUDIT_ACTION = {
+  OPEN: 'BAY_OPENED',
+  MAINTENANCE: 'BAY_MAINTENANCE_ON',
+  CLOSED: 'BAY_CLOSED',
+} as const;
 
 const sessionInclude = {
   user: { select: { email: true } },
@@ -41,6 +50,7 @@ export class OpsService {
     private readonly prisma: PrismaService | PrismaClient,
     private readonly sessions: SessionService,
     private readonly wallets: WalletService,
+    private readonly deviceOps: Pick<DeviceOpsService, 'enqueueAvailability'>,
   ) {}
 
   /** Dashboard: tum peronlar, cihaz sagligi, aktif seans, baslatilabilirlik. */
@@ -67,13 +77,17 @@ export class OpsService {
         stationCode: bay.station.code,
         status: bay.status,
         problem: this.sessions.bayProblem(bay),
-        maintenance: bay.maintenanceAt
-          ? {
-              since: bay.maintenanceAt.toISOString(),
-              reason: bay.maintenanceReason,
-              by: bay.maintenanceBy,
-            }
-          : null,
+        outOfService:
+          bay.outOfServiceKind && bay.outOfServiceAt
+            ? {
+                kind: bay.outOfServiceKind,
+                since: bay.outOfServiceAt.toISOString(),
+                reason: bay.outOfServiceReason,
+                note: bay.outOfServiceNote,
+                by: bay.outOfServiceBy,
+              }
+            : null,
+        deviceInSync: !d || d.availRev === bay.availabilityRev,
         device: d
           ? {
               deviceId: d.deviceId,
@@ -101,36 +115,106 @@ export class OpsService {
   }
 
   /**
-   * Bakim modu. Suren seans kesilmez (musteri odedigi sureyi kullanir); yeni seans
-   * baslatilamaz. Acil kesmek icin ayrica `stopSession`.
+   * Hizmet durumu (ADR-0014): bakim, kapali veya acik. Suren seans kesilmez (musteri odedigi
+   * sureyi kullanir); yeni seans baslatilamaz. Durum ayni transaction'da cihaza da kuyruklanir.
+   * Acil kesmek icin ayrica `stopSession`.
    */
-  async setMaintenance(
+  async setBayAvailability(
     actor: AdminActor,
     bayId: string,
-    input: SetMaintenanceRequest,
+    input: SetBayAvailabilityRequest,
   ): Promise<AdminBayView> {
     await this.prisma.$transaction(async (tx) => {
       const bay = await tx.bay.findUnique({ where: { id: bayId } });
       if (!bay) throw new AdminError('BAY_NOT_FOUND', 'Peron bulunamadi.');
-      await tx.bay.update({
-        where: { id: bayId },
-        data: input.enabled
-          ? {
-              maintenanceAt: bay.maintenanceAt ?? new Date(),
-              maintenanceReason: input.reason,
-              maintenanceBy: actor.userId,
-            }
-          : { maintenanceAt: null, maintenanceReason: null, maintenanceBy: null },
-      });
+      await this.applyAvailability(tx, bay, input, actor);
       await writeAudit(tx, {
         actorId: actor.userId,
-        action: input.enabled ? 'BAY_MAINTENANCE_ON' : 'BAY_MAINTENANCE_OFF',
+        action: AUDIT_ACTION[input.state],
         targetType: 'BAY',
         targetId: bayId,
-        reason: input.enabled ? input.reason : null,
+        reason: input.state === 'OPEN' ? null : input.reason,
+        details: input.state === 'OPEN' ? undefined : { note: input.note ?? null },
       });
     });
     return (await this.bays()).find((b) => b.id === bayId)!;
+  }
+
+  /**
+   * Istasyonun tum peronlari (gece kapatma vb.). CLOSED yalniz acik peronlara, OPEN yalniz
+   * KAPALI peronlara uygulanir: bakimdaki peron bakimda kalir.
+   */
+  async setStationAvailability(
+    actor: AdminActor,
+    stationId: string,
+    input: SetStationAvailabilityRequest,
+  ): Promise<StationAvailabilityResult> {
+    return this.prisma.$transaction(async (tx) => {
+      const station = await tx.station.findUnique({
+        where: { id: stationId },
+        include: { bays: true },
+      });
+      if (!station) throw new AdminError('STATION_NOT_FOUND', 'Istasyon bulunamadi.');
+      let changed = 0;
+      let skippedMaintenance = 0;
+      for (const bay of station.bays) {
+        if (bay.outOfServiceKind === 'MAINTENANCE') {
+          skippedMaintenance++;
+          continue;
+        }
+        const target = input.state === 'CLOSED' ? 'CLOSED' : null;
+        if (bay.outOfServiceKind === target) continue;
+        await this.applyAvailability(tx, bay, input, actor);
+        changed++;
+      }
+      await writeAudit(tx, {
+        actorId: actor.userId,
+        action: input.state === 'CLOSED' ? 'STATION_CLOSED' : 'STATION_OPENED',
+        targetType: 'STATION',
+        targetId: stationId,
+        reason: input.state === 'CLOSED' ? input.reason : null,
+        details: {
+          changed,
+          skippedMaintenance,
+          ...(input.state === 'CLOSED' ? { note: input.note ?? null } : {}),
+        },
+      });
+      return { changed, skippedMaintenance };
+    });
+  }
+
+  private async applyAvailability(
+    tx: Tx,
+    bay: Bay,
+    input: SetBayAvailabilityRequest,
+    actor: AdminActor,
+  ): Promise<void> {
+    await tx.bay.update({
+      where: { id: bay.id },
+      data:
+        input.state === 'OPEN'
+          ? {
+              outOfServiceKind: null,
+              outOfServiceAt: null,
+              outOfServiceReason: null,
+              outOfServiceNote: null,
+              outOfServiceBy: null,
+              availabilityRev: { increment: 1 },
+            }
+          : {
+              outOfServiceKind: input.state,
+              // Ayni turde not/sebep degisirse baslangic zamani korunur.
+              outOfServiceAt:
+                bay.outOfServiceKind === input.state && bay.outOfServiceAt
+                  ? bay.outOfServiceAt
+                  : new Date(),
+              outOfServiceReason: input.reason ?? null,
+              outOfServiceNote: input.note ?? null,
+              outOfServiceBy: actor.userId,
+              availabilityRev: { increment: 1 },
+            },
+    });
+    await this.deviceOps.enqueueAvailability(tx, bay.id);
   }
 
   /** Acil durdurma: cihaza STOP (ADMIN_OVERRIDE), tahsilat kullanilan saniye kadar. */

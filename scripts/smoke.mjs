@@ -236,8 +236,9 @@ if (env.SMOKE_ADMIN_EMAIL && env.SMOKE_ADMIN_PASSWORD) {
     );
     for (const b of Array.isArray(bays.json) ? bays.json : []) {
       const label = `Peron ${b.bayCode} cihazi`;
-      if (b.status === 'MAINTENANCE') {
-        warn(label, 'bakimda (musteri baslatamaz)');
+      if (b.outOfService || b.status === 'MAINTENANCE') {
+        const kind = b.outOfService?.kind === 'CLOSED' ? 'kapali' : 'bakimda';
+        warn(label, `${kind} (musteri baslatamaz)`);
       } else if (!b.device) {
         fail(label, 'cihaz kaydi yok (NO_DEVICE)');
       } else {

@@ -154,9 +154,9 @@ export class AlarmService {
     const ago = (ms: number) => new Date(now.getTime() - ms);
     const out: Firing[] = [];
 
-    // 1) Cihaz cevrimdisi (bakimdaki peron beklenen durumdur)
+    // 1) Cihaz cevrimdisi (bakimdaki/kapali peronda beklenen durumdur; gece cihaz kapatilabilir)
     const bays = await this.prisma.bay.findMany({
-      where: { maintenanceAt: null, device: { isNot: null } },
+      where: { outOfServiceKind: null, device: { isNot: null } },
       include: { device: true },
     });
     for (const bay of bays) {

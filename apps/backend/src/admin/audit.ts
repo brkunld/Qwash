@@ -15,7 +15,11 @@ export type AuditAction =
   | 'TOPUP_SETTINGS_UPDATED'
   | 'ROLE_GRANTED'
   | 'BAY_MAINTENANCE_ON'
-  | 'BAY_MAINTENANCE_OFF'
+  | 'BAY_MAINTENANCE_OFF' // Eski kayitlar; yenileri BAY_OPENED
+  | 'BAY_CLOSED'
+  | 'BAY_OPENED'
+  | 'STATION_CLOSED'
+  | 'STATION_OPENED'
   | 'SESSION_ADMIN_STOP'
   | 'SESSION_REVIEWED'
   | 'SESSION_SERVICE_REFUND'
@@ -25,7 +29,7 @@ export type AuditAction =
   | 'BAY_PROGRAMS_SET';
 
 export type AuditTarget =
-  'USER' | 'REFUND_REQUEST' | 'TOPUP_SETTINGS' | 'BAY' | 'SESSION' | 'PROGRAM';
+  'USER' | 'REFUND_REQUEST' | 'TOPUP_SETTINGS' | 'BAY' | 'STATION' | 'SESSION' | 'PROGRAM';
 
 export interface AuditEntry {
   /** null: komut satiri betigi. */

@@ -202,6 +202,7 @@ describe('Peron/seans HTTP + Socket.IO (gercek PostgreSQL)', () => {
       stationName: 'Merkez',
       available: true,
       unavailableReason: null,
+      notice: null,
       programs: [
         { code: 'WATER', name: 'Su', description: null, icon: null, pricePerSecondKurus: PRICE },
       ],

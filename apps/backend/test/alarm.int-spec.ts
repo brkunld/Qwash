@@ -150,7 +150,20 @@ describe('Alarmlar (AlarmService, gercek PostgreSQL)', () => {
   it('bakimdaki peron cevrimdisi sayilmaz', async () => {
     await prisma.bay.update({
       where: { id: bayId },
-      data: { maintenanceAt: clock(), status: BayStatus.MAINTENANCE },
+      data: {
+        outOfServiceKind: 'MAINTENANCE',
+        outOfServiceAt: clock(),
+        status: BayStatus.MAINTENANCE,
+      },
+    });
+    advance(30 * MIN);
+    expect(await alarms.sweep()).toBe(0);
+  });
+
+  it('kapali peron cevrimdisi sayilmaz (gece cihaz kapatilabilir)', async () => {
+    await prisma.bay.update({
+      where: { id: bayId },
+      data: { outOfServiceKind: 'CLOSED', outOfServiceAt: clock() },
     });
     advance(30 * MIN);
     expect(await alarms.sweep()).toBe(0);

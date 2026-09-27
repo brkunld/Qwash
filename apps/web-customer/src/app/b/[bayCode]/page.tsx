@@ -21,6 +21,7 @@ const DURATIONS = [60, 120, 180, 300, 600];
 
 const UNAVAILABLE: Record<BayUnavailableReason, string> = {
   MAINTENANCE: 'Peron bakımda.',
+  CLOSED: 'Peron şu an kapalı.',
   NO_DEVICE: 'Peron henüz hizmete açılmadı.',
   DEVICE_OFFLINE: 'Peron cihazı şu an çevrimdışı.',
   DEVICE_STALE: 'Peron cihazından bir süredir haber alınamıyor.',
@@ -225,7 +226,10 @@ export default function BayPage() {
 
       {!usable ? (
         <>
-          <Alert tone="warning">{UNAVAILABLE[bay.unavailableReason ?? 'DEVICE_OFFLINE']}</Alert>
+          <Alert tone="warning">
+            {UNAVAILABLE[bay.unavailableReason ?? 'DEVICE_OFFLINE']}
+            {bay.notice && <span className="mt-1 block font-semibold">{bay.notice}</span>}
+          </Alert>
           <Button variant="secondary" onClick={loadBay}>
             Tekrar kontrol et
           </Button>

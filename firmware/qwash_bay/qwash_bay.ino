@@ -58,6 +58,13 @@ static char stationId[32] = DEFAULT_STATION_ID;
 static char bayId[32] = DEFAULT_BAY_ID;
 static char qrBase[96] = DEFAULT_QR_BASE;
 
+// Hizmet durumu (ADR-0014): backend'in SET_AVAILABILITY'si NVS'te tutulur; ag yokken acilista da
+// BAKIMDA/KAPALI gorunur, QR gosterilmez. rev backend'e geri bildirilir (farkliysa yeniden gonderir).
+enum class Avail : uint8_t { OPEN = 0, MAINTENANCE = 1, CLOSED = 2 };
+static Avail avail = Avail::OPEN;
+static char availNote[48] = "";
+static uint32_t availRev = 0;
+
 static Preferences prefs;
 static WiFiManager wm;
 // Broker sertifikasi MQTT_CA_CERT ile dogrulanir; CA'sini bilmedigimiz sunucuya baglanilmaz.
@@ -202,6 +209,10 @@ static void loadSettings() {
   strlcpy(qrBase, prefs.getString("qrBase", DEFAULT_QR_BASE).c_str(), sizeof(qrBase));
   strlcpy(recentCmds[0], prefs.getString("lastCmd", "").c_str(), sizeof(recentCmds[0]));
   recentIdx = recentCmds[0][0] ? 1 : 0;
+  uint8_t a = prefs.getUChar("avSt", 0);
+  avail = a <= 2 ? (Avail)a : Avail::OPEN;
+  strlcpy(availNote, prefs.getString("avNote", "").c_str(), sizeof(availNote));
+  availRev = prefs.getUInt("avRev", 0);
 }
 
 static void saveSession() {
@@ -249,6 +260,7 @@ static void publishStatus(const char* status) {
     p["status"] = status;
     p["firmwareVersion"] = FW_VERSION;
     p["qrBase"] = qrBase;  // Backend istenenden farkliysa SET_CONFIG gonderir
+    p["availRev"] = availRev;  // Farkliysa SET_AVAILABILITY gonderir
     p["resetReason"] = (int)esp_reset_reason();  // 1 guc, 3 yazilim, 4 panic, 5-7 WDT, 9 brownout
   });
 }
@@ -280,6 +292,7 @@ static void publishHeartbeat() {
     p["firmwareVersion"] = FW_VERSION;
     p["heapFree"] = ESP.getFreeHeap();
     p["sessionActive"] = sess.active;
+    p["availRev"] = availRev;
     // Seans surerken kalan sure backend'e "kanitlanmis kullanim" olarak gider: cihaz
     // kaybolursa yalnizca buna kadarki sure tahsil edilir (ADR-0010 #8).
     if (sess.active) {
@@ -360,6 +373,7 @@ static void menuClose() {
 static void handleShowMenu(JsonObject pl) {
   const char* claimId = pl["claimId"] | "";
   if (!claimId[0]) return;
+  if (avail != Avail::OPEN) return;  // Backend hizmet disi perona bag vermez; gec gelen komut
   bool sameClaim = menu.active && strcmp(menu.claimId, claimId) == 0;
   menu.active = true;
   strlcpy(menu.claimId, claimId, sizeof(menu.claimId));
@@ -498,6 +512,40 @@ static void handleSetConfig(JsonObject pl) {
     if (uiMode == UiMode::IDLE) uiDirty = true;
   }
   publishStatus(sess.active ? "BUSY" : "ONLINE");  // Backend yeni adresi gorsun
+}
+
+static void handleSetAvailability(JsonObject pl) {
+  const char* st = pl["state"] | "";
+  Avail a;
+  if (!strcmp(st, "OPEN")) a = Avail::OPEN;
+  else if (!strcmp(st, "MAINTENANCE")) a = Avail::MAINTENANCE;
+  else if (!strcmp(st, "CLOSED")) a = Avail::CLOSED;
+  else {
+    Serial.println("[avail] gecersiz durum, yok sayildi");
+    return;
+  }
+  uint32_t rev = pl["rev"] | 0;
+  const char* note = pl["note"] | "";
+  bool changed = a != avail || rev != availRev || strcmp(note, availNote) != 0;
+  if (changed) {
+    avail = a;
+    availRev = rev;
+    strlcpy(availNote, note, sizeof(availNote));
+    prefs.putUChar("avSt", (uint8_t)avail);
+    prefs.putString("avNote", availNote);
+    prefs.putUInt("avRev", availRev);
+    Serial.printf("[avail] %s rev=%u %s\n", st, (unsigned)availRev, availNote);
+  }
+  // Suren seans kesilmez; bitince hizmet disi ekrani gelir (endSession).
+  if (!sess.active && avail != Avail::OPEN && menu.active) {
+    publishEvent(tEvents, false, [&](JsonObject o) {
+      o["type"] = "MENU_EXIT";
+      o["claimId"] = menu.claimId;
+    });
+    menuClose();
+  }
+  if (!sess.active && (uiMode == UiMode::IDLE || uiMode == UiMode::DONE)) setMode(UiMode::IDLE);
+  publishHeartbeat();  // Backend uygulanan revizyonu hemen gorsun
 }
 
 // Imza: ECDSA P-256, imajin SHA-256'si uzerinde, DER + base64 (scripts/firmware-sign.mjs).
@@ -694,7 +742,17 @@ static void endSession(const char* reason) {
   lastEndResendUntil = millis() + END_RESEND_MS;
   publishStatus("ONLINE");  // Retained BUSY'yi temizle.
   stopSent = false;
-  if (menu.active) {
+  if (menu.active && avail != Avail::OPEN) {
+    // Seans sirasinda peron hizmet disina alindi: "tekrar sec" yerine bag kapanir.
+    publishEvent(tEvents, false, [&](JsonObject o) {
+      o["type"] = "MENU_EXIT";
+      o["claimId"] = menu.claimId;
+    });
+    menu.active = false;
+    menu.claimId[0] = 0;
+    setMode(UiMode::DONE);
+    doneUntilMs = millis() + 5000;
+  } else if (menu.active) {
     // Ekrana bagli musteri: 30 sn "tekrar sec". Backend guncel bakiyeyle yeni SHOW_MENU da gonderir.
     menu.afterSession = true;
     menu.deadlineMs = millis() + AFTER_SESSION_MENU_SEC * 1000UL;
@@ -801,6 +859,7 @@ static void onMessage(char* topic, byte* payload, unsigned int len) {
   else if (!strcmp(type, "SHOW_QR")) handleShowQr(pl);
   else if (!strcmp(type, "MENU_ERROR")) handleMenuError(pl);
   else if (!strcmp(type, "SET_CONFIG")) handleSetConfig(pl);
+  else if (!strcmp(type, "SET_AVAILABILITY")) handleSetAvailability(pl);
   else if (!strcmp(type, "OTA")) handleOta(pl);
   else if (!strcmp(type, "RESET")) {
     relaysAllOff();
@@ -917,9 +976,15 @@ static void updateUi() {
         uiDirty = false;
         lastWifi = w;
         lastMqtt = m;
-        char url[160];
-        snprintf(url, sizeof(url), "%s%s", qrBase, bayId);
-        uiIdle(url, bayId, w, m);
+        if (avail != Avail::OPEN) {
+          // QR gizli: musteri okutup hayal kirikligina ugramasin.
+          bool maint = avail == Avail::MAINTENANCE;
+          uiOutOfService(maint ? "BAKIMDA" : "KAPALI", availNote, bayId, maint ? TFT_ORANGE : TFT_LIGHTGREY);
+        } else {
+          char url[160];
+          snprintf(url, sizeof(url), "%s%s", qrBase, bayId);
+          uiIdle(url, bayId, w, m);
+        }
       }
       break;
     case UiMode::MENU_PROGRAMS:

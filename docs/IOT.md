@@ -134,6 +134,8 @@ Süreler: ilk seçim 90 sn, seans bitince 30 sn, sonra ekran QR'a döner (backen
 - **`OTA`** (Backend ➔ ESP32): `updateId`, `version`, `url` (tek seferlik indirme anahtarı içerir), `sha256`, `sizeBytes`, `signature` (ECDSA P-256, DER, base64). Seans veya ekran bağı varken reddedilir (`BUSY`). Aynı sürüm tekrar gelirse yok sayılır.
 - **`OTA_STATUS`** (ESP32 ➔ Backend, `events`): `updateId`, `status` (`DOWNLOADING` / `REBOOTING` / `SUCCEEDED` / `FAILED`), `detail` (Örn: `SIGNATURE`, `SHA256`, `BUSY`, `ROLLED_BACK`, `HTTP_404`).
 - Güncelleme sırasında cihaz `DEVICE_STATUS: UPDATING` bildirir; peron kullanılamaz görünür. Yeni sürüm 60 sn MQTT'ye bağlı çalışınca `SUCCEEDED`; 3 açılışta bu sağlanamazsa eski sürüme döner.
+- **`SET_AVAILABILITY`** (Backend ➔ ESP32, ADR-0014, 0.8.0+): `state` (`OPEN` / `MAINTENANCE` / `CLOSED`), `note` (ASCII büyük harf, ≤40, boş olabilir), `rev`. Cihaz NVS'e yazar; hizmet dışıyken boşta ekranda QR yerine BAKIMDA/KAPALI + not gösterir, süren seansı kesmez. Seans yokken menü açıksa `MENU_EXIT` gönderip bağı bırakır.
+- **`availRev`** (`DEVICE_STATUS` ve `HEARTBEAT`, 0.8.0+): cihazın uyguladığı `rev`. Backend farklı görürse `SET_AVAILABILITY`'yi yeniden gönderir; saklanan (retained) ve `OFFLINE` mesajı dikkate alınmaz.
 
 ---
 

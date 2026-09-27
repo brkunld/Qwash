@@ -9,6 +9,7 @@ import { z } from 'zod';
  */
 export const BayUnavailableReasonSchema = z.enum([
   'MAINTENANCE',
+  'CLOSED',
   'NO_DEVICE',
   'DEVICE_OFFLINE',
   'DEVICE_STALE',
@@ -33,6 +34,8 @@ export const BayViewSchema = z.object({
   stationName: z.string(),
   available: z.boolean(),
   unavailableReason: BayUnavailableReasonSchema.nullable(),
+  /** Hizmet disiyken isletmenin musteriye notu (Orn: "15:00'te acilir"). */
+  notice: z.string().nullable(),
   programs: z.array(BayProgramViewSchema),
   /** Tek seansin en uzun suresi (saniye). */
   maxDurationSec: z.number().int(),

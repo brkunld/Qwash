@@ -89,6 +89,6 @@ import { SessionWorker } from './session.worker';
         ]),
     },
   ],
-  exports: [SessionService, SessionQueries, MqttService],
+  exports: [SessionService, SessionQueries, MqttService, DeviceOpsService],
 })
 export class SessionModule {}

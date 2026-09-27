@@ -9,6 +9,7 @@ import {
   type OtaCommandPayload,
   type OtaStatusPayload,
   type ParsedTopic,
+  type SetAvailabilityCommandPayload,
   type SetConfigCommandPayload,
 } from '../iot/iot.contract';
 import type { OutboxService } from '../outbox/outbox.service';
@@ -63,6 +64,24 @@ export interface DeviceOpsHooks {
     qrBase: string | undefined,
   ): Promise<void>;
   onOtaStatus(deviceId: string, p: OtaStatusPayload): Promise<void>;
+  onAvailabilityReport(topic: ParsedTopic, deviceId: string, availRev: number): Promise<void>;
+}
+
+/** Hizmet durumu komutunun cihaza ulasmasi icin sure (cihaz cevrimdisiysa baglaninca tekrar gider). */
+const AVAILABILITY_TTL_MS = 60_000;
+
+/** Ekran fontunda Turkce harf yok: sadelestir, buyut, ASCII disini at, 40 karaktere kes. */
+export function toScreenText(text: string | null | undefined, max = 40): string {
+  if (!text) return '';
+  // NFKD c/g/o/s/u/I'yi ayristirir; noktasiz ı ayristirilmaz.
+  const ascii = text
+    .replace(/ı/g, 'i')
+    .normalize('NFKD')
+    .replace(/[^\x20-\x7E]/g, '')
+    .toUpperCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+  return ascii.slice(0, max).trim();
 }
 
 /**
@@ -122,6 +141,79 @@ export class DeviceOpsService implements DeviceOpsHooks {
   }
 
   // ---------------------------------------------------------------------------
+  // Hizmet durumu (ADR-0014)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Peronun guncel hizmet durumunu cihaza kuyruga yazar. Admin degisikligiyle ayni
+   * transaction'da cagrilir: durum ve komut birlikte yazilir ya da hic yazilmaz.
+   */
+  async enqueueAvailability(tx: Tx, bayId: string): Promise<void> {
+    const bay = await tx.bay.findUnique({
+      where: { id: bayId },
+      include: { station: true, device: true },
+    });
+    if (!bay?.device) return; // Cihaz yok: baglaninca rapor ederse gonderilir.
+    await this.enqueue(
+      tx,
+      bay.station.code,
+      bay.bayCode,
+      bay.device.deviceId,
+      this.availabilityPayload(bay),
+      AVAILABILITY_TTL_MS,
+    );
+  }
+
+  /**
+   * Cihaz uyguladigi revizyonu bildirdi (baglanti + her heartbeat). Farkliysa guncel durum
+   * yeniden gonderilir; boylece cihaz kapaliyken yapilan degisiklik de ekrana yansir.
+   */
+  async onAvailabilityReport(
+    topic: ParsedTopic,
+    deviceId: string,
+    availRev: number,
+  ): Promise<void> {
+    const device = await this.prisma.device.findUnique({
+      where: { deviceId },
+      include: { bay: { include: { station: true } } },
+    });
+    const bay = device?.bay;
+    if (!device || !bay) return;
+    if (bay.bayCode !== topic.bayCode || bay.station.code !== topic.stationCode) return;
+    if (device.availRev !== availRev) {
+      await this.prisma.device.update({ where: { deviceId }, data: { availRev } });
+    }
+    if (availRev === bay.availabilityRev) return;
+    await this.prisma.$transaction((tx) =>
+      this.enqueue(
+        tx,
+        bay.station.code,
+        bay.bayCode,
+        deviceId,
+        this.availabilityPayload(bay),
+        AVAILABILITY_TTL_MS,
+      ),
+    );
+    this.logger.log(
+      { deviceId, from: availRev, to: bay.availabilityRev },
+      'Cihaz hizmet durumu guncelleniyor',
+    );
+  }
+
+  private availabilityPayload(bay: {
+    outOfServiceKind: 'MAINTENANCE' | 'CLOSED' | null;
+    outOfServiceNote: string | null;
+    availabilityRev: number;
+  }): SetAvailabilityCommandPayload {
+    return {
+      type: 'SET_AVAILABILITY',
+      state: bay.outOfServiceKind ?? 'OPEN',
+      note: bay.outOfServiceKind ? toScreenText(bay.outOfServiceNote) : '',
+      rev: bay.availabilityRev,
+    };
+  }
+
+  // ---------------------------------------------------------------------------
   // Firmware yayini ve guncelleme
   // ---------------------------------------------------------------------------
 
@@ -137,7 +229,10 @@ export class DeviceOpsService implements DeviceOpsHooks {
     if (!bay) throw new BayNotFoundError(bayCode);
     if (!bay.device) throw new BayUnavailableError(bayCode, 'NO_DEVICE');
     const problem = this.sessions.bayProblem(bay);
-    if (problem && problem !== 'MAINTENANCE') throw new BayUnavailableError(bayCode, problem);
+    // Hizmet disi peron guncellenebilir (bakim/kapali saatler guncelleme icin uygun zamandir).
+    if (problem && problem !== 'MAINTENANCE' && problem !== 'CLOSED') {
+      throw new BayUnavailableError(bayCode, problem);
+    }
     const release = await this.prisma.firmwareRelease.findUnique({ where: { version } });
     if (!release) {
       throw new FirmwareUpdateError('FIRMWARE_NOT_FOUND', `Yayinlanmis surum yok: ${version}`);
@@ -175,6 +270,7 @@ export class DeviceOpsService implements DeviceOpsHooks {
       }
       const update = await tx.firmwareUpdate.create({
         data: {
+          createdAt: now, // sweep zaman asimini ayni saatle olcer
           deviceId,
           releaseId: release.id,
           fromVersion,
@@ -273,7 +369,7 @@ export class DeviceOpsService implements DeviceOpsHooks {
     stationCode: string,
     bayCode: string,
     deviceId: string,
-    payload: SetConfigCommandPayload | OtaCommandPayload,
+    payload: SetConfigCommandPayload | SetAvailabilityCommandPayload | OtaCommandPayload,
     ttlMs: number,
   ): Promise<void> {
     const now = this.clock();

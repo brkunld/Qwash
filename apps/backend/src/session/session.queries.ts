@@ -58,6 +58,7 @@ export class SessionQueries {
       stationName: bay.station.name,
       available: reason === null,
       unavailableReason: reason,
+      notice: bay.outOfServiceKind ? bay.outOfServiceNote : null,
       programs: bay.programs.map(({ program }) => ({
         code: program.code,
         name: program.name,
@@ -122,7 +123,12 @@ export class SessionQueries {
 
 function toPublicReason(problem: string | null): BayUnavailableReason | null {
   if (problem === null) return null;
-  if (problem === 'MAINTENANCE' || problem === 'NO_DEVICE' || problem === 'DEVICE_STALE') {
+  if (
+    problem === 'MAINTENANCE' ||
+    problem === 'CLOSED' ||
+    problem === 'NO_DEVICE' ||
+    problem === 'DEVICE_STALE'
+  ) {
     return problem;
   }
   return 'DEVICE_OFFLINE';
