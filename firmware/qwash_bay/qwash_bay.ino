@@ -300,6 +300,7 @@ struct LastEnd {
   uint32_t remainingSec = 0;
 };
 static LastEnd lastEnd;
+static uint32_t lastEndResendUntil = 0;  // millis(); 0 = yeniden gonderim yok
 
 static void loadLastEnd() {
   strlcpy(lastEnd.sessionId, prefs.getString("eSid", "").c_str(), sizeof(lastEnd.sessionId));
@@ -690,6 +691,7 @@ static void endSession(const char* reason) {
   prefs.putBool("sActive", false);
   Serial.printf("[session] bitti: %s (kalan %us)\n", reason, rem);
   publishLastEnd();
+  lastEndResendUntil = millis() + END_RESEND_MS;
   publishStatus("ONLINE");  // Retained BUSY'yi temizle.
   stopSent = false;
   if (menu.active) {
@@ -1191,6 +1193,9 @@ void loop() {
   if (mqtt.connected() && millis() - lastHeartbeat >= hbEvery) {
     lastHeartbeat = millis();
     publishHeartbeat();
+    // Bitis bildirimi kaybolduysa (QoS 0) seans RECONCILING'de kalmasin: bir sure tekrar gonder.
+    if (lastEndResendUntil && (int32_t)(millis() - lastEndResendUntil) < 0) publishLastEnd();
+    else lastEndResendUntil = 0;
   }
 
   otaHealthCheck();

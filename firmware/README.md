@@ -2,7 +2,7 @@
 
 Arduino IDE sketch'i: `firmware/qwash_bay/`. Kontrat `docs/IOT.md` ile birebir. Donanim: ESP32-32E, 3.2" ST7789 240x320 dirençli dokunmatik ekran modulu (SKU E32R32P).
 
-> **Durum:** 0.6.0 (dokunmatik menu, ADR-0012) gercek cihazda (E32R32P, `4CC382C3CC1C`) calisti. 0.7.0 (uzaktan ayar + OTA, ADR-0013) arduino-cli 1.5.1 + esp32 3.3.8 ile derlendi.
+> **Durum:** 0.6.0 (dokunmatik menu, ADR-0012) gercek cihazda (E32R32P, `4CC382C3CC1C`) calisti. 0.7.x (uzaktan ayar + OTA, ADR-0013) gercek cihazda denendi: QR adresi kendiliginden eslendi, 0.7.0 -> 0.7.1 kablosuz guncellendi, yanlis imzali imaj reddedildi.
 
 ## Kurulum (Arduino IDE)
 
