@@ -22,6 +22,7 @@ import {
 import { OutboxService } from '../outbox/outbox.service';
 import { WalletNotFoundError } from '../wallet/wallet.errors';
 import { WalletService, type Tx } from '../wallet/wallet.service';
+import type { DeviceMessageMeta } from '../iot/mqtt.service';
 import type { ClaimHooks } from './bay-claim.service';
 import type { DeviceOpsHooks } from './device-ops.service';
 import {
@@ -347,7 +348,11 @@ export class SessionService {
   // Cihazdan gelen mesajlar
   // ---------------------------------------------------------------------------
 
-  async handleDeviceMessage(topic: string, raw: string): Promise<DeviceMessageOutcome> {
+  async handleDeviceMessage(
+    topic: string,
+    raw: string,
+    meta: DeviceMessageMeta = { retained: false },
+  ): Promise<DeviceMessageOutcome> {
     const parsed = parseDeviceTopic(topic);
     if (!parsed) return 'IGNORED_TOPIC';
 
@@ -366,7 +371,7 @@ export class SessionService {
     const msg = result.data;
 
     if (parsed.kind === 'status' || parsed.kind === 'heartbeat') {
-      await this.recordDeviceState(parsed, msg);
+      await this.recordDeviceState(parsed, msg, meta.retained);
       const s = msg.payload;
       if (s.type === 'DEVICE_STATUS') {
         await this.deviceOps?.onDeviceStatus(parsed, msg.deviceId, s.status, s.qrBase);
@@ -883,7 +888,11 @@ export class SessionService {
     });
   }
 
-  private async recordDeviceState(topic: ParsedTopic, msg: DeviceMessage): Promise<void> {
+  private async recordDeviceState(
+    topic: ParsedTopic,
+    msg: DeviceMessage,
+    retained: boolean,
+  ): Promise<void> {
     const now = this.clock();
     const bay = await this.prisma.bay.findUnique({
       where: { bayCode: topic.bayCode },
@@ -917,14 +926,17 @@ export class SessionService {
         reportedStatus,
         firmwareVersion: firmwareVersion ?? null,
         resetReason: resetReason ?? null,
-        lastSeenAt: now,
+        // Saklanan mesaj cihazin simdi canli oldugunu kanitlamaz: yeni cihaz "hic gorulmedi" sayilir.
+        lastSeenAt: retained ? new Date(0) : now,
       },
       update: {
         ...(bayId ? { bayId } : {}),
         ...(p.type === 'DEVICE_STATUS' || p.type === 'HEARTBEAT' ? { reportedStatus } : {}),
         ...(firmwareVersion ? { firmwareVersion } : {}),
         ...(resetReason !== undefined ? { resetReason } : {}),
-        lastSeenAt: now,
+        // Backend acilisinda broker saklanan DEVICE_STATUS'u yeniden verir; bu, kapali bir cihazi
+        // ~90 sn "canli" gostermemeli. Yalnizca yeni mesaj (heartbeat, canli durum) lastSeenAt'i ilerletir.
+        ...(retained ? {} : { lastSeenAt: now }),
       },
     });
 

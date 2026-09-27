@@ -3,7 +3,19 @@ import { connect, type MqttClient } from 'mqtt';
 import type { MessagePublisher } from '../outbox/outbox.service';
 import { DEVICE_SUBSCRIPTIONS } from './iot.contract';
 
-export type DeviceMessageHandler = (topic: string, payload: string) => Promise<unknown>;
+/**
+ * `retained`: broker bu mesaji abonelik aninda saklanan (eski) mesaj olarak verdi. Cihazin
+ * SU AN canli oldugunu kanitlamaz; canlilik yalnizca yeni gelen mesajlardan sayilir.
+ */
+export interface DeviceMessageMeta {
+  retained: boolean;
+}
+
+export type DeviceMessageHandler = (
+  topic: string,
+  payload: string,
+  meta: DeviceMessageMeta,
+) => Promise<unknown>;
 
 /**
  * Broker baglantisi: komut yayinlar (QoS 1) ve cihaz topic'lerini dinler.
@@ -52,9 +64,9 @@ export class MqttService implements MessagePublisher {
 
     // Mesajlar sirayla islenir: ayni seansin ACK ve bitis mesaji ters sirada uygulanmaz.
     let chain = Promise.resolve();
-    client.on('message', (topic, payload) => {
+    client.on('message', (topic, payload, packet) => {
       chain = chain
-        .then(() => onMessage(topic, payload.toString('utf8')))
+        .then(() => onMessage(topic, payload.toString('utf8'), { retained: packet.retain }))
         .then(
           (outcome) => this.logger.debug({ topic, outcome }, 'Cihaz mesaji islendi'),
           (err: unknown) => this.logger.error({ topic, err }, 'Cihaz mesaji islenemedi'),
