@@ -10,6 +10,7 @@ import {
   Logger,
   NestInterceptor,
   PipeTransform,
+  StreamableFile,
 } from '@nestjs/common';
 import { ThrottlerException } from '@nestjs/throttler';
 import type { Request, Response } from 'express';
@@ -38,15 +39,16 @@ export class EnvelopeInterceptor implements NestInterceptor {
   intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
     const req = context.switchToHttp().getRequest<Request>();
     const res = context.switchToHttp().getResponse<Response>();
-    return next
-      .handle()
-      .pipe(
-        map((data: unknown) =>
-          res.statusCode === 204
+    return next.handle().pipe(
+      map((data: unknown) =>
+        // Dosya (firmware imaji) zarfsiz, ham gider.
+        data instanceof StreamableFile
+          ? data
+          : res.statusCode === 204
             ? undefined
             : { success: true, data: data ?? null, metadata: metadata(req) },
-        ),
-      );
+      ),
+    );
   }
 }
 

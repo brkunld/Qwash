@@ -42,3 +42,9 @@ docker/mosquitto/passwd
 firmware/qwash_bay/secrets.h
 docker/mosquitto/certs/
 firmware/qwash_bay/mqtt_ca.h
+
+# Firmware: imzali imajlar ve imza anahtarlari (ADR-0013). Ozel anahtari yedekle, paylasma.
+firmware-releases/
+firmware/keys/
+firmware/qwash_bay/ota_pubkey.h
+firmware/qwash_bay/build/

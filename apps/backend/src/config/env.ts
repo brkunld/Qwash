@@ -24,6 +24,14 @@ export const EnvSchema = z
     CORS_ORIGINS: z.string().default('http://localhost:3000,http://localhost:3002'),
     // Iyzico odeme formunun donecegi API adresi (callback: <API_PUBLIC_URL>/api/v1/payments/iyzico/callback).
     API_PUBLIC_URL: z.url().default('http://localhost:3001'),
+    // Peron QR'inin tabani (Orn: https://qwash.com.tr/b/). Bos: <CUSTOMER_APP_URL>/b/. Cihaz bildirdigi
+    // adres bundan farkliysa backend SET_CONFIG gonderir (ADR-0013).
+    DEVICE_QR_BASE: z.preprocess((v) => (v === '' ? undefined : v), z.url().optional()),
+    // Cihazin firmware indirecegi API kok adresi (cihaz agindan erisilebilir olmali, localhost olmaz).
+    // Bos: API_PUBLIC_URL.
+    DEVICE_API_URL: z.preprocess((v) => (v === '' ? undefined : v), z.url().optional()),
+    // Imzali firmware imajlarinin klasoru (git disi). Bos: depo kokunde firmware-releases/.
+    FIRMWARE_DIR: z.preprocess((v) => (v === '' ? undefined : v), z.string().optional()),
     // Iyzico anahtarlari; tanimli degilse kart yukleme kapali (ADR-0003).
     IYZICO_API_KEY: z.preprocess((v) => (v === '' ? undefined : v), z.string().optional()),
     IYZICO_SECRET_KEY: z.preprocess((v) => (v === '' ? undefined : v), z.string().optional()),

@@ -19,7 +19,9 @@
     "db:seed": "prisma db seed",
     "db:studio": "prisma studio",
     "demo:session": "tsx scripts/demo-session.ts",
-    "admin:grant": "tsx scripts/admin-grant.ts"
+    "admin:grant": "tsx scripts/admin-grant.ts",
+    "firmware:publish": "tsx scripts/firmware-publish.ts",
+    "firmware:rollout": "tsx scripts/firmware-rollout.ts"
   },
   "dependencies": {
     "@nestjs/common": "^12.1.0",

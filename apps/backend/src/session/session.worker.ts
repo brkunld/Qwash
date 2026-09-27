@@ -23,15 +23,15 @@ export class SessionWorker implements OnApplicationBootstrap, OnApplicationShutd
     private readonly outbox: OutboxService,
     private readonly sessions: SessionService,
     private readonly intervals: WorkerIntervals,
-    private readonly claims?: { sweep(): Promise<unknown> },
+    /** Ek periyodik taramalar (ekran baglari, firmware guncellemeleri). */
+    private readonly sweepers: { name: string; sweep(): Promise<unknown> }[] = [],
   ) {}
 
   onApplicationBootstrap(): void {
     this.mqtt.start((topic, payload) => this.sessions.handleDeviceMessage(topic, payload));
     this.every('outbox', this.intervals.outboxMs, () => this.outbox.publishPending(this.mqtt));
     this.every('sweep', this.intervals.sweepMs, () => this.sessions.sweep());
-    const claims = this.claims;
-    if (claims) this.every('claims', this.intervals.sweepMs, () => claims.sweep());
+    for (const s of this.sweepers) this.every(s.name, this.intervals.sweepMs, () => s.sweep());
   }
 
   async onApplicationShutdown(): Promise<void> {

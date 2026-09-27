@@ -23,6 +23,7 @@ import { OutboxService } from '../outbox/outbox.service';
 import { WalletNotFoundError } from '../wallet/wallet.errors';
 import { WalletService, type Tx } from '../wallet/wallet.service';
 import type { ClaimHooks } from './bay-claim.service';
+import type { DeviceOpsHooks } from './device-ops.service';
 import {
   BayBusyError,
   BayClaimedError,
@@ -104,7 +105,8 @@ export type DeviceMessageOutcome =
   | 'CLAIM_EXPIRED'
   | 'CLAIM_RELEASED'
   | 'MENU_SESSION_STARTED'
-  | 'MENU_START_REJECTED';
+  | 'MENU_START_REJECTED'
+  | 'OTA_STATUS_RECORDED';
 
 export interface SweepResult {
   ackTimeouts: number;
@@ -163,6 +165,8 @@ export class SessionService {
   private readonly logger = new Logger(SessionService.name);
   /** Dokunmatik ekran bagi (BayClaimService kendini baglar); yoksa ekran olaylari yok sayilir. */
   private claims: ClaimHooks | null = null;
+  /** Cihaz ayari ve firmware guncellemesi (DeviceOpsService kendini baglar). */
+  private deviceOps: DeviceOpsHooks | null = null;
 
   constructor(
     private readonly prisma: PrismaClient,
@@ -174,6 +178,10 @@ export class SessionService {
 
   attachClaims(claims: ClaimHooks): void {
     this.claims = claims;
+  }
+
+  attachDeviceOps(deviceOps: DeviceOpsHooks): void {
+    this.deviceOps = deviceOps;
   }
 
   // ---------------------------------------------------------------------------
@@ -359,11 +367,20 @@ export class SessionService {
 
     if (parsed.kind === 'status' || parsed.kind === 'heartbeat') {
       await this.recordDeviceState(parsed, msg);
+      const s = msg.payload;
+      if (s.type === 'DEVICE_STATUS') {
+        await this.deviceOps?.onDeviceStatus(parsed, msg.deviceId, s.status, s.qrBase);
+      }
       return 'DEVICE_STATE_RECORDED';
     }
 
     // Dokunmatik ekran olaylari kendi transaction'larini acar (seans baslatma dahil).
     const p0 = msg.payload;
+    if (p0.type === 'OTA_STATUS') {
+      if (!this.deviceOps || parsed.kind !== 'events') return 'NO_OP';
+      await this.deviceOps.onOtaStatus(msg.deviceId, p0);
+      return 'OTA_STATUS_RECORDED';
+    }
     if (p0.type === 'MENU_START' || p0.type === 'MENU_EXIT') {
       if (!this.claims || parsed.kind !== 'events') return 'NO_OP';
       const eventId = msg.eventId;

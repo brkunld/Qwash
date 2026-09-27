@@ -1,6 +1,10 @@
 // QWASH peron firmware'i (Faz 3 SPIKE) - Arduino IDE.
 // Kontrat: docs/IOT.md. Kurulum ve test: firmware/README.md
 //
+// Uzaktan (0.7.0, ADR-0013): SET_CONFIG ile QR adresi degisir; OTA ile imzali imaj indirilir,
+// sha256 + ECDSA imzasi (gomulu acik anahtar) dogrulanmadan yazilmaz. Yeni surum 3 acilista
+// saglikli olamazsa (MQTT'ye baglanip 60 sn calisamazsa) cihaz eski surume doner.
+//
 // Dokunmatik menu (0.6.0): musteri QR'i okutup telefonda onaylayinca backend SHOW_MENU gonderir,
 // ekran o hesaba bagli paket/sure menusune gecer. Cihaz yalniz secimi bildirir (MENU_START);
 // tutar, bakiye ve seans karari backend'dedir. DURDUR roleyi cihazda hemen kapatir; tahsilat
@@ -26,7 +30,18 @@
 #endif
 #include <time.h>
 #include <functional>
+#include <HTTPClient.h>
+#include <Update.h>
+#include <esp_ota_ops.h>
+#include <mbedtls/base64.h>
+#include <mbedtls/pk.h>
+#include <mbedtls/sha256.h>
 #include "config.h"
+#if __has_include("ota_pubkey.h")
+#include "ota_pubkey.h"  // pnpm firmware:keys
+#else
+#error "ota_pubkey.h yok: depo kokunde pnpm firmware:keys calistir"
+#endif
 #if __has_include("mqtt_ca.h")
 #include "mqtt_ca.h"  // pnpm mqtt:certs
 #else
@@ -105,6 +120,10 @@ static char pendingReq[40] = "";
 static int8_t pendingProg = -1;
 static uint32_t pendingDur = 0;
 static bool stopSent = false;
+
+// ---------- Uzaktan guncelleme durumu ----------
+static bool otaPending = false;  // Yeni surumle acildik, henuz saglikli sayilmadi
+static char otaId[40] = "";
 
 // ---------- Yardimcilar ----------
 static void newUuid(char* out) {  // v4
@@ -229,6 +248,7 @@ static void publishStatus(const char* status) {
     p["type"] = "DEVICE_STATUS";
     p["status"] = status;
     p["firmwareVersion"] = FW_VERSION;
+    p["qrBase"] = qrBase;  // Backend istenenden farkliysa SET_CONFIG gonderir
     p["resetReason"] = (int)esp_reset_reason();  // 1 guc, 3 yazilim, 4 panic, 5-7 WDT, 9 brownout
   });
 }
@@ -280,6 +300,7 @@ struct LastEnd {
   uint32_t remainingSec = 0;
 };
 static LastEnd lastEnd;
+static uint32_t lastEndResendUntil = 0;  // millis(); 0 = yeniden gonderim yok
 
 static void loadLastEnd() {
   strlcpy(lastEnd.sessionId, prefs.getString("eSid", "").c_str(), sizeof(lastEnd.sessionId));
@@ -452,6 +473,205 @@ static void drawMenu() {
   if (menuMsg[0]) uiFooterMessage(menuMsg, TFT_ORANGE);
 }
 
+// ---------- Uzaktan ayar ve guncelleme (ADR-0013) ----------
+static void publishOta(const char* updateId, const char* status, const char* detail = nullptr) {
+  publishEvent(tEvents, false, [&](JsonObject p) {
+    p["type"] = "OTA_STATUS";
+    p["updateId"] = updateId;
+    p["status"] = status;
+    if (detail) p["detail"] = detail;
+  });
+}
+
+static void handleSetConfig(JsonObject pl) {
+  const char* q = pl["qrBase"] | "";
+  size_t n = strlen(q);
+  bool ok = n > 8 && n < sizeof(qrBase) && (!strncmp(q, "http://", 7) || !strncmp(q, "https://", 8)) && q[n - 1] == '/';
+  if (!ok) {
+    Serial.println("[config] gecersiz qrBase, yok sayildi");
+    return;
+  }
+  if (strcmp(q, qrBase) != 0) {
+    strlcpy(qrBase, q, sizeof(qrBase));
+    prefs.putString("qrBase", qrBase);
+    Serial.printf("[config] QR adresi: %s\n", qrBase);
+    if (uiMode == UiMode::IDLE) uiDirty = true;
+  }
+  publishStatus(sess.active ? "BUSY" : "ONLINE");  // Backend yeni adresi gorsun
+}
+
+// Imza: ECDSA P-256, imajin SHA-256'si uzerinde, DER + base64 (scripts/firmware-sign.mjs).
+static bool verifySignature(const uint8_t hash[32], const char* sigB64) {
+  uint8_t sig[96];
+  size_t sigLen = 0;
+  if (mbedtls_base64_decode(sig, sizeof(sig), &sigLen, (const uint8_t*)sigB64, strlen(sigB64)) != 0) return false;
+  mbedtls_pk_context pk;
+  mbedtls_pk_init(&pk);
+  int rc = mbedtls_pk_parse_public_key(&pk, (const uint8_t*)OTA_PUBLIC_KEY_PEM, strlen(OTA_PUBLIC_KEY_PEM) + 1);
+  if (rc == 0) rc = mbedtls_pk_verify(&pk, MBEDTLS_MD_SHA256, hash, 32, sig, sigLen);
+  mbedtls_pk_free(&pk);
+  return rc == 0;
+}
+
+static void uiOtaProgress(uint32_t got, uint32_t size) {
+  char buf[24];
+  snprintf(buf, sizeof(buf), "%u%%", (unsigned)(size ? got * 100ULL / size : 0));
+  gfx.fillRect(0, 150, gfx.width(), 40, TFT_BLACK);
+  uiCenterText(buf, 155, 3, TFT_WHITE);
+}
+
+// Imaji indirir, yazarken SHA-256 hesaplar; sha256 ve imza tutmazsa hic acilmaz (Update.abort).
+static bool downloadAndFlash(const char* url, uint32_t size, const char* shaHex, const char* sigB64, char* err,
+                             size_t errN) {
+  WiFiClient plain;
+  WiFiClientSecure tls;
+  bool https = !strncmp(url, "https://", 8);
+  // Butunluk ve kaynak imzayla dogrulanir; TLS yalniz tasima (sertifika paketi sonraki is, ADR-0013).
+  if (https) tls.setInsecure();
+  WiFiClient* client = https ? (WiFiClient*)&tls : &plain;
+  HTTPClient http;
+  http.setTimeout(OTA_STALL_MS);
+  if (!http.begin(*client, url)) {
+    strlcpy(err, "HTTP_BEGIN", errN);
+    return false;
+  }
+  int code = http.GET();
+  if (code != 200) {
+    snprintf(err, errN, "HTTP_%d", code);
+    http.end();
+    return false;
+  }
+  if (http.getSize() != (int)size) {
+    strlcpy(err, "SIZE_MISMATCH", errN);
+    http.end();
+    return false;
+  }
+  if (!Update.begin(size, U_FLASH)) {
+    strlcpy(err, "UPDATE_BEGIN", errN);
+    http.end();
+    return false;
+  }
+  mbedtls_sha256_context ctx;
+  mbedtls_sha256_init(&ctx);
+  mbedtls_sha256_starts(&ctx, 0);
+  WiFiClient* stream = http.getStreamPtr();
+  static uint8_t buf[4096];
+  uint32_t got = 0, lastData = millis();
+  int lastTenth = -1;
+  bool writeFailed = false;
+  while (got < size) {
+    esp_task_wdt_reset();
+    size_t avail = stream->available();
+    if (!avail) {
+      if (millis() - lastData > OTA_STALL_MS) break;
+      delay(2);
+      continue;
+    }
+    size_t want = avail;
+    if (want > sizeof(buf)) want = sizeof(buf);
+    if (want > size - got) want = size - got;
+    int n = stream->readBytes(buf, want);
+    if (n <= 0) continue;
+    lastData = millis();
+    mbedtls_sha256_update(&ctx, buf, n);
+    if (Update.write(buf, n) != (size_t)n) {
+      writeFailed = true;
+      break;
+    }
+    got += n;
+    int tenth = (int)(got * 10ULL / size);
+    if (tenth != lastTenth) {
+      lastTenth = tenth;
+      uiOtaProgress(got, size);
+    }
+  }
+  http.end();
+  uint8_t hash[32];
+  mbedtls_sha256_finish(&ctx, hash);
+  mbedtls_sha256_free(&ctx);
+  if (writeFailed || got != size) {
+    Update.abort();
+    strlcpy(err, writeFailed ? "WRITE" : "INCOMPLETE", errN);
+    return false;
+  }
+  char hex[65];
+  for (int i = 0; i < 32; i++) snprintf(hex + i * 2, 3, "%02x", hash[i]);
+  if (strcasecmp(hex, shaHex) != 0) {
+    Update.abort();
+    strlcpy(err, "SHA256", errN);
+    return false;
+  }
+  if (!verifySignature(hash, sigB64)) {
+    Update.abort();
+    strlcpy(err, "SIGNATURE", errN);
+    return false;
+  }
+  if (!Update.end()) {  // Imaj basligini dogrular ve acilis bolumunu yeni imaja cevirir
+    snprintf(err, errN, "UPDATE_END_%u", (unsigned)Update.getError());
+    return false;
+  }
+  return true;
+}
+
+static void handleOta(JsonObject pl) {
+  // Komut metinleri once kopyalanir: yayinlar PubSubClient'in ortak tamponunu kullanir.
+  char updateId[40], version[33], url[200], shaHex[65], sig[128];
+  strlcpy(updateId, pl["updateId"] | "", sizeof(updateId));
+  strlcpy(version, pl["version"] | "", sizeof(version));
+  strlcpy(url, pl["url"] | "", sizeof(url));
+  strlcpy(shaHex, pl["sha256"] | "", sizeof(shaHex));
+  strlcpy(sig, pl["signature"] | "", sizeof(sig));
+  uint32_t size = pl["sizeBytes"] | 0;
+  if (!updateId[0]) return;
+  if (!strcmp(version, FW_VERSION)) return;  // Tekrar gelen komut; zaten bu surumdeyiz
+  if (!url[0] || strlen(shaHex) != 64 || !sig[0] || size == 0) {
+    publishOta(updateId, "FAILED", "INVALID_COMMAND");
+    return;
+  }
+  // Su akarken veya musteri ekranda secim yaparken guncelleme yok.
+  if (sess.active || menu.active) {
+    publishOta(updateId, "FAILED", "BUSY");
+    return;
+  }
+  const esp_partition_t* target = esp_ota_get_next_update_partition(NULL);
+  if (!target || size > target->size) {
+    publishOta(updateId, "FAILED", "TOO_LARGE");
+    return;
+  }
+  Serial.printf("[ota] %s -> %s indiriliyor (%u bayt)\n", FW_VERSION, version, (unsigned)size);
+  publishOta(updateId, "DOWNLOADING");
+  publishStatus("UPDATING");  // Peron guncelleme bitene kadar kullanilamaz
+  uiMessage("GUNCELLENIYOR", TFT_YELLOW);
+  char err[32] = "";
+  if (!downloadAndFlash(url, size, shaHex, sig, err, sizeof(err))) {
+    Serial.printf("[ota] basarisiz: %s\n", err);
+    publishOta(updateId, "FAILED", err);
+    publishStatus("ONLINE");
+    setMode(UiMode::IDLE);
+    return;
+  }
+  // Yeni surum saglikli oldugunu kanitlayana kadar "deneme" sayilir (bkz. setup).
+  prefs.putString("otaId", updateId);
+  prefs.putUChar("otaTries", 0);
+  prefs.putBool("otaPend", true);
+  Serial.println("[ota] dogrulandi, yeniden baslatiliyor");
+  publishOta(updateId, "REBOOTING");
+  uiMessage("YENIDEN BASLIYOR", TFT_GREEN);
+  mqtt.loop();
+  delay(500);
+  relaysAllOff();
+  ESP.restart();
+}
+
+// Yeni surum MQTT'ye baglanip bir sure calistiysa saglikli: deneme isaretini kaldir, bildir.
+static void otaHealthCheck() {
+  if (!otaPending || !mqtt.connected() || millis() < OTA_HEALTHY_AFTER_MS) return;
+  otaPending = false;
+  prefs.putBool("otaPend", false);
+  Serial.printf("[ota] %s saglikli\n", FW_VERSION);
+  publishOta(otaId, "SUCCEEDED");
+}
+
 // ---------- Seans ----------
 static void endSession(const char* reason) {
   if (!sess.active) return;
@@ -471,6 +691,7 @@ static void endSession(const char* reason) {
   prefs.putBool("sActive", false);
   Serial.printf("[session] bitti: %s (kalan %us)\n", reason, rem);
   publishLastEnd();
+  lastEndResendUntil = millis() + END_RESEND_MS;
   publishStatus("ONLINE");  // Retained BUSY'yi temizle.
   stopSent = false;
   if (menu.active) {
@@ -579,6 +800,8 @@ static void onMessage(char* topic, byte* payload, unsigned int len) {
   else if (!strcmp(type, "SHOW_MENU")) handleShowMenu(pl);
   else if (!strcmp(type, "SHOW_QR")) handleShowQr(pl);
   else if (!strcmp(type, "MENU_ERROR")) handleMenuError(pl);
+  else if (!strcmp(type, "SET_CONFIG")) handleSetConfig(pl);
+  else if (!strcmp(type, "OTA")) handleOta(pl);
   else if (!strcmp(type, "RESET")) {
     relaysAllOff();
     delay(200);
@@ -629,6 +852,10 @@ static void mqttTryConnect() {
     mqtt.subscribe(tCmd, 1);
     publishStatus(sess.active ? "BUSY" : "ONLINE");
     publishLastEnd();  // Cevrimdisiyken biten seans varsa bildirimi simdi gider.
+    if (prefs.getBool("otaRolled", false)) {  // Yeni surum acilamadi, eskiye donuldu
+      publishOta(otaId, "FAILED", "ROLLED_BACK");
+      prefs.putBool("otaRolled", false);
+    }
     if (recoveredPending) {
       char detail[32];
       snprintf(detail, sizeof(detail), "RESET_REASON_%d", (int)esp_reset_reason());
@@ -825,6 +1052,27 @@ void setup() {
 
   prefs.begin("qwash", false);
   loadSettings();
+
+  // Yeni surumle acilis: saglikli oldugu kanitlanmadan OTA_MAX_BOOT_TRIES kez acildiysa
+  // (cokme, WDT, MQTT'ye hic baglanamama) onceki bolume don.
+  strlcpy(otaId, prefs.getString("otaId", "").c_str(), sizeof(otaId));
+  if (prefs.getBool("otaPend", false)) {
+    uint8_t tries = prefs.getUChar("otaTries", 0) + 1;
+    prefs.putUChar("otaTries", tries);
+    Serial.printf("[ota] yeni surum deneme %u/%u\n", tries, OTA_MAX_BOOT_TRIES);
+    if (tries > OTA_MAX_BOOT_TRIES) {
+      prefs.putBool("otaPend", false);
+      prefs.putBool("otaRolled", true);
+      const esp_partition_t* prev = esp_ota_get_next_update_partition(NULL);
+      if (prev && esp_ota_set_boot_partition(prev) == ESP_OK) {
+        Serial.println("[ota] eski surume donuluyor");
+        delay(100);
+        ESP.restart();
+      }
+    } else {
+      otaPending = true;
+    }
+  }
   loadLastEnd();
   buildTopics();
   uiBegin();
@@ -945,8 +1193,12 @@ void loop() {
   if (mqtt.connected() && millis() - lastHeartbeat >= hbEvery) {
     lastHeartbeat = millis();
     publishHeartbeat();
+    // Bitis bildirimi kaybolduysa (QoS 0) seans RECONCILING'de kalmasin: bir sure tekrar gonder.
+    if (lastEndResendUntil && (int32_t)(millis() - lastEndResendUntil) < 0) publishLastEnd();
+    else lastEndResendUntil = 0;
   }
 
+  otaHealthCheck();
   pollTouch();
   updateUi();
 }
