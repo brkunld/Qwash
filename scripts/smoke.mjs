@@ -118,6 +118,7 @@ if (health.status === 0) {
   );
   process.exit(1);
 }
+await check('GET /health/ready (veritabani + MQTT)', 'GET', '/health/ready', 200);
 await check(`GET /bays/${bay} (QR onay ekrani)`, 'GET', `/bays/${bay}`, 200, {}, (r) =>
   r.json?.bayCode === bay ? undefined : 'bayCode uyusmuyor',
 );
@@ -205,6 +206,17 @@ if (env.SMOKE_ADMIN_EMAIL && env.SMOKE_ADMIN_PASSWORD) {
       );
     }
     await check('GET /admin/audit-logs', 'GET', '/admin/audit-logs', 200, { token });
+    const alarmList = await check(
+      'GET /admin/alarms',
+      'GET',
+      '/admin/alarms',
+      200,
+      { token },
+      (r) => (Array.isArray(r.json) ? undefined : 'alarm listesi degil'),
+    );
+    for (const a of Array.isArray(alarmList.json) ? alarmList.json : []) {
+      (a.severity === 'CRITICAL' ? fail : warn)(`Acik alarm: ${a.title}`, a.detail);
+    }
     await check(
       'GET /admin/sessions/review',
       'GET',

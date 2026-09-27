@@ -228,13 +228,13 @@ Uc alt faz (2026-09-26 plani). Model onerisi parantez icinde.
 
 - [ ] Production Docker/Nginx deployment.
 - [x] Yedekleme ve **test edilmis** restore proseduru. `pnpm db:backup`, `pnpm db:restore-verify`, `docs/DEPLOYMENT.md` bolum 6 (planli calistirma ve makine disi kopya production kurulumunda).
-- [ ] Gozlemlenebilirlik: log toplama, health check, temel alarm (cihaz cevrimdisi, odeme hatasi, ACK zaman asimi orani).
+- [x] Gozlemlenebilirlik: health check (`/health/db|mqtt|ready`) ve temel alarmlar (cihaz cevrimdisi, odeme/iade takilmasi, ACK zaman asimi orani, takili seans, MQTT kopuklugu; e-posta + `GET /admin/alarms`), bkz. `docs/DEPLOYMENT.md` §3. **Log toplama** (merkezi depolama/arama) production altyapisiyla kurulacak; log stdout'a JSON yazilir.
 - [x] Eszamanli seans baslatma icin yuk testi. `pnpm --filter @qwash/backend test:load`; sonuclar `docs/LOAD-TEST.md` (double spending / kayip odemeli seans yok; asiri yukte 503 SERVICE_BUSY). Canlidan once hedef sunucuda bir kez daha calistirilmali.
 - [x] Musteri, admin, API ve cihaz akislari icin smoke testler. `pnpm smoke` (`scripts/smoke.mjs`, salt okur, canli backend'e karsi); yalniz-okur oldugu icin para/seans akisini uctan uca denemez, o kapsam entegrasyon ve yuk testlerindedir.
 - [x] Guvenlik gozden gecirmesi: auth, secret yonetimi, MQTT, odeme, rate limit. `docs/SECURITY.md` bolum 8 (acik kalanlar: admin MFA, hiz siniri bellekte).
 - [x] Yaygin arizalar icin operasyon runbook'u. `docs/RUNBOOK.md` (kod ve IOT.md'ye dayanir; gercek cihaz/Iyzico ile sahada denenmedi).
 - [ ] Saha kurulum ve devreye alma kontrol listesi.
-- [ ] Faz 3'teki donanim spike'inin gercek cihazla dogrulandiginin kaydi.
+- [x] Faz 3'teki donanim spike'inin gercek cihazla dogrulandiginin kaydi: `docs/HARDWARE-VALIDATION.md` (ne denendi, ne denenmedi; **gercek role/su akisi henuz denenmedi**, sahaya cikmadan once kapanmali).
 
 **Tamamlanma Kriterleri**
 - Pilot istasyon deploy edilebilir, izlenebilir, restart sonrasi toparlanabilir.

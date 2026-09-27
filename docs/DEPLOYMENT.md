@@ -76,9 +76,15 @@ git tag v1.2.0 && git push --tags
 | Endpoint | Kontrol Edilen | Başarı Kriteri |
 |---|---|---|
 | `GET /health` | Temel sunucu canlılığı | `200 OK` |
-| `GET /health/db` | PostgreSQL bağlantısı | `200 OK` + `{ db: "ok" }` |
-| `GET /health/redis` | Redis bağlantısı | `200 OK` + `{ redis: "ok" }` |
-| `GET /health/mqtt` | MQTT broker bağlantısı | `200 OK` + `{ mqtt: "ok" }` |
+| `GET /health/db` | PostgreSQL bağlantısı | `200 OK` + `{ db: "ok" }`; düşükse `503` |
+| `GET /health/mqtt` | MQTT broker bağlantısı | `200 OK` + `{ mqtt: "ok" }`; düşükse `503` |
+| `GET /health/ready` | Veritabanı + MQTT birlikte (yük dengeleyicinin "trafik verilebilir mi" sorusu) | `200 OK`; değilse `503` ve `error.details` içinde hangisinin düştüğü |
+
+> [!NOTE]
+> `/health/redis` yoktur: Redis şu an hiçbir şey için kullanılmıyor (hız sınırı backend belleğinde, `SECURITY.md` §8). Redis kullanılmaya başlanınca uç eklenir.
+
+**Alarmlar (Faz 7 izleme):** backend her 30 sn'de kuralları tarar (`monitoring/alarm.service.ts`): peron cihazı 3+ dk çevrimdışı, 10+ dk `RECONCILING`'de seans, son 30 dk'da 3+ ACK zaman aşımı, 15+ dk takılan kart iptali/iade parçası, 60+ sn cihaza gitmeyen komut, 60+ sn MQTT kopukluğu, 1+ saat bekleyen inceleme. Her alarm loga (`ALARM:`) ve `GET /api/v1/admin/alarms`'a yazılır; `ALERT_EMAIL` ve `SMTP_*` tanımlıysa e-posta da gider: açılışta, 6 saatte bir hatırlatma ve kapanışta (her taramada değil). `pnpm smoke` açık alarmları bildirir. Kanal şimdilik e-postadır; Telegram/SMS gerekirse `AlertNotifier` arayüzüne eklenir.
+> Log toplama (merkezi depolama, arama) production altyapısıyla (alan adı ve sunucu belli olunca) kurulacak; log şu an stdout'a JSON yazılır.
 
 > [!NOTE]
 > `/health` endpoint'i yetkilendirme (JWT) gerektirmez ve yük dengeleyici (load balancer) tarafından düzenli aralıklarla çağrılır.

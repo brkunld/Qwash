@@ -251,6 +251,15 @@ export const AdminBayViewSchema = z.object({
 });
 export type AdminBayView = z.infer<typeof AdminBayViewSchema>;
 
+export const AdminAlarmSchema = z.object({
+  key: z.string(),
+  severity: z.enum(['WARNING', 'CRITICAL']),
+  title: z.string(),
+  detail: z.string(),
+  firingSince: z.string(),
+});
+export type AdminAlarm = z.infer<typeof AdminAlarmSchema>;
+
 export const SetMaintenanceRequestSchema = z.discriminatedUnion('enabled', [
   z.object({ enabled: z.literal(true), reason: z.string().trim().min(3).max(200) }),
   z.object({ enabled: z.literal(false) }),

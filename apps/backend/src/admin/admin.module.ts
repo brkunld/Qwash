@@ -3,6 +3,7 @@ import { AuthModule } from '../auth/auth.module';
 import { PaymentGateway } from '../payments/payment-gateway';
 import { PaymentsModule } from '../payments/payments.module';
 import { PrismaService } from '../prisma/prisma.service';
+import { MonitoringModule } from '../monitoring/monitoring.module';
 import { SessionModule } from '../session/session.module';
 import { SessionService } from '../session/session.service';
 import { WalletModule } from '../wallet/wallet.module';
@@ -15,7 +16,7 @@ import { ProgramService } from './program.service';
 import { RefundAdminService } from './refund-admin.service';
 
 @Module({
-  imports: [AuthModule, WalletModule, PaymentsModule, SessionModule],
+  imports: [AuthModule, WalletModule, PaymentsModule, SessionModule, MonitoringModule],
   controllers: [AdminController],
   providers: [
     AdminGuard,

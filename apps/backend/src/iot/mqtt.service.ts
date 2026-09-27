@@ -74,6 +74,11 @@ export class MqttService implements MessagePublisher {
     });
   }
 
+  /** Broker baglantisi su an acik mi (saglik ucu ve alarm). */
+  get isConnected(): boolean {
+    return this.client?.connected === true;
+  }
+
   async publish(topic: string, payload: string): Promise<void> {
     if (!this.client?.connected) throw new Error('MQTT bagli degil');
     await this.client.publishAsync(topic, payload, { qos: 1 });

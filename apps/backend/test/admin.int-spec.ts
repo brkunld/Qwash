@@ -5,6 +5,8 @@ import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import request from 'supertest';
 import { AccountService } from '../src/account/account.service';
 import { AdminController } from '../src/admin/admin.controller';
+import { AlarmService } from '../src/monitoring/alarm.service';
+import { NoopAlertNotifier } from '../src/monitoring/email-alert-notifier';
 import type { AdminActor } from '../src/admin/admin.guard';
 import { AdminGuard } from '../src/admin/admin.guard';
 import { AdminService } from '../src/admin/admin.service';
@@ -587,6 +589,10 @@ describe('Admin operasyonlari (gercek PostgreSQL)', () => {
           { provide: RefundAdminService, useValue: refunds },
           { provide: OpsService, useValue: {} },
           { provide: ProgramService, useValue: new ProgramService(prisma) },
+          {
+            provide: AlarmService,
+            useValue: new AlarmService(prisma, { isConnected: true }, new NoopAlertNotifier()),
+          },
           { provide: APP_GUARD, useClass: ThrottlerGuard },
           AdminGuard,
         ],
@@ -601,6 +607,20 @@ describe('Admin operasyonlari (gercek PostgreSQL)', () => {
     });
 
     const http = () => request(app.getHttpServer());
+
+    it('acik alarmlar: yalniz admin gorur, sorun yoksa bos liste', async () => {
+      const user = await tokenFor(UserRole.USER);
+      await http()
+        .get('/api/v1/admin/alarms')
+        .set('Authorization', `Bearer ${user.token}`)
+        .expect(403);
+      const adm = await tokenFor(UserRole.ADMIN);
+      const res = await http()
+        .get('/api/v1/admin/alarms')
+        .set('Authorization', `Bearer ${adm.token}`)
+        .expect(200);
+      expect(res.body.data).toEqual([]);
+    });
 
     async function tokenFor(role: UserRole): Promise<{ token: string; userId: string }> {
       seq += 1;
