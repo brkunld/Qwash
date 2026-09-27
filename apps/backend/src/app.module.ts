@@ -7,7 +7,9 @@ import { AccountModule } from './account/account.module';
 import { AdminModule } from './admin/admin.module';
 import { AuthModule } from './auth/auth.module';
 import { Env, validateEnv } from './config/env';
+import { HealthChecksController } from './health/health-checks.controller';
 import { HealthController } from './health/health.controller';
+import { MonitoringModule } from './monitoring/monitoring.module';
 import { UserThrottlerGuard } from './http/user-throttler.guard';
 import { PaymentsModule } from './payments/payments.module';
 import { PrismaModule } from './prisma/prisma.module';
@@ -46,8 +48,9 @@ import { WalletModule } from './wallet/wallet.module';
     AccountModule,
     RealtimeModule,
     AdminModule,
+    MonitoringModule,
   ],
-  controllers: [HealthController],
+  controllers: [HealthController, HealthChecksController],
   providers: [{ provide: APP_GUARD, useClass: UserThrottlerGuard }],
 })
 export class AppModule {}

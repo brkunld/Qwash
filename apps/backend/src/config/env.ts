@@ -32,6 +32,10 @@ export const EnvSchema = z
     DEVICE_API_URL: z.preprocess((v) => (v === '' ? undefined : v), z.url().optional()),
     // Imzali firmware imajlarinin klasoru (git disi). Bos: depo kokunde firmware-releases/.
     FIRMWARE_DIR: z.preprocess((v) => (v === '' ? undefined : v), z.string().optional()),
+    // Alarm bildirimi (Faz 7 izleme): cihaz cevrimdisi, odeme/iade takilmasi, ACK zaman asimi orani,
+    // takili seans, MQTT kopuklugu. Bos: alarmlar yalniz loga ve GET /admin/alarms'a yazilir.
+    // E-posta icin SMTP_* da tanimli olmali.
+    ALERT_EMAIL: z.preprocess((v) => (v === '' ? undefined : v), z.email().optional()),
     // Iyzico anahtarlari; tanimli degilse kart yukleme kapali (ADR-0003).
     IYZICO_API_KEY: z.preprocess((v) => (v === '' ? undefined : v), z.string().optional()),
     IYZICO_SECRET_KEY: z.preprocess((v) => (v === '' ? undefined : v), z.string().optional()),

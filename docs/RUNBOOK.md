@@ -11,6 +11,8 @@ Yaygın arızalarda **ne görülür, para güvende mi, ne yapılır**. Sayılar 
 
 `pnpm smoke` ortamı: `SMOKE_BASE_URL`, `SMOKE_CUSTOMER_EMAIL/PASSWORD`, `SMOKE_ADMIN_EMAIL/PASSWORD` (ayrıntı betiğin başında). Saha için ayrı, düşük yetkili hesaplar kullan; şifreleri depoya yazma. Giriş ucu **IP başına 15 dakikada 10 deneme** verir, bir smoke koşusu 2 giriş harcar; art arda çok koşarsan `429` alırsın (betik bunu "kontrol YAPILAMADI" diye bildirir). Sayaç backend belleğindedir: süre dolunca ya da backend yeniden başlayınca sıfırlanır.
 
+**Alarmlar:** backend arıza koşullarını kendisi izler ve `ALERT_EMAIL` tanımlıysa e-posta atar (`docs/DEPLOYMENT.md` §3). Açık alarmlar: `GET /api/v1/admin/alarms` veya `pnpm smoke`. Her alarmın metni bu belgedeki ilgili bölümü gösterir; alarm kendiliğinden kapanır (kapanışta "COZULDU" e-postası gelir). Alarm anahtarları: `device-offline:<PERON>` (§3), `sessions-reconciling` (§5), `ack-timeouts` (§4), `payments-stuck` (§8–9), `outbox-backlog` ve `mqtt-down` (§10), `sessions-need-review` (§6).
+
 ## 1. Arıza tablosu (hızlı bakış)
 
 | Belirti | Bölüm | Para durumu |

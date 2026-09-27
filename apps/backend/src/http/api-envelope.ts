@@ -204,7 +204,22 @@ export class ApiErrorFilter implements ExceptionFilter {
     }
     if (exception instanceof HttpException) {
       const status = exception.getStatus();
-      return { status, code: HttpStatus[status] ?? 'HTTP_ERROR', message: exception.message };
+      // Saglik uclari 503'te hangi bagimlilik dustugunu bilerek govdeyle verir (statusCode alani
+      // olmayan duz nesne); Nest'in varsayilan hata govdesi ayrinti sayilmaz ve sizdirilmaz.
+      const body: unknown = exception.getResponse();
+      const details =
+        status === HttpStatus.SERVICE_UNAVAILABLE &&
+        typeof body === 'object' &&
+        body !== null &&
+        !('statusCode' in body)
+          ? body
+          : undefined;
+      return {
+        status,
+        code: HttpStatus[status] ?? 'HTTP_ERROR',
+        message: exception.message,
+        ...(details ? { details } : {}),
+      };
     }
     return {
       status: HttpStatus.INTERNAL_SERVER_ERROR,

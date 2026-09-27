@@ -606,3 +606,19 @@ model FirmwareUpdate {
   @@index([deviceId, status])
   @@index([status, createdAt])
 }
+
+// Calisan alarm durumu (Faz 7 izleme). Her kural bir anahtar uretir; kosul surdukce kayit acik
+// kalir (resolvedAt bos), bitince kapanir. Bildirim yalnizca acilista, ne zaman hatirlatildiginda
+// ve kapanista gider; her tarama e-posta yagdirmaz.
+model Alarm {
+  key            String    @id // Orn: "device-offline:BAY-001", "sessions-reconciling"
+  severity       String // WARNING | CRITICAL
+  title          String
+  detail         String
+  firingSince    DateTime
+  lastNotifiedAt DateTime?
+  resolvedAt     DateTime?
+  updatedAt      DateTime  @updatedAt
+
+  @@index([resolvedAt])
+}

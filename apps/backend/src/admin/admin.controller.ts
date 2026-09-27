@@ -17,6 +17,7 @@ import {
 } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import {
+  type AdminAlarm,
   type AdminAuditEntry,
   type AdminProgram,
   type CreateProgramRequest,
@@ -61,6 +62,7 @@ import type { Request } from 'express';
 import { z } from 'zod';
 import { RefundRequestStatus } from '../generated/prisma/enums';
 import { ZodBody } from '../http/api-envelope';
+import { AlarmService } from '../monitoring/alarm.service';
 import { IdempotencyKeyRequiredError } from '../payments/payments.errors';
 import { AdminGuard, adminFromRequest, type AdminActor, SuperAdminOnly } from './admin.guard';
 import { AdminService } from './admin.service';
@@ -90,6 +92,7 @@ export class AdminController {
     private readonly refunds: RefundAdminService,
     private readonly ops: OpsService,
     private readonly programs: ProgramService,
+    private readonly alarms: AlarmService,
   ) {}
 
   @Get('me')
@@ -293,6 +296,12 @@ export class AdminController {
     @Body(new ZodBody(SetBayProgramsRequestSchema)) body: SetBayProgramsRequest,
   ): Promise<AdminProgram[]> {
     return this.programs.setBayPrograms(actor, id, body);
+  }
+
+  /** Acik alarmlar (cihaz cevrimdisi, takili seans/odeme...). Bos dizi: sorun yok. */
+  @Get('alarms')
+  activeAlarms(): Promise<AdminAlarm[]> {
+    return this.alarms.active();
   }
 
   @Get('audit-logs')
