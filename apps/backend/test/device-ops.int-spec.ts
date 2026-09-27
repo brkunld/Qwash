@@ -12,12 +12,16 @@ import { configureApp } from '../src/http/configure-app';
 import type { CommandEnvelope, OtaCommandPayload } from '../src/iot/iot.contract';
 import { OutboxService, type MessagePublisher } from '../src/outbox/outbox.service';
 import { BayClaimService } from '../src/session/bay-claim.service';
+import type { AdminActor } from '../src/admin/admin.guard';
+import { OpsService } from '../src/admin/ops.service';
 import {
   DEFAULT_DEVICE_OPS_TIMINGS,
   DeviceOpsService,
   FirmwareUpdateError,
+  toScreenText,
 } from '../src/session/device-ops.service';
 import { FIRMWARE_DIR, FirmwareController } from '../src/session/firmware.controller';
+import { SessionQueries } from '../src/session/session.queries';
 import { SessionService } from '../src/session/session.service';
 import { WalletService } from '../src/wallet/wallet.service';
 import { resetDatabase, testPrisma } from './db';
@@ -138,6 +142,154 @@ describe('Cihaz ayari ve firmware guncellemesi (DeviceOpsService, gercek Postgre
     );
     await flush();
     expect(publisher.ofType('SET_CONFIG')).toHaveLength(0);
+  });
+
+  // ---------------------------------------------------------------- hizmet durumu (ADR-0014)
+
+  describe('hizmet durumu', () => {
+    let admin: AdminActor;
+    let adminOps: OpsService;
+    let bayId: string;
+    const heartbeat = (availRev?: number) =>
+      device('heartbeat', { type: 'HEARTBEAT', ...(availRev === undefined ? {} : { availRev }) });
+
+    beforeEach(async () => {
+      adminOps = new OpsService(prisma, sessions, wallets, ops);
+      const a = await prisma.user.create({ data: { email: 'op@test.local', role: 'ADMIN' } });
+      admin = { userId: a.id, role: 'ADMIN' };
+      bayId = (await prisma.bay.findUniqueOrThrow({ where: { bayCode: BAY } })).id;
+    });
+
+    it('ekran notu: Turkce harf sadelesir, buyuk harf, 40 karakter', () => {
+      expect(toScreenText("Köpük arızalı, 15:00'te açılır")).toBe("KOPUK ARIZALI, 15:00'TE ACILIR");
+      expect(toScreenText('İğne  ŞÜÇ ı')).toBe('IGNE SUC I');
+      expect(toScreenText('x'.repeat(60))).toHaveLength(40);
+      expect(toScreenText(null)).toBe('');
+    });
+
+    it('bakim: cihaza SET_AVAILABILITY gider, ic sebep gitmez; cihaz uygulayinca senkron', async () => {
+      const view = await adminOps.setBayAvailability(admin, bayId, {
+        state: 'MAINTENANCE',
+        reason: 'Pompa arizasi, teknisyen cagrildi',
+        note: 'Köpük arızalı',
+      });
+      expect(view).toMatchObject({ problem: 'MAINTENANCE', deviceInSync: false });
+      await flush();
+      const [cmd] = publisher.ofType('SET_AVAILABILITY');
+      expect(cmd!.topic).toBe(T('cmd'));
+      expect(cmd!.envelope.payload).toEqual({
+        type: 'SET_AVAILABILITY',
+        state: 'MAINTENANCE',
+        note: 'KOPUK ARIZALI',
+        rev: 1,
+      });
+
+      await heartbeat(1); // Cihaz uyguladi
+      await flush();
+      expect(publisher.ofType('SET_AVAILABILITY')).toHaveLength(1);
+      expect((await adminOps.bays())[0]!.deviceInSync).toBe(true);
+
+      await adminOps.setBayAvailability(admin, bayId, { state: 'OPEN' });
+      await flush();
+      expect(publisher.ofType('SET_AVAILABILITY')[1]!.envelope.payload).toMatchObject({
+        state: 'OPEN',
+        note: '',
+        rev: 2,
+      });
+    });
+
+    it('cihaz eski revizyon bildirirse yeniden gonderilir; eski firmware ve saklanan mesaja gonderilmez', async () => {
+      await adminOps.setBayAvailability(admin, bayId, {
+        state: 'CLOSED',
+        note: 'Sabah 7 de acilir',
+      });
+      await flush();
+      publisher.sent = [];
+
+      await heartbeat(0); // Kapaliyken cihaz yeniden basladi, komut kayboldu
+      await flush();
+      expect(publisher.ofType('SET_AVAILABILITY')).toHaveLength(1);
+      expect(publisher.ofType('SET_AVAILABILITY')[0]!.envelope.payload).toMatchObject({
+        state: 'CLOSED',
+        rev: 1,
+      });
+
+      await heartbeat(); // Eski firmware: alan yok
+      await sessions.handleDeviceMessage(
+        T('status'),
+        JSON.stringify({
+          deviceId: DEVICE,
+          payload: { type: 'DEVICE_STATUS', status: 'ONLINE', availRev: 0 },
+        }),
+        { retained: true },
+      );
+      await status({ status: 'OFFLINE', availRev: 0 }); // LWT
+      await flush();
+      expect(publisher.ofType('SET_AVAILABILITY')).toHaveLength(1);
+    });
+
+    it('kapali: seans baslatilamaz, musteri notu gorunur, suren seans kesilmez', async () => {
+      await adminOps.setBayAvailability(admin, bayId, {
+        state: 'CLOSED',
+        reason: 'Gece',
+        note: 'Sabah 07:00 de açılır',
+      });
+      const queries = new SessionQueries(prisma, sessions, clock);
+      expect(await queries.getBay(BAY)).toMatchObject({
+        available: false,
+        unavailableReason: 'CLOSED',
+        notice: 'Sabah 07:00 de açılır',
+      });
+      expect((await adminOps.bays())[0]!.outOfService).toMatchObject({
+        kind: 'CLOSED',
+        reason: 'Gece',
+      });
+    });
+
+    it('istasyonu kapat: acik peronlar kapanir, bakimdaki dokunulmaz; ac: yalniz kapalilar acilir', async () => {
+      const station = await prisma.station.findUniqueOrThrow({ where: { code: STATION } });
+      const bay2 = await prisma.bay.create({
+        data: { bayCode: 'BAY-002', name: 'BAY-002', stationId: station.id },
+      });
+      await adminOps.setBayAvailability(admin, bay2.id, { state: 'MAINTENANCE', reason: 'Nozul' });
+
+      expect(
+        await adminOps.setStationAvailability(admin, station.id, { state: 'CLOSED', note: 'Gece' }),
+      ).toEqual({ changed: 1, skippedMaintenance: 1 });
+      const kinds = async () =>
+        Object.fromEntries(
+          (await adminOps.bays()).map((b) => [b.bayCode, b.outOfService?.kind ?? 'OPEN']),
+        );
+      expect(await kinds()).toEqual({ [BAY]: 'CLOSED', 'BAY-002': 'MAINTENANCE' });
+
+      // Tekrar kapatmak degisiklik yapmaz.
+      expect(await adminOps.setStationAvailability(admin, station.id, { state: 'CLOSED' })).toEqual(
+        { changed: 0, skippedMaintenance: 1 },
+      );
+
+      expect(await adminOps.setStationAvailability(admin, station.id, { state: 'OPEN' })).toEqual({
+        changed: 1,
+        skippedMaintenance: 1,
+      });
+      expect(await kinds()).toEqual({ [BAY]: 'OPEN', 'BAY-002': 'MAINTENANCE' });
+
+      // Cihazi olmayan BAY-002'ye komut gitmez; BAY-001'e kapat + ac.
+      await flush();
+      expect(
+        publisher
+          .ofType('SET_AVAILABILITY')
+          .map((c) => (c.envelope.payload as { state: string }).state),
+      ).toEqual(['CLOSED', 'OPEN']);
+      const actions = (await prisma.adminAuditLog.findMany({ orderBy: { createdAt: 'asc' } })).map(
+        (a) => a.action,
+      );
+      expect(actions).toEqual([
+        'BAY_MAINTENANCE_ON',
+        'STATION_CLOSED',
+        'STATION_CLOSED',
+        'STATION_OPENED',
+      ]);
+    });
   });
 
   // ---------------------------------------------------------------- guncelleme

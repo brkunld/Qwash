@@ -89,6 +89,19 @@ export interface SetConfigCommandPayload {
 }
 
 /**
+ * Peronun hizmet durumu (ADR-0014). Cihaz NVS'e yazar (aginsiz acilista da gosterir), QR'i
+ * gizler ve ekranda BAKIMDA/KAPALI + not gosterir; suren seans kesilmez. rev'i DEVICE_STATUS ve
+ * HEARTBEAT'te geri bildirir; backend farkliysa yeniden gonderir.
+ */
+export interface SetAvailabilityCommandPayload {
+  type: 'SET_AVAILABILITY';
+  state: 'OPEN' | 'MAINTENANCE' | 'CLOSED';
+  /** Ekran notu: ASCII buyuk harf, en fazla 40 karakter; bos olabilir. */
+  note: string;
+  rev: number;
+}
+
+/**
  * Imzali firmware guncellemesi (ADR-0013). Cihaz seans/ekran bagi yokken kabul eder, imaji
  * url'den indirir, sha256 ve imzayi (gomulu acik anahtar) dogrular, sonra yeniden baslar.
  */
@@ -116,6 +129,7 @@ export interface CommandEnvelope {
     | StopCommandPayload
     | ScreenCommandPayload
     | SetConfigCommandPayload
+    | SetAvailabilityCommandPayload
     | OtaCommandPayload;
 }
 
@@ -168,6 +182,8 @@ export const DeviceStatusSchema = z.object({
   resetReason: z.number().int().optional(),
   // Firmware 0.7.0+: cihazin kullandigi QR taban adresi (SET_CONFIG karsilastirmasi).
   qrBase: z.string().max(200).optional(),
+  // Firmware 0.8.0+: uyguladigi SET_AVAILABILITY revizyonu (ADR-0014).
+  availRev: z.number().int().nonnegative().optional(),
 });
 
 export const HeartbeatSchema = z.object({
@@ -179,6 +195,7 @@ export const HeartbeatSchema = z.object({
   remainingSec: z.number().int().nonnegative().optional(),
   // Device twin: seans surerken cekili role (firmware 0.5.0+).
   relayIndex: z.number().int().optional(),
+  availRev: z.number().int().nonnegative().optional(),
 });
 
 // Dokunmatik ekran olaylari (events topic'i). Ekrandaki DURDUR ayri olay degildir: cihaz roleyi

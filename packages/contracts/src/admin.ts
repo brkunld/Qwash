@@ -221,11 +221,20 @@ export const AdminBayViewSchema = z.object({
   name: z.string(),
   stationCode: z.string(),
   status: z.enum(['IDLE', 'WAITING', 'RUNNING', 'OFFLINE', 'MAINTENANCE', 'ERROR']),
-  /** Musteri seans baslatabilir mi; degilse neden (MAINTENANCE, NO_DEVICE, DEVICE_STALE...). */
+  /** Musteri seans baslatabilir mi; degilse neden (MAINTENANCE, CLOSED, NO_DEVICE...). */
   problem: z.string().nullable(),
-  maintenance: z
-    .object({ since: z.string(), reason: z.string().nullable(), by: z.string().nullable() })
+  /** Hizmet disi (ADR-0014). null: acik. */
+  outOfService: z
+    .object({
+      kind: z.enum(['MAINTENANCE', 'CLOSED']),
+      since: z.string(),
+      reason: z.string().nullable(),
+      note: z.string().nullable(),
+      by: z.string().nullable(),
+    })
     .nullable(),
+  /** Cihaz ekranindaki durum guncel mi (false: cihaz henuz uygulamadi veya eski firmware). */
+  deviceInSync: z.boolean(),
   device: z
     .object({
       deviceId: z.string(),
@@ -260,11 +269,65 @@ export const AdminAlarmSchema = z.object({
 });
 export type AdminAlarm = z.infer<typeof AdminAlarmSchema>;
 
-export const SetMaintenanceRequestSchema = z.discriminatedUnion('enabled', [
-  z.object({ enabled: z.literal(true), reason: z.string().trim().min(3).max(200) }),
-  z.object({ enabled: z.literal(false) }),
+/** Cihaz ekranina sigan musteri notu (ekran ASCII buyuk harfe cevirir). */
+export const OUT_OF_SERVICE_NOTE_MAX = 40;
+const PublicNote = z
+  .string()
+  .trim()
+  .max(OUT_OF_SERVICE_NOTE_MAX)
+  .transform((v) => v || null)
+  .nullish();
+
+/**
+ * Peronun hizmet durumu (ADR-0014). MAINTENANCE icin ic sebep zorunlu (plansiz, sorun);
+ * CLOSED icin istege bagli (planli: gece, temizlik). note musteriye gorunur.
+ */
+export const SetBayAvailabilityRequestSchema = z.discriminatedUnion('state', [
+  z.object({ state: z.literal('OPEN') }),
+  z.object({
+    state: z.literal('MAINTENANCE'),
+    reason: z.string().trim().min(3).max(200),
+    note: PublicNote,
+  }),
+  z.object({
+    state: z.literal('CLOSED'),
+    reason: z
+      .string()
+      .trim()
+      .max(200)
+      .transform((v) => v || null)
+      .nullish(),
+    note: PublicNote,
+  }),
 ]);
-export type SetMaintenanceRequest = z.infer<typeof SetMaintenanceRequestSchema>;
+export type SetBayAvailabilityRequest = z.infer<typeof SetBayAvailabilityRequestSchema>;
+
+/**
+ * Istasyonun tum peronlari. CLOSED yalniz acik peronlari kapatir; OPEN yalniz KAPALI peronlari
+ * acar. Bakimdaki peron iki durumda da bakimda kalir (bakim bilgisi kaybolmasin).
+ */
+export const SetStationAvailabilityRequestSchema = z.discriminatedUnion('state', [
+  z.object({ state: z.literal('OPEN') }),
+  z.object({
+    state: z.literal('CLOSED'),
+    reason: z
+      .string()
+      .trim()
+      .max(200)
+      .transform((v) => v || null)
+      .nullish(),
+    note: PublicNote,
+  }),
+]);
+export type SetStationAvailabilityRequest = z.infer<typeof SetStationAvailabilityRequestSchema>;
+
+export const StationAvailabilityResultSchema = z.object({
+  /** Durumu degisen peron sayisi. */
+  changed: z.number().int(),
+  /** Bakimda oldugu icin dokunulmayan peron sayisi. */
+  skippedMaintenance: z.number().int(),
+});
+export type StationAvailabilityResult = z.infer<typeof StationAvailabilityResultSchema>;
 
 export const AdminStopSessionRequestSchema = z.object({ reason: Reason });
 export type AdminStopSessionRequest = z.infer<typeof AdminStopSessionRequestSchema>;

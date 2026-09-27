@@ -376,6 +376,12 @@ export class SessionService {
       if (s.type === 'DEVICE_STATUS') {
         await this.deviceOps?.onDeviceStatus(parsed, msg.deviceId, s.status, s.qrBase);
       }
+      // Saklanan (retained) mesaj eski durumdur; cihaz gercekten baglanmis olmayabilir.
+      const reportsAvailability =
+        (s.type === 'DEVICE_STATUS' && s.status !== 'OFFLINE') || s.type === 'HEARTBEAT';
+      if (reportsAvailability && s.availRev !== undefined && !meta.retained) {
+        await this.deviceOps?.onAvailabilityReport(parsed, msg.deviceId, s.availRev);
+      }
       return 'DEVICE_STATE_RECORDED';
     }
 
@@ -973,7 +979,8 @@ export class SessionService {
    * ayni kurali kullanir (onay ekraninda "uygun" gorunen peron baslatmada reddedilmesin).
    */
   bayProblem(bay: BayWithDevice): string | null {
-    if (bay.status === BayStatus.MAINTENANCE || bay.maintenanceAt) return 'MAINTENANCE';
+    if (bay.outOfServiceKind === 'CLOSED') return 'CLOSED';
+    if (bay.status === BayStatus.MAINTENANCE || bay.outOfServiceKind) return 'MAINTENANCE';
     if (!bay.device) return 'NO_DEVICE';
     if (bay.device.reportedStatus !== 'ONLINE') return `DEVICE_${bay.device.reportedStatus}`;
     const age = this.clock().getTime() - bay.device.lastSeenAt.getTime();

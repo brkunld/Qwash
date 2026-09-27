@@ -40,7 +40,7 @@ describe('Admin peron ve seans operasyonlari (gercek PostgreSQL)', () => {
     nowMs = Date.now();
     wallets = new WalletService(prisma);
     sessions = new SessionService(prisma, wallets, new OutboxService(prisma, clock), clock);
-    ops = new OpsService(prisma, sessions, wallets);
+    ops = new OpsService(prisma, sessions, wallets, { enqueueAvailability: async () => {} });
 
     const station = await prisma.station.create({ data: { code: STATION, name: 'Test' } });
     const program = await prisma.washProgram.create({
@@ -103,8 +103,16 @@ describe('Admin peron ve seans operasyonlari (gercek PostgreSQL)', () => {
 
   it('bakim modu yeni seansi engeller, suren seansi kesmez; seans bitince peron bakimda kalir', async () => {
     const s = await running(60);
-    const bay = await ops.setMaintenance(admin, bayId, { enabled: true, reason: 'Nozul degisimi' });
-    expect(bay.maintenance).toMatchObject({ reason: 'Nozul degisimi', by: admin.userId });
+    const bay = await ops.setBayAvailability(admin, bayId, {
+      state: 'MAINTENANCE',
+      reason: 'Nozul degisimi',
+    });
+    expect(bay.outOfService).toMatchObject({
+      kind: 'MAINTENANCE',
+      reason: 'Nozul degisimi',
+      note: null,
+      by: admin.userId,
+    });
     expect(bay.problem).toBe('MAINTENANCE');
     expect(bay.activeSession?.id).toBe(s.id);
 
@@ -118,10 +126,10 @@ describe('Admin peron ve seans operasyonlari (gercek PostgreSQL)', () => {
     expect(after.problem).toBe('MAINTENANCE'); // ama baslatilamaz
     await expect(running()).rejects.toBeInstanceOf(BayUnavailableError);
 
-    await ops.setMaintenance(admin, bayId, { enabled: false });
+    await ops.setBayAvailability(admin, bayId, { state: 'OPEN' });
     expect((await ops.bays())[0]!.problem).toBeNull();
     const audits = await prisma.adminAuditLog.findMany({ orderBy: { createdAt: 'asc' } });
-    expect(audits.map((a) => a.action)).toEqual(['BAY_MAINTENANCE_ON', 'BAY_MAINTENANCE_OFF']);
+    expect(audits.map((a) => a.action)).toEqual(['BAY_MAINTENANCE_ON', 'BAY_OPENED']);
   });
 
   it('acil durdurma: STOP (ADMIN_OVERRIDE) gider, tahsilat kullanilan sure kadar', async () => {
@@ -258,7 +266,7 @@ describe('Admin peron ve seans operasyonlari (gercek PostgreSQL)', () => {
       bayCode: BAY,
       stationCode: STATION,
       problem: null,
-      maintenance: null,
+      outOfService: null,
       activeSession: null,
       device: { deviceId: DEVICE, reportedStatus: 'ONLINE', firmwareVersion: 'test' },
     });

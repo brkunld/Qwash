@@ -296,17 +296,28 @@ model Station {
   createdAt  DateTime      @default(now())
 }
 
+/** MAINTENANCE: plansiz, sorun sayilir. CLOSED: planli (gece, don, temizlik), sorun sayilmaz. */
+enum OutOfServiceKind {
+  MAINTENANCE
+  CLOSED
+}
+
 model Bay {
   id                String        @id @default(uuid())
   bayCode           String        @unique // QR icerigi (Orn: "BAY-001")
   name              String
   status            BayStatus     @default(IDLE)
-  // Bakim modu (ADR-0011 #6): calisma durumundan ayri tutulur; seans bitince status IDLE
-  // olsa da peron bakimda kalir. Doluysa yeni seans baslatilamaz.
-  maintenanceAt     DateTime?
-  maintenanceReason String?
-  maintenanceBy     String?
-  stationId         String
+  // Hizmet disi (ADR-0014): calisma durumundan ayri tutulur; seans bitince status IDLE olsa da
+  // peron hizmet disi kalir. Doluysa yeni seans baslatilamaz. Reason ic nottur; note cihaz
+  // ekraninda ve musteri sayfasinda gorunur.
+  outOfServiceKind   OutOfServiceKind?
+  outOfServiceAt     DateTime?
+  outOfServiceReason String?
+  outOfServiceNote   String?
+  outOfServiceBy     String?
+  // Her durum degisiminde artar; cihaz uyguladigi degeri bildirir, farkliysa yeniden gonderilir.
+  availabilityRev    Int               @default(0)
+  stationId          String
   station           Station       @relation(fields: [stationId], references: [id], onDelete: Restrict)
   programs          BayProgram[]
   sessions          WashSession[]
@@ -411,6 +422,8 @@ model Device {
   lastDriftStopAt  DateTime?
   // Cihazin bildirdigi QR taban adresi; backend istenenden farkliysa SET_CONFIG gonderir.
   qrBase           String?
+  // Cihazin uyguladigi hizmet durumu revizyonu (0.8.0+); eski firmware'de null.
+  availRev         Int?
   updatedAt        DateTime  @updatedAt
   firmwareUpdates  FirmwareUpdate[]
 }

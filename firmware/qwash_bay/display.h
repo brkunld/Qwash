@@ -147,6 +147,31 @@ static void uiIdle(const char* qrUrl, const char* bayId, bool wifiOk, bool mqttO
   uiCenterText(st, gfx.height() - 22, 2, (wifiOk && mqttOk) ? TFT_GREEN : TFT_YELLOW);
 }
 
+// Hizmet disi (ADR-0014): buyuk durum + istege bagli not (en fazla 2 satir, kelimeden bolunur).
+static void uiOutOfService(const char* title, const char* note, const char* bayId, uint16_t color) {
+  gfx.fillScreen(TFT_BLACK);
+  uiCenterText(title, 40, 6, color);
+  if (note && note[0]) {
+    const int perLine = (gfx.width() - 10) / 12;  // Font0 boyut 2: 12 px/karakter
+    char l1[32] = "", l2[32] = "";
+    size_t n = strlen(note);
+    if ((int)n <= perLine) {
+      strlcpy(l1, note, sizeof(l1));
+    } else {
+      int cut = perLine;
+      while (cut > 0 && note[cut] != ' ') cut--;
+      if (cut == 0) cut = perLine;  // Tek uzun kelime
+      strlcpy(l1, note, min((size_t)cut + 1, sizeof(l1)));
+      const char* rest = note + cut;
+      while (*rest == ' ') rest++;
+      strlcpy(l2, rest, min((size_t)perLine + 1, sizeof(l2)));
+    }
+    uiCenterText(l1, 120, 2, TFT_WHITE);
+    if (l2[0]) uiCenterText(l2, 144, 2, TFT_WHITE);
+  }
+  uiCenterText(bayId, gfx.height() - 30, 2, TFT_DARKGREY);
+}
+
 // Menu ust satiri: sol baslik + alt bilgi. Geri sayim uiCountdown ile yalniz kendi alanini boyar.
 static void uiHeader(const char* title, const char* sub) {
   gfx.fillRect(0, 0, gfx.width(), 48, TFT_BLACK);

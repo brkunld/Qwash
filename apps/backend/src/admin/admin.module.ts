@@ -4,6 +4,7 @@ import { PaymentGateway } from '../payments/payment-gateway';
 import { PaymentsModule } from '../payments/payments.module';
 import { PrismaService } from '../prisma/prisma.service';
 import { MonitoringModule } from '../monitoring/monitoring.module';
+import { DeviceOpsService } from '../session/device-ops.service';
 import { SessionModule } from '../session/session.module';
 import { SessionService } from '../session/session.service';
 import { WalletModule } from '../wallet/wallet.module';
@@ -27,9 +28,13 @@ import { RefundAdminService } from './refund-admin.service';
     },
     {
       provide: OpsService,
-      inject: [PrismaService, SessionService, WalletService],
-      useFactory: (prisma: PrismaService, sessions: SessionService, wallets: WalletService) =>
-        new OpsService(prisma, sessions, wallets),
+      inject: [PrismaService, SessionService, WalletService, DeviceOpsService],
+      useFactory: (
+        prisma: PrismaService,
+        sessions: SessionService,
+        wallets: WalletService,
+        deviceOps: DeviceOpsService,
+      ) => new OpsService(prisma, sessions, wallets, deviceOps),
     },
     {
       provide: AdminService,

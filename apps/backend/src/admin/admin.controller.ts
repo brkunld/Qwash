@@ -34,8 +34,11 @@ import {
   ReviewSessionRequestSchema,
   type ServiceRefundRequest,
   ServiceRefundRequestSchema,
-  type SetMaintenanceRequest,
-  SetMaintenanceRequestSchema,
+  type SetBayAvailabilityRequest,
+  SetBayAvailabilityRequestSchema,
+  type SetStationAvailabilityRequest,
+  SetStationAvailabilityRequestSchema,
+  type StationAvailabilityResult,
   type AdminMe,
   type AdminRefundRequest,
   type AdminStation,
@@ -200,13 +203,22 @@ export class AdminController {
     return this.ops.bays();
   }
 
-  @Put('bays/:id/maintenance')
-  setMaintenance(
+  @Put('bays/:id/availability')
+  setBayAvailability(
     @CurrentAdmin() actor: AdminActor,
     @Param('id', ParseUUIDPipe) id: string,
-    @Body(new ZodBody(SetMaintenanceRequestSchema)) body: SetMaintenanceRequest,
+    @Body(new ZodBody(SetBayAvailabilityRequestSchema)) body: SetBayAvailabilityRequest,
   ): Promise<AdminBayView> {
-    return this.ops.setMaintenance(actor, id, body);
+    return this.ops.setBayAvailability(actor, id, body);
+  }
+
+  @Put('stations/:id/availability')
+  setStationAvailability(
+    @CurrentAdmin() actor: AdminActor,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body(new ZodBody(SetStationAvailabilityRequestSchema)) body: SetStationAvailabilityRequest,
+  ): Promise<StationAvailabilityResult> {
+    return this.ops.setStationAvailability(actor, id, body);
   }
 
   @Post('sessions/:id/stop')

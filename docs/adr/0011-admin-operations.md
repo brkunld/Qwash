@@ -71,6 +71,8 @@ Talep reddedilirse (gerekce zorunlu) bloke serbest birakilir; yalniz hic parca o
 
 ### 6. Bakim modu ve acil durdurma
 
+> **Guncelleme (2026-09-28):** Bakim modu ADR-0014 ile hizmet durumuna (bakim / kapali) genisletildi ve cihaz ekranina yansitildi.
+
 Bakim modu peronu `MAINTENANCE` yapar; yeni seans baslatilamaz. Suren seans kesilmez (musteri parasini odedigi sureyi kullanir); seans bitince peron `IDLE`'a degil `MAINTENANCE`'ta kalir. Acil durdurma ayri bir islemdir: admin seansi durdurur, cihaza STOP gider (musterinin durdurmasiyla ayni yol, neden `ADMIN_STOP`), tahsilat kullanilan saniye kadardir.
 
 ### 7. Admin paneli ayri uygulama
