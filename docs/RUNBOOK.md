@@ -31,7 +31,7 @@ Yaygın arızalarda **ne görülür, para güvende mi, ne yapılır**. Sayılar 
 
 - **Bak:** süreç ayakta mı, `GET /api/v1/health`, backend log'u.
 - **Yap:** backend'i yeniden başlat. Yeniden başlangıçta yarım kalan işler kendini toparlar: bekleyen START/STOP komutları outbox'ta durur, süresi dolan seanslar süpürme (sweep) ile kapanır.
-- **Dikkat:** açılıştan sonra ~90 sn boyunca peronun durumu cihazın eski (retained) mesajından yanlış "başlatılabilir" görünebilir (bilinen küçük sorun). Cihazı kapalıysa peron bu sürede yanlışlıkla açık görünür; ACK gelmezse seans yine `ACK_TIMEOUT` ile iade edilir.
+- **Açılış sonrası:** broker, backend yeniden bağlanınca cihazın saklanan (retained) `DEVICE_STATUS` mesajını yeniden verir. Bu mesaj cihazın **şimdi** canlı olduğunu kanıtlamaz, bu yüzden `lastSeenAt`'i ilerletmez: kapalı bir cihazın peronu yeniden başlatma sonrası da "başlatılabilir" görünmez (`DEVICE_STALE`). Cihaz canlıysa ilk heartbeat'iyle (bosta en fazla 30 sn) peron açılır; bu kısa sürede QR ekranı "peron cihazından haber alınamıyor" gösterebilir.
 - `pnpm smoke` `503 SERVICE_BUSY` görürse: aşırı yük (veritabanı bağlantı havuzu dolu), bkz. `docs/LOAD-TEST.md`. Bekle, tekrar dene; para etkilenmez.
 
 ## 3. Peron çevrimdışı (`OFFLINE`, `DEVICE_STALE`, `NO_DEVICE`)

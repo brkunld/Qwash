@@ -28,7 +28,9 @@ export class SessionWorker implements OnApplicationBootstrap, OnApplicationShutd
   ) {}
 
   onApplicationBootstrap(): void {
-    this.mqtt.start((topic, payload) => this.sessions.handleDeviceMessage(topic, payload));
+    this.mqtt.start((topic, payload, meta) =>
+      this.sessions.handleDeviceMessage(topic, payload, meta),
+    );
     this.every('outbox', this.intervals.outboxMs, () => this.outbox.publishPending(this.mqtt));
     this.every('sweep', this.intervals.sweepMs, () => this.sessions.sweep());
     for (const s of this.sweepers) this.every(s.name, this.intervals.sweepMs, () => s.sweep());
