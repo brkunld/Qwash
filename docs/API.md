@@ -199,7 +199,7 @@ Uygulama: **Redis** üzerinde `sliding window` algoritması ile.
 İmza doğru olsa bile bildirimdeki `status` kullanılmaz: backend sonucu İyzico'dan sorar ve yanıtın kendi imzasını (`paymentStatus:paymentId:currency:basketId:conversationId:paidPrice:price:token`) doğrular. Böylece bakiye yalnız İyzico'nun imzalı yanıtıyla yüklenir. İyzico bildirimi 3 kez (15 dk arayla) dener; kaçan bildirimleri mutabakat worker'ı yakalar.
 
 ### 7.2 IP Allowlist
-Production Nginx / API Gateway katmanında yalnızca [https://developer.iyzico.com/docs/webhooks](https://developer.iyzico.com/docs/webhooks) adresinde yayınlanan İyzico IP aralıklarına izin verilir. Diğer IP'lerden gelen istekler `403` ile reddedilir.
+Production Nginx / API Gateway katmanında `POST /api/v1/payments/webhook` için yalnızca İyzico'nun bildirim IP'lerine izin verilir; diğer IP'lerden gelen istekler `403` ile reddedilir. Liste, İyzico'nun webhook imzasını açtığı e-postanın ekinde gönderilir (hesaba özel, depoya eklenmez; güncel liste için İyzico'ya sorulur). 2026-09-28 sandbox denemesinde bildirim `213.226.118.95` adresinden geldi. IP kısıtı ek katmandır; asıl güvence §7.1 imzası ve sonucun İyzico'dan sorulmasıdır. Nginx bir vekil arkasındaysa (Cloudflare vb.) kaynak IP `X-Forwarded-For`/`CF-Connecting-IP`'den güvenilir vekil yapılandırmasıyla alınmalıdır.
 
 ### 7.3 Idempotency
 Mükerrer bildirim, callback ve mutabakat aynı `CardTopUp` satırında koşullu durum geçişiyle (`PENDING/EXPIRED → SUCCEEDED`) tekilleştirilir; ledger anahtarı `card-topup:<id>` benzersizdir. Ayrı bir `InboxMessage` kaydı gerekmez.
