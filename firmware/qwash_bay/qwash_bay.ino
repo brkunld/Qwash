@@ -201,6 +201,13 @@ static uint32_t remainingSec() {
 
 // ---------- NVS ----------
 static void loadSettings() {
+  if (prefs.getUChar("cfgVer", 1) < SETTINGS_VERSION) {
+    prefs.putString("mqttHost", DEFAULT_MQTT_HOST);
+    prefs.putString("mqttTlsPort", DEFAULT_MQTT_PORT);
+    prefs.putString("qrBase", DEFAULT_QR_BASE);
+    prefs.putUChar("cfgVer", SETTINGS_VERSION);
+    Serial.printf("[nvs] ayar surumu %u: broker %s:%s\n", SETTINGS_VERSION, DEFAULT_MQTT_HOST, DEFAULT_MQTT_PORT);
+  }
   strlcpy(mqttHost, prefs.getString("mqttHost", DEFAULT_MQTT_HOST).c_str(), sizeof(mqttHost));
   strlcpy(mqttPortStr, prefs.getString("mqttTlsPort", DEFAULT_MQTT_PORT).c_str(), sizeof(mqttPortStr));
   strlcpy(mqttPass, prefs.getString("mqttPass", DEFAULT_MQTT_PASS).c_str(), sizeof(mqttPass));
@@ -871,7 +878,7 @@ static void onMessage(char* topic, byte* payload, unsigned int len) {
 // ---------- Wi-Fi / MQTT ----------
 static void onSaveParams() { paramsChanged = true; }
 
-static WiFiManagerParameter pHost("host", "MQTT sunucu (IP)", DEFAULT_MQTT_HOST, 63);
+static WiFiManagerParameter pHost("host", "MQTT sunucu (alan adi / IP)", DEFAULT_MQTT_HOST, 63);
 static WiFiManagerParameter pPort("port", "MQTT port", DEFAULT_MQTT_PORT, 7);
 // Kayitli sifre portalda gosterilmez; bos birakilirsa mevcut sifre korunur.
 static WiFiManagerParameter pPass("pass", "MQTT sifre (bos = degistirme)", "", 64, "type='password'");

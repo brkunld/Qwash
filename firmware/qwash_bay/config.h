@@ -2,7 +2,7 @@
 // QWASH peron firmware'i (Faz 3 SPIKE). Kontrat: docs/IOT.md
 // Donanim: ESP32-32E 3.2" ST7789 240x320 (SKU E32R32P).
 
-#define FW_VERSION "0.8.0"
+#define FW_VERSION "0.9.0"
 
 // ---- Ekran pinleri (E32R32P uretici semasi; kartinla dogrula) ----
 constexpr int PIN_TFT_SCLK = 14;
@@ -56,8 +56,13 @@ constexpr uint32_t END_RESEND_MS = 120000;
 constexpr uint32_t WIFI_RETRY_MS = 15000;  // Wi-Fi kopunca kendi yeniden deneme araligi.
 
 // ---- Portal ile ayarlanabilen varsayilanlar (NVS'te saklanir) ----
-#define DEFAULT_MQTT_HOST "192.168.1.100"  // Bilgisayarinin LAN IP'si
-#define DEFAULT_MQTT_PORT "18883"          // TLS; docker/docker-compose.dev.yml (NVS anahtari mqttTlsPort)
+// Production broker (deploy/docker-compose.prod.yml). Yerel gelistirme icin portaldan bilgisayarin
+// LAN IP'si ve 18883 girilir (docker/docker-compose.dev.yml); sertifika SAN'i o adresi icermeli.
+#define DEFAULT_MQTT_HOST "qwash.burakunaldi.me"
+#define DEFAULT_MQTT_PORT "8883"  // TLS (NVS anahtari mqttTlsPort)
+// NVS ayar surumu. Artinca kayitli broker/QR adresi yeni varsayilanlarla degistirilir (loadSettings);
+// Wi-Fi, MQTT sifresi, istasyon ve peron korunur. 2: LAN gelistirme broker'indan production'a.
+constexpr uint8_t SETTINGS_VERSION = 2;
 // MQTT sifresi (kullanici adi deviceId). Portal yalnizca Wi-Fi baglanamazsa acildigi icin
 // gelistirmede sifre secrets.h'den gelir (git'e girmez; secrets.h.example'a bak). NVS'te portaldan
 // girilmis sifre varsa o kullanilir.
@@ -74,5 +79,5 @@ constexpr uint32_t WIFI_RETRY_MS = 15000;  // Wi-Fi kopunca kendi yeniden deneme
 static_assert(sizeof(DEFAULT_AP_PASS) - 1 >= 8, "DEFAULT_AP_PASS en az 8 karakter olmali");
 #define DEFAULT_STATION_ID "STATION-01"
 #define DEFAULT_BAY_ID "BAY-001"
-// QR icerigi = QR_BASE + bayId. Gercek alan adi belli olunca portaldan guncellenir.
-#define DEFAULT_QR_BASE "https://qwash.example/b/"
+// QR icerigi = QR_BASE + bayId. Backend farkli bir adres isterse SET_CONFIG ile gunceller (ADR-0013).
+#define DEFAULT_QR_BASE "https://qwash.burakunaldi.me/b/"
