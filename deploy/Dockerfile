@@ -14,6 +14,8 @@ WORKDIR /app
 
 FROM base AS build
 COPY . .
+# Kok "prepare" betigi git hook'larini ayarlar; imajda git deposu yok.
+RUN npm pkg delete scripts.prepare
 RUN --mount=type=cache,id=pnpm-store,target=/root/.local/share/pnpm/store \
   pnpm install --frozen-lockfile
 
