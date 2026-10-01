@@ -1,0 +1,135 @@
+# QWASH production (tek sunucu). Kurulum ve guncelleme: docs/DEPLOYMENT.md, deploy/deploy.sh.
+# Calistirma (depo kokunden):
+#   docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env.production up -d --wait
+# Disariya yalniz caddy (80/443) ve mosquitto TLS (8883) acilir; veritabani ve duz MQTT ic agda kalir.
+name: qwash
+
+x-app: &app
+  image: qwash-app:latest
+  pull_policy: never # yerelde derlenir (deploy/deploy.sh)
+  restart: unless-stopped
+  env_file: .env.production
+  logging:
+    driver: json-file
+    options: { max-size: 20m, max-file: '5' }
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: qwash
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?deploy/.env.production icinde tanimla}
+      POSTGRES_DB: qwash
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U qwash -d qwash']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  mosquitto:
+    image: eclipse-mosquitto:2
+    restart: unless-stopped
+    ports:
+      - '8883:8883' # Cihazlar: MQTT TLS (ozel CA, firmware/qwash_bay/mqtt_ca.h)
+    volumes:
+      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - ./secrets/mqtt/acl:/mosquitto/config/acl:ro
+      - ./secrets/mqtt/passwd:/mosquitto/config/passwd:ro
+      - ./secrets/mqtt/ca.crt:/mosquitto/config/certs/ca.crt:ro
+      - ./secrets/mqtt/server.crt:/mosquitto/config/certs/server.crt:ro
+      - ./secrets/mqtt/server.key:/mosquitto/config/certs/server.key:ro
+      - mosquitto-data:/mosquitto/data
+    environment:
+      MQTT_HEALTH_PASSWORD: ${MQTT_HEALTH_PASSWORD:?deploy/.env.production icinde tanimla}
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          'mosquitto_sub -u qwash-health -P "$$MQTT_HEALTH_PASSWORD" -t \$$SYS/broker/uptime -C 1 -W 3',
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # Bekleyen migration'lari uygular ve cikar; backend ancak basariyla bitince baslar.
+  migrate:
+    <<: *app
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      args:
+        CUSTOMER_API_URL: https://${CUSTOMER_HOST:?}/api/v1
+        ADMIN_API_URL: https://${ADMIN_HOST:?}/api/v1
+        NEXT_PUBLIC_GOOGLE_CLIENT_ID: ${NEXT_PUBLIC_GOOGLE_CLIENT_ID:-}
+    restart: 'no'
+    working_dir: /app/apps/backend
+    command: ['node_modules/.bin/prisma', 'migrate', 'deploy']
+    depends_on:
+      postgres: { condition: service_healthy }
+
+  backend:
+    <<: *app
+    working_dir: /app/apps/backend
+    command: ['node', 'dist/main.js']
+    environment:
+      FIRMWARE_DIR: /data/firmware
+    volumes:
+      - firmware:/data/firmware
+    depends_on:
+      postgres: { condition: service_healthy }
+      mosquitto: { condition: service_healthy }
+      migrate: { condition: service_completed_successfully }
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://localhost:3001/api/v1/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  web-customer:
+    <<: *app
+    working_dir: /app/apps/web-customer
+    command: ['node_modules/.bin/next', 'start', '--port', '3000']
+    depends_on:
+      backend: { condition: service_healthy }
+
+  web-admin:
+    <<: *app
+    working_dir: /app/apps/web-admin
+    command: ['node_modules/.bin/next', 'start', '--port', '3002']
+    depends_on:
+      backend: { condition: service_healthy }
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - '80:80'
+      - '443:443'
+      - '443:443/udp'
+    environment:
+      CUSTOMER_HOST: ${CUSTOMER_HOST}
+      ADMIN_HOST: ${ADMIN_HOST}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - web-customer
+      - web-admin
+
+volumes:
+  postgres-data:
+  mosquitto-data:
+  firmware:
+  caddy-data:
+  caddy-config:
