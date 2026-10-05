@@ -123,9 +123,15 @@ services:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data
       - caddy-config:/config
+    # edge: ayni sunucudaki diger projeler (Akyay) bu Caddy'nin arkasinda calisir.
+    networks: [default, edge]
     depends_on:
       - web-customer
       - web-admin
+
+networks:
+  edge:
+    external: true # docker network create edge
 
 volumes:
   postgres-data:
