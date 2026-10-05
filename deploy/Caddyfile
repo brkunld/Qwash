@@ -35,11 +35,3 @@
 		reverse_proxy web-admin:3002
 	}
 }
-
-# Akyay Gayrimenkul (ayri depo, /opt/akyay). "edge" agi uzerinden akyay-app:3000.
-akyay.burakunaldi.me {
-	import common
-	header X-Frame-Options "SAMEORIGIN"
-	header X-Robots-Tag "noindex, nofollow"
-	reverse_proxy akyay-app:3000
-}

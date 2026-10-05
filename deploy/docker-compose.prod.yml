@@ -123,7 +123,8 @@ services:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data
       - caddy-config:/config
-    # edge: ayni sunucudaki diger projeler (Akyay) bu Caddy'nin arkasinda calisir.
+    # edge: ayni sunucudaki diger projeler bu Caddy'nin arkasinda calisabilir (su an bos;
+    # Akyay 2026-10-06'da kendi sunucusuna tasindi).
     networks: [default, edge]
     depends_on:
       - web-customer
