@@ -19,7 +19,7 @@ Yaygın arızalarda **ne görülür, para güvende mi, ne yapılır**. Sayılar 
 |---|---|---|
 | `pnpm smoke`: backend'e ulaşılamıyor | 2 | Etkilenmez (bekleyen işlem yok) |
 | Peron "çevrimdışı" / `DEVICE_STALE` / `NO_DEVICE` | 3 | Yeni seans başlamaz, para hareket etmez |
-| Müşteri başlattı, peron açılmadı (`ACK_TIMEOUT`) | 4 | Bloke otomatik iade edilir |
+| Müşteri başlattı, peron açılmadı (`ACK_TIMEOUT`) | 4 | Komut gitmediyse iade; gittiyse cihazın bildirimine kadar bloke durur |
 | Seans `RECONCILING`'de takılı | 5 | Bloke durur; 30 dk sonra otomatik kapanır |
 | Denetim kuyruğunda seans (`needsReview`) | 6 | Otomatik para hareketi yok; karar yöneticide |
 | "Para çekildi ama su gelmedi" | 7 | Yönetici bakiyeye iade eder |
@@ -47,7 +47,10 @@ Yaygın arızalarda **ne görülür, para güvende mi, ne yapılır**. Sayılar 
 
 ## 4. Başlattı ama açılmadı (`ACK_TIMEOUT`)
 
-Backend `START` gönderir ve **10 sn** cihazdan `STARTED_ACK` bekler. Gelmezse seans `FAILED` olur, **bloke tamamen iade edilir**, peron `ERROR` durumuna alınır ve süren bir STOP komutu gönderilir (5 sn aralıkla, en çok 24 deneme, ~2 dk).
+Backend `START` gönderir ve **10 sn** cihazdan `STARTED_ACK` bekler. Gelmezse iki durum vardır:
+
+- **START cihaza hiç gitmedi** (broker yok): seans `FAILED` olur, **bloke tamamen iade edilir**, peron `ERROR` durumuna alınır ve süren bir STOP komutu gönderilir (5 sn aralıkla, en çok 24 deneme, ~2 dk).
+- **START gitti ama ACK gelmedi**: cihaz suyu açmış olabilir. Seans `RECONCILING`'e geçer (`startedAt` boş, geçiş nedeni `ACK_UNCERTAIN`), **bloke durur** ve yıkama kesilmez. Kararı cihazın bir sonraki bildirimi verir: seansı çalıştırıyorsa `RUNNING` olur, boştaysa para iade edilir, bitişi bildirirse kullanılan süre tahsil edilir. Hiç haber gelmezse planlanan bitişten 30 dk sonra bölüm 5'teki kural uygulanır (ADR-0010 #10).
 
 - **Yap:** cihaz/broker sorununu gider (bölüm 3). Peron `ERROR`'dan **kendiliğinden** çıkar: cihaz `ONLINE` durumu bildirince `IDLE`'a döner (elle bir şey gerekmez). Çıkmıyorsa cihaz gerçekten `ONLINE` bildirmiyordur; cihazın MQTT bağlantısına bak.
 - **Geç gelen ACK** (`LATE_ACK`): cihaz iade edilmiş bir seansta çalıştığını bildirirse tahsil **edilmez**, seans `needsReview` olarak işaretlenir (bölüm 6).

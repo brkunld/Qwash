@@ -336,6 +336,136 @@ describe('SessionService (gercek PostgreSQL)', () => {
     }
   });
 
+  // ---------------------------------------------------------------- ACK belirsiz (START gitti)
+
+  /** START cihaza gider, ACK hic gelmez, tarama ACK suresini doldurur. */
+  async function ackLost(user: string, durationSec = 60): Promise<WashSession> {
+    const s = await start(user, durationSec);
+    await outbox.publishPending(publisher);
+    expect(publisher.ofType('START')).toHaveLength(1);
+    advance(DEFAULT_TIMINGS.ackTimeoutMs);
+    expect((await sessions.sweep()).ackTimeouts).toBe(1);
+    publisher.sent = [];
+    return s;
+  }
+
+  it('START gitti, ACK kayboldu: iade yok, yikama kesilmez, seans RECONCILING (startedAt bos)', async () => {
+    const user = await userWith(10_000);
+    const s = await ackLost(user);
+    expect(await reload(s)).toMatchObject({
+      status: SessionStatus.RECONCILING,
+      startedAt: null,
+      endReason: null,
+    });
+    expect((await holdOf(s)).status).toBe(HoldStatus.ACTIVE);
+    expect(await available(user)).toBe(10_000 - 60 * PRICE);
+    await outbox.publishPending(publisher);
+    expect(publisher.ofType('STOP')).toHaveLength(0);
+    // Peronda baska seans acilamaz.
+    await expect(start(await userWith(10_000), 60)).rejects.toBeInstanceOf(BayBusyError);
+  });
+
+  it('ACK kayboldu, cihaz cevrimdisi tum sureyi calisti, donunce bitirdi: tamami tahsil', async () => {
+    const user = await userWith(10_000);
+    const s = await ackLost(user);
+    advance(5 * 60_000);
+    expect(await ended(s, 0)).toBe('SESSION_COMPLETED');
+    expect(await reload(s)).toMatchObject({
+      status: SessionStatus.COMPLETED,
+      usedSeconds: 60,
+      chargedKurus: 3000n,
+      needsReview: false,
+    });
+    expect(await balance(user)).toBe(7_000);
+    expect(await bayStatus()).toBe(BayStatus.IDLE);
+  });
+
+  it('ACK kayboldu, heartbeat seansi calistirdigini gosterir: RUNNING, baslama kalan sureden', async () => {
+    const user = await userWith(10_000);
+    const s = await ackLost(user);
+    advance(20_000); // START 30 sn once gitti; cihaz baglantiyi gec kurdu
+    await heartbeat(s, 45); // 15 sn calisti
+    const running = await reload(s);
+    expect(running).toMatchObject({ status: SessionStatus.RUNNING, provenUsedSec: 15 });
+    expect(running.startedAt!.getTime()).toBe(nowMs - 15_000);
+    expect(await bayStatus()).toBe(BayStatus.RUNNING);
+    expect(await ended(s, 0)).toBe('SESSION_COMPLETED');
+    expect(await balance(user)).toBe(7_000);
+  });
+
+  it('ACK kayboldu, gec ACK gelir: RUNNING olur, STOP gonderilmez', async () => {
+    const user = await userWith(10_000);
+    const s = await ackLost(user);
+    expect(await ack(s, 'SUCCESS', { remainingSec: 50 })).toBe('SESSION_RUNNING');
+    expect((await reload(s)).status).toBe(SessionStatus.RUNNING);
+    await outbox.publishPending(publisher);
+    expect(publisher.ofType('STOP')).toHaveLength(0);
+  });
+
+  it('ACK kayboldu, heartbeat cihazin bosta oldugunu gosterir: FAILED, iade, peron IDLE', async () => {
+    const user = await userWith(10_000);
+    const s = await ackLost(user);
+    await deviceSays(BAY, { type: 'HEARTBEAT', sessionActive: false });
+    expect(await reload(s)).toMatchObject({
+      status: SessionStatus.FAILED,
+      endReason: 'ACK_TIMEOUT',
+    });
+    expect((await holdOf(s)).status).toBe(HoldStatus.RELEASED);
+    expect(await available(user)).toBe(10_000);
+    expect(await bayStatus()).toBe(BayStatus.IDLE);
+  });
+
+  it('ACK kayboldu, cihazin REJECTED ACK i gec gelir: FAILED ve iade', async () => {
+    const user = await userWith(10_000);
+    const s = await ackLost(user);
+    expect(await ack(s, 'REJECTED', { reason: 'BUSY' })).toBe('SESSION_FAILED');
+    expect(await available(user)).toBe(10_000);
+  });
+
+  it('ACK kayboldu ve cihazdan hic haber yok: planlanan bitis + 30 dk sonra kapanir, kanit yoksa iade', async () => {
+    const user = await userWith(200_000);
+    const s = await ackLost(user, 3600);
+    // 30 dk dolsa da cihaz 60 dk'lik seansi hala calistiriyor olabilir.
+    advance(DEFAULT_TIMINGS.reconcileTimeoutMs);
+    expect((await sessions.sweep()).autoClosed).toBe(0);
+    advance((3600 + DEFAULT_TIMINGS.endGraceSec) * 1000);
+    expect((await sessions.sweep()).autoClosed).toBe(1);
+    expect(await reload(s)).toMatchObject({
+      status: SessionStatus.COMPLETED,
+      endReason: 'DEVICE_LOST',
+      chargedKurus: 0n,
+      needsReview: true,
+    });
+    expect(await available(user)).toBe(200_000);
+  });
+
+  it('ACK belirsizken musteri durdurur: cihaz seansi bilmiyorsa (NOT_ACTIVE) iade', async () => {
+    const user = await userWith(10_000);
+    const s = await ackLost(user);
+    await sessions.requestStop(s.id, user);
+    await outbox.publishPending(publisher);
+    expect(publisher.ofType('STOP')[0]!.envelope.payload).toMatchObject({ reason: 'USER_STOP' });
+    expect(await stoppedAck(s, 'NOT_ACTIVE')).toBe('SESSION_FAILED');
+    expect(await reload(s)).toMatchObject({
+      status: SessionStatus.FAILED,
+      endReason: 'ACK_TIMEOUT',
+    });
+    expect(await available(user)).toBe(10_000);
+  });
+
+  it('ACK belirsizken musteri durdurur: cihaz calisiyorduysa durdurma anina kadar tahsil', async () => {
+    const user = await userWith(10_000);
+    const s = await ackLost(user); // START 10 sn once gonderildi
+    advance(10_000);
+    await sessions.requestStop(s.id, user);
+    // STOP kayboldu, cihaz tum sureyi calisti: tavan = 20 sn + pay.
+    expect(await ended(s, 0)).toBe('SESSION_COMPLETED');
+    expect(await reload(s)).toMatchObject({
+      usedSeconds: 20 + DEFAULT_TIMINGS.stopGraceSec,
+      needsReview: true,
+    });
+  });
+
   it('cihaz START i reddederse (BUSY/EXPIRED...): FAILED ve iade', async () => {
     const user = await userWith(10_000);
     const s = await start(user, 60);

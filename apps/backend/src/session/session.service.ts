@@ -119,6 +119,9 @@ export interface SweepResult {
 /** Cihazi kaybolan seans otomatik kapatildiginda kullanilan bitis nedeni. */
 export const DEVICE_LOST_REASON = 'DEVICE_LOST';
 
+/** START cihaza gitti ama ACK gelmedi: seans RECONCILING'e (startedAt bos) alinir. */
+export const ACK_UNCERTAIN_REASON = 'ACK_UNCERTAIN';
+
 type StopReason = StopCommandPayload['reason'];
 
 /**
@@ -152,7 +155,11 @@ const ACTIVE: SessionStatus[] = [
  *   baslat -> [HOLD + seans(STARTING) + START outbox]  (tek transaction)
  *   STARTED_ACK SUCCESS   -> RUNNING
  *   STARTED_ACK REJECTED  -> FAILED, bloke iade
- *   ACK suresi doldu      -> FAILED, bloke iade, tedbiren STOP
+ *   ACK suresi doldu, START yayinlanmadi -> FAILED, bloke iade, tedbiren STOP
+ *   ACK suresi doldu, START yayinlandi   -> RECONCILING (startedAt bos, "ACK belirsiz"):
+ *     bloke durur, yikama kesilmez. Cihaz bu seansi calistirdigini bildirirse (gec ACK,
+ *     heartbeat) RUNNING; bosta oldugunu bildirirse FAILED ve iade; bitis bildirirse
+ *     kullanilan sure tahsil. Hic haber yoksa otomatik kapatma (kanitlanmis kullanim).
  *   SESSION_ENDED         -> COMPLETED, kullanilan sure tahsil, kalan iade
  *   bitis bildirilmedi    -> RECONCILING (bloke durur, cihaz donunce kapanir)
  *   FAILED iken STARTED_ACK (gec ACK) -> STOP gonderilir
@@ -313,7 +320,7 @@ export class SessionService {
     return this.prisma.$transaction(async (tx) => {
       const session = await this.lockSession(tx, { id: sessionId });
       if (!session || session.userId !== userId) throw new SessionNotFoundError(sessionId);
-      if (session.status === SessionStatus.STARTING || session.status === SessionStatus.RUNNING) {
+      if (isStoppable(session)) {
         await this.enqueueStop(tx, session, 'USER_STOP');
         await this.transition(tx, session.id, session.status, session.status, 'STOP_REQUESTED');
         return tx.washSession.findUniqueOrThrow({ where: { id: session.id } });
@@ -334,9 +341,7 @@ export class SessionService {
     return this.prisma.$transaction(async (tx) => {
       const session = await this.lockSession(tx, { id: sessionId });
       if (!session) throw new SessionNotFoundError(sessionId);
-      if (session.status !== SessionStatus.STARTING && session.status !== SessionStatus.RUNNING) {
-        return null;
-      }
+      if (!isStoppable(session)) return null;
       await this.enqueueStop(tx, session, 'ADMIN_OVERRIDE');
       await this.transition(tx, session.id, session.status, session.status, 'ADMIN_STOP_REQUESTED');
       await audit(tx, session);
@@ -419,6 +424,7 @@ export class SessionService {
           if (p.status === 'SUCCESS' && p.remainingSec !== undefined) {
             return this.settle(tx, parsed, p.sessionId, p.remainingSec, 'DEVICE_STOPPED');
           }
+          if (p.status === 'NOT_ACTIVE') return this.onStopNotActive(tx, parsed, p.sessionId);
           return 'NO_OP';
         case 'SESSION_RECOVERED':
           return this.onRecovered(tx, parsed, p.sessionId, p.detail, p.remainingSec);
@@ -444,9 +450,27 @@ export class SessionService {
       const done = await this.prisma.$transaction(async (tx) => {
         const s = await this.lockSession(tx, { id }, true);
         if (!s || s.status !== SessionStatus.STARTING) return false; // ACK yetisti
-        await this.fail(tx, s, 'ACK_TIMEOUT', BayStatus.ERROR);
-        // Cihaz START'i almis ama ACK'i kaybolmus olabilir: suyu tedbiren kapat.
-        await this.enqueueStop(tx, s, 'ACK_TIMEOUT');
+        if (!(await this.startPublished(tx, s))) {
+          // START cihaza hic gitmedi (broker yok, suresi doldu): su akmiyor, bloke iade.
+          await this.fail(tx, s, 'ACK_TIMEOUT', BayStatus.ERROR);
+          // Yayin ile "gonderildi" kaydi arasinda cokulmus olabilir: suyu tedbiren kapat.
+          await this.enqueueStop(tx, s, 'ACK_TIMEOUT');
+          return true;
+        }
+        // START cihaza gitti ama ACK gelmedi. ACK QoS 0 ve baglanti kopunca kaybolur; cihaz
+        // suyu acmis olabilir. Iade edilirse su bedava akar (inceleme 2026-09-29 #1): bloke
+        // tutulur, yikama kesilmez, karari cihazin sonraki bildirimi verir.
+        await tx.washSession.update({
+          where: { id },
+          data: { status: SessionStatus.RECONCILING, reconcilingAt: now },
+        });
+        await this.transition(
+          tx,
+          id,
+          SessionStatus.STARTING,
+          SessionStatus.RECONCILING,
+          ACK_UNCERTAIN_REASON,
+        );
         return true;
       });
       if (done) result.ackTimeouts += 1;
@@ -480,10 +504,15 @@ export class SessionService {
 
     // Cihaz beklenen surede donmedi: yalnizca kanitlanmis kullanim tahsil, kalan iade,
     // admin incelemesine isaretle (Burak'in karari, 2026-09-25; ADR-0010 #8).
+    // ACK'i belirsiz seansta cihaz planlanan sureyi henuz bitirmemis olabilir (en fazla
+    // 60 dk): bekleme planlanan bitisten sonra baslar.
     const reconcileDeadline = new Date(now.getTime() - this.timings.reconcileTimeoutMs);
     const lost = await this.prisma.$queryRaw<{ id: string }[]>`
       SELECT "id" FROM "WashSession"
       WHERE "status" = 'RECONCILING' AND "reconcilingAt" <= ${reconcileDeadline}
+        AND ("startedAt" IS NOT NULL
+          OR "ackDeadlineAt" + make_interval(secs => "plannedDurationSec" + ${this.timings.endGraceSec})
+             <= ${reconcileDeadline})
       LIMIT 100`;
     for (const { id } of lost) {
       const done = await this.prisma.$transaction(async (tx) => {
@@ -556,18 +585,12 @@ export class SessionService {
 
     if (p.status === 'SUCCESS') {
       if (s.status === SessionStatus.STARTING) {
-        await tx.washSession.update({
-          where: { id: s.id },
-          data: { status: SessionStatus.RUNNING, startedAt: this.clock() },
-        });
-        await tx.bay.update({ where: { id: s.bayId }, data: { status: BayStatus.RUNNING } });
-        await this.transition(
-          tx,
-          s.id,
-          SessionStatus.STARTING,
-          SessionStatus.RUNNING,
-          'STARTED_ACK',
-        );
+        await this.markRunning(tx, s, this.clock(), 'STARTED_ACK');
+        return 'SESSION_RUNNING';
+      }
+      if (isAckUncertain(s)) {
+        // Gec ACK, bloke hala duruyor: seans normal devam eder.
+        await this.markRunning(tx, s, this.estimatedStart(s, p.remainingSec), 'LATE_STARTED_ACK');
         return 'SESSION_RUNNING';
       }
       if (s.status === SessionStatus.FAILED) {
@@ -583,11 +606,87 @@ export class SessionService {
       return 'NO_OP';
     }
 
-    if (p.status === 'REJECTED' && s.status === SessionStatus.STARTING) {
+    if (p.status === 'REJECTED' && (s.status === SessionStatus.STARTING || isAckUncertain(s))) {
       await this.fail(tx, s, `DEVICE_REJECTED_${p.reason ?? 'UNKNOWN'}`, BayStatus.IDLE);
       return 'SESSION_FAILED';
     }
     return 'NO_OP';
+  }
+
+  private async markRunning(
+    tx: Tx,
+    s: WashSession,
+    startedAt: Date,
+    reason: string,
+  ): Promise<void> {
+    await tx.washSession.update({
+      where: { id: s.id },
+      data: { status: SessionStatus.RUNNING, startedAt, reconcilingAt: null },
+    });
+    await tx.bay.update({ where: { id: s.bayId }, data: { status: BayStatus.RUNNING } });
+    await this.transition(tx, s.id, s.status, SessionStatus.RUNNING, reason);
+  }
+
+  /** START'in cihaza gittigi an: ACK suresi bu andan itibaren sayilir. */
+  private startSentAt(s: WashSession): Date {
+    return new Date(s.ackDeadlineAt.getTime() - this.timings.ackTimeoutMs);
+  }
+
+  /**
+   * ACK'i gec ogrenilen seansin baslama ani. Cihaz kalan sureyi bildirdiyse ondan
+   * hesaplanir; yoksa START'in gonderildigi an (cihaz daha once baslamis olamaz).
+   */
+  private estimatedStart(s: WashSession, remainingSec: number | undefined): Date {
+    const sent = this.startSentAt(s).getTime();
+    if (remainingSec === undefined) return new Date(sent);
+    const used = Math.min(s.plannedDurationSec, Math.max(0, s.plannedDurationSec - remainingSec));
+    return new Date(Math.max(sent, this.clock().getTime() - used * 1000));
+  }
+
+  /** START outbox'tan broker'a gitti mi (gitmediyse cihaz seansi hic almadi). */
+  private async startPublished(tx: Tx, s: WashSession): Promise<boolean> {
+    const rows = await tx.$queryRaw<{ id: string }[]>`
+      SELECT "id" FROM "OutboxEvent"
+      WHERE "sessionId" = ${s.id} AND "status" = 'PUBLISHED'
+        AND "payload"->>'commandId' = ${s.startCommandId}
+      LIMIT 1`;
+    return rows.length > 0;
+  }
+
+  /** STOP ulasti ama cihazda bu seans yok: ACK'i belirsiz seans hic baslamamis demektir. */
+  private async onStopNotActive(
+    tx: Tx,
+    topic: ParsedTopic,
+    sessionId: string,
+  ): Promise<DeviceMessageOutcome> {
+    const s = await this.lockSession(tx, { id: sessionId });
+    if (!s || !sameBay(s, topic) || !isAckUncertain(s)) return 'NO_OP';
+    await this.fail(tx, s, 'ACK_TIMEOUT', BayStatus.IDLE);
+    return 'SESSION_FAILED';
+  }
+
+  /**
+   * Heartbeat, ACK'i belirsiz seansi cozer: cihaz bu seansi calistiriyorsa RUNNING,
+   * bostaysa START'i hic uygulamamistir (bloke iade). Baska seans calistiriyorsa
+   * karar device twin'e kalir.
+   */
+  private async resolveAckUncertain(bayId: string, p: HeartbeatPayload): Promise<void> {
+    const pending = await this.prisma.washSession.findFirst({
+      where: { bayId, status: SessionStatus.RECONCILING, startedAt: null },
+      select: { id: true },
+    });
+    if (!pending) return;
+    await this.prisma.$transaction(async (tx) => {
+      const s = await this.lockSession(tx, { id: pending.id });
+      if (!s || !isAckUncertain(s)) return;
+      if (p.sessionActive && p.sessionId === s.id) {
+        await this.markRunning(tx, s, this.estimatedStart(s, p.remainingSec), 'HEARTBEAT_STARTED');
+      } else if (p.sessionActive === false) {
+        await this.fail(tx, s, 'ACK_TIMEOUT', BayStatus.IDLE);
+        // START cok gec ulasirsa diye: STOP yalniz bu seansi durdurur.
+        await this.enqueueStop(tx, s, 'ACK_TIMEOUT');
+      }
+    });
   }
 
   /** Cihazin bildirdigi kalan sureye gore kullanilan sureyi tahsil eder, kalani iade eder. */
@@ -714,11 +813,15 @@ export class SessionService {
 
   /**
    * Musteri durdurduysa tahsil edilebilecek en uzun sure: durdurma anina kadar gecen sure
-   * + stopGraceSec. Baslamadan once durdurulduysa yalnizca pay.
+   * + stopGraceSec. ACK gelmeden (STARTING) durdurulduysa yalnizca pay; ACK'i belirsiz
+   * seansta durdurulduysa cihaz START gonderildiginden beri calisiyor olabilir.
    */
   private billableSeconds(s: WashSession, usedSeconds: number): number {
     if (!s.stopRequestedAt || s.stopReason !== 'USER_STOP') return usedSeconds;
-    const startMs = s.startedAt?.getTime() ?? s.stopRequestedAt.getTime();
+    const stoppedWhileUncertain = s.stopRequestedAt >= s.ackDeadlineAt;
+    const startMs =
+      s.startedAt?.getTime() ??
+      (stoppedWhileUncertain ? this.startSentAt(s).getTime() : s.stopRequestedAt.getTime());
     const beforeStop = Math.max(0, Math.ceil((s.stopRequestedAt.getTime() - startMs) / 1000));
     return Math.min(usedSeconds, beforeStop + this.timings.stopGraceSec);
   }
@@ -951,6 +1054,7 @@ export class SessionService {
       await this.recordProvenUsage(this.prisma, bayId, p.sessionId, p.remainingSec);
     }
 
+    if (bayId && p.type === 'HEARTBEAT' && !retained) await this.resolveAckUncertain(bayId, p);
     if (bayId && p.type === 'HEARTBEAT') await this.evaluateTwin(bayId, msg.deviceId, p);
 
     // Peron durumu yalnizca bilgi amaclidir; seans karari seans tablosundan verilir.
@@ -1067,6 +1171,18 @@ export class SessionService {
     );
     return 'BAY_MISMATCH';
   }
+}
+
+/** START gitti, ACK gelmedi, cihazdan henuz haber yok (bkz. sweep). */
+function isAckUncertain(s: WashSession): boolean {
+  return s.status === SessionStatus.RECONCILING && s.startedAt === null;
+}
+
+/** Su akiyor olabilecek seans: musteri veya admin durdurabilir. */
+function isStoppable(s: WashSession): boolean {
+  return (
+    s.status === SessionStatus.STARTING || s.status === SessionStatus.RUNNING || isAckUncertain(s)
+  );
 }
 
 function sameBay(s: SessionWithBay, topic: ParsedTopic): boolean {

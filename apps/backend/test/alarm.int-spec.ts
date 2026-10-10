@@ -205,6 +205,40 @@ describe('Alarmlar (AlarmService, gercek PostgreSQL)', () => {
     expect((await alarms.active())[0]).toMatchObject({ key: 'ack-timeouts', severity: 'WARNING' });
   });
 
+  it('ACK zaman asimi orani: iade edilmeyen (ACK belirsiz) seanslar da sayilir, iki kez degil', async () => {
+    const uncertain = async (over: Record<string, unknown> = {}) => {
+      const s = await session({ status: SessionStatus.RECONCILING, ...over });
+      await prisma.sessionTransition.create({
+        data: {
+          sessionId: s.id,
+          fromState: SessionStatus.STARTING,
+          toState: SessionStatus.RECONCILING,
+          reason: 'ACK_UNCERTAIN',
+          createdAt: ago(2 * MIN),
+        },
+      });
+    };
+    await uncertain({ reconcilingAt: ago(2 * MIN) });
+    // Belirsiz kaldiktan sonra cihaz bosta cikti ve iade edildi: tek seans.
+    await uncertain({
+      status: SessionStatus.FAILED,
+      endReason: 'ACK_TIMEOUT',
+      endedAt: ago(1 * MIN),
+    });
+    expect(await alarms.sweep()).toBe(0);
+    // Belirsiz kaldiktan sonra cihaz calistigini bildirdi ve seans bitti.
+    await uncertain({
+      status: SessionStatus.COMPLETED,
+      startedAt: ago(2 * MIN),
+      endedAt: ago(1 * MIN),
+      endReason: 'DEVICE_COMPLETED',
+      usedSeconds: 60,
+      chargedKurus: 3000n,
+    });
+    expect(await alarms.sweep()).toBe(1);
+    expect((await alarms.active())[0]).toMatchObject({ key: 'ack-timeouts' });
+  });
+
   it('odeme takilmasi: iptali bekleyen kart odemesi ve belirsiz iade parcasi', async () => {
     const topUp = await prisma.cardTopUp.create({
       data: {
