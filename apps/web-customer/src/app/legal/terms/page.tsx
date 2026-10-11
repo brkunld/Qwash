@@ -132,7 +132,7 @@ export default function TermsPage() {
         Bu şartlara Türk hukuku uygulanır. Uyuşmazlıklarda tüketici hakem heyetleri ve tüketici
         mahkemeleri yetkilidir. Sorularınız ve talepleriniz için: {COMPANY.email}, {COMPANY.phone}.
       </p>
-      <p className="text-slate-500">
+      <p className="text-ink-muted">
         {COMPANY.legalName} · {COMPANY.address} · Vergi: {COMPANY.taxOffice} · MERSİS:{' '}
         {COMPANY.mersis}
       </p>

@@ -103,9 +103,9 @@ function DeleteAccount({ me }: { me: Me }) {
 
       {hasBalance && (
         <Card>
-          <p className="text-sm text-slate-500">Kalan bakiyeniz</p>
+          <p className="text-sm text-ink-muted">Kalan bakiyeniz</p>
           <p className="text-3xl font-extrabold">{tl(preview.availableKurus)}</p>
-          <p className="mt-2 text-sm text-slate-600">
+          <p className="mt-2 text-sm text-ink-muted">
             Bakiyenizi kullanmak isterseniz silmekten vazgeçebilirsiniz. Silmek istiyorsanız birini
             seçin:
           </p>
@@ -114,7 +114,7 @@ function DeleteAccount({ me }: { me: Me }) {
               <label
                 key={c}
                 className={`flex min-h-12 cursor-pointer items-center gap-3 rounded-xl border p-3 ${
-                  choice === c ? 'border-brand-500 bg-brand-50' : 'border-slate-300'
+                  choice === c ? 'border-brand-500 bg-brand-50' : 'border-line-strong'
                 }`}
               >
                 <input
@@ -134,7 +134,7 @@ function DeleteAccount({ me }: { me: Me }) {
               <ul className="flex flex-col gap-1 text-sm">
                 {preview.allocation.map((p, i) => (
                   <li key={i} className="flex justify-between gap-2">
-                    <span className="text-slate-600">{METHOD[p.method]}</span>
+                    <span className="text-ink-muted">{METHOD[p.method]}</span>
                     <span className="font-semibold">{tl(p.amountKurus)}</span>
                   </li>
                 ))}
@@ -155,7 +155,7 @@ function DeleteAccount({ me }: { me: Me }) {
                   }`}
                 />
               )}
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-ink-muted">
                 İade talebi yönetici onayıyla işlenir; bu sürede tutar bloke kalır.
               </p>
             </div>

@@ -207,10 +207,10 @@ export default function BayPage() {
     <Page>
       {/* QR-jacking savunmasi (IOT.md): musteri hangi perona baglandigini acikca gorur. */}
       <Card className="text-center">
-        <p className="text-sm text-slate-500">{bay.stationName}</p>
+        <p className="text-sm text-ink-muted">{bay.stationName}</p>
         <p className="mt-1 text-3xl font-extrabold">{bay.bayName}</p>
-        <p className="mt-1 font-mono text-sm text-slate-500">{bay.bayCode}</p>
-        <p className="mt-3 text-sm text-slate-600">
+        <p className="mt-1 font-mono text-sm text-ink-muted">{bay.bayCode}</p>
+        <p className="mt-3 text-sm text-ink-muted">
           Peron ekranında gördüğünüz kodla aynı olduğundan emin olun.
         </p>
       </Card>
@@ -250,18 +250,18 @@ export default function BayPage() {
         <>
           <Card className="text-center">
             <p className="text-lg font-semibold">Peron ekranı hesabınıza bağlandı</p>
-            <p className="mt-2 text-sm text-slate-600">
+            <p className="mt-2 text-sm text-ink-muted">
               Paketi ve süreyi peronun dokunmatik ekranından seçin; ücret bakiyenizden düşer.
               Telefona tekrar gerek yok. Yıkama sürerken ekrandaki <strong>DURDUR</strong> ile erken
               bitirebilirsiniz.
             </p>
             {claimLeftSec > 0 && (
-              <p className="mt-3 text-sm text-slate-600">
+              <p className="mt-3 text-sm text-ink-muted">
                 {claimLeftSec} sn içinde seçim yapılmazsa bağlantı kapanır.
               </p>
             )}
             {wallet && (
-              <p className="mt-1 text-sm text-slate-600">
+              <p className="mt-1 text-sm text-ink-muted">
                 Kullanılabilir bakiye: {tl(wallet.availableKurus)}
               </p>
             )}
@@ -275,7 +275,7 @@ export default function BayPage() {
         <>
           <Card className="text-center">
             <p className="font-semibold">Paketi peron ekranından seçin</p>
-            <p className="mt-1 text-sm text-slate-600">
+            <p className="mt-1 text-sm text-ink-muted">
               Ekran hesabınıza bağlanır, paketi dokunarak seçersiniz. Ücret bakiyenizden düşer.
             </p>
             <div className="mt-3">
@@ -285,7 +285,7 @@ export default function BayPage() {
             </div>
           </Card>
           {claimError !== null && <Alert>{errorMessage(claimError)}</Alert>}
-          <p className="text-center text-sm text-slate-500">veya buradan seçin</p>
+          <p className="text-center text-sm text-ink-muted">veya buradan seçin</p>
           <Card>
             <h2 className="mb-3 font-semibold">Program</h2>
             <div className="grid grid-cols-2 gap-2">
@@ -298,11 +298,11 @@ export default function BayPage() {
                   className={`min-h-16 rounded-xl border p-3 text-left ${
                     p.code === program
                       ? 'border-brand-500 bg-brand-50 ring-2 ring-brand-200'
-                      : 'border-slate-300 bg-white'
+                      : 'border-line-strong bg-surface'
                   }`}
                 >
                   <span className="block font-semibold">{p.name}</span>
-                  <span className="text-sm text-slate-600">
+                  <span className="text-sm text-ink-muted">
                     {tl(p.pricePerSecondKurus * 60)} / dk
                   </span>
                 </button>
@@ -321,20 +321,20 @@ export default function BayPage() {
                   aria-pressed={d === duration}
                   className={`min-h-12 min-w-16 rounded-xl border px-3 font-semibold ${
                     d === duration
-                      ? 'border-brand-500 bg-brand-500 text-slate-900'
-                      : 'border-slate-300 bg-white'
+                      ? 'border-brand-500 bg-brand-500 text-ink'
+                      : 'border-line-strong bg-surface'
                   }`}
                 >
                   {durationLabel(d)}
                 </button>
               ))}
             </div>
-            <p className="mt-4 text-sm text-slate-600">
-              En fazla <strong className="text-slate-900">{tl(cost)}</strong>. Erken durdurursanız
-              yalnız kullandığınız süre ödenir, kalanı bakiyenizde kalır.
+            <p className="mt-4 text-sm text-ink-muted">
+              En fazla <strong className="text-ink">{tl(cost)}</strong>. Erken durdurursanız yalnız
+              kullandığınız süre ödenir, kalanı bakiyenizde kalır.
             </p>
             {wallet && (
-              <p className="mt-1 text-sm text-slate-600">
+              <p className="mt-1 text-sm text-ink-muted">
                 Kullanılabilir bakiye: {tl(wallet.availableKurus)}
               </p>
             )}
