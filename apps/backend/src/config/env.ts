@@ -40,6 +40,12 @@ export const EnvSchema = z
     IYZICO_API_KEY: z.preprocess((v) => (v === '' ? undefined : v), z.string().optional()),
     IYZICO_SECRET_KEY: z.preprocess((v) => (v === '' ? undefined : v), z.string().optional()),
     IYZICO_BASE_URL: z.url().default('https://sandbox-api.iyzipay.com'),
+    // Production'da Iyzico sandbox'i yalniz acik izinle (pilot/deneme donemi). Unutulursa test
+    // kartlari gercek bakiye yukler; bu yuzden varsayilan kapali.
+    IYZICO_SANDBOX_IN_PRODUCTION: z
+      .enum(['true', 'false'])
+      .default('false')
+      .transform((v) => v === 'true'),
     // E-posta (SMTP). SMTP_HOST tanimli degilse gelistirmede baglanti konsola yazilir,
     // production'da uygulama baslamaz. Gmail: smtp.gmail.com:587 + uygulama sifresi.
     SMTP_HOST: z.preprocess((v) => (v === '' ? undefined : v), z.string().optional()),
@@ -61,9 +67,53 @@ export const EnvSchema = z
   .refine((e) => !!e.SMTP_USER === !!e.SMTP_PASSWORD, {
     path: ['SMTP_PASSWORD'],
     message: 'SMTP_USER ve SMTP_PASSWORD birlikte verilmeli.',
+  })
+  .superRefine((e, ctx) => {
+    if (e.NODE_ENV !== 'production') return;
+    // Varsayilanlar gelistirme icindir; canlida unutulursa uygulama sessizce yanlis calisir
+    // (guvenlik incelemesi 2026-09-29 #6). DATABASE_URL ve MQTT_URL kontrol edilmez: canlida
+    // ikisi de compose ic agindadir (deploy/.env.production.example), TLS gerekmez.
+    const issue = (path: string, message: string) =>
+      ctx.addIssue({ code: 'custom', path: [path], message });
+    for (const key of ['CUSTOMER_APP_URL', 'API_PUBLIC_URL', 'DEVICE_API_URL'] as const) {
+      const value = e[key];
+      if (value !== undefined && !isPublicHttps(value)) {
+        issue(key, 'Production: https ve localhost olmayan bir adres olmali.');
+      }
+    }
+    const origins = e.CORS_ORIGINS.split(',')
+      .map((o) => o.trim())
+      .filter(Boolean);
+    if (origins.length === 0 || !origins.every(isPublicHttps)) {
+      issue('CORS_ORIGINS', 'Production: her kaynak https ve localhost olmayan bir adres olmali.');
+    }
+    if (e.TRUST_PROXY < 1) {
+      issue('TRUST_PROXY', 'Production ters vekil (Caddy) arkasinda: en az 1 olmali.');
+    }
+    if (
+      e.IYZICO_API_KEY &&
+      e.IYZICO_BASE_URL.includes('sandbox') &&
+      !e.IYZICO_SANDBOX_IN_PRODUCTION
+    ) {
+      issue(
+        'IYZICO_BASE_URL',
+        'Production: Iyzico sandbox adresi. Bilerek deneme yapiliyorsa IYZICO_SANDBOX_IN_PRODUCTION=true.',
+      );
+    }
   });
 
 export type Env = z.infer<typeof EnvSchema>;
+
+const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]', '0.0.0.0']);
+
+function isPublicHttps(raw: string): boolean {
+  try {
+    const url = new URL(raw);
+    return url.protocol === 'https:' && !LOCAL_HOSTS.has(url.hostname);
+  } catch {
+    return false;
+  }
+}
 
 export function validateEnv(raw: Record<string, unknown>): Env {
   const result = EnvSchema.safeParse(raw);

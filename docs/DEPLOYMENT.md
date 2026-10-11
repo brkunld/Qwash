@@ -115,6 +115,9 @@ IYZICO_API_KEY="<iyzico api key>"
 IYZICO_SECRET_KEY="<iyzico secret key>"
 IYZICO_BASE_URL="https://api.iyzipay.com"           # prod
 # IYZICO_BASE_URL="https://sandbox-api.iyzipay.com" # dev/staging
+# IYZICO_SANDBOX_IN_PRODUCTION=true                  # NODE_ENV=production + sandbox icin zorunlu izin
+# NODE_ENV=production iken backend su ayarlar olmadan baslamaz: https ve localhost olmayan
+# CUSTOMER_APP_URL / API_PUBLIC_URL / DEVICE_API_URL / CORS_ORIGINS, TRUST_PROXY>=1.
 IYZICO_WEBHOOK_SECRET="<webhook hmac secret>"
 
 # ─── Uygulama ───
