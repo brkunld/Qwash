@@ -13,6 +13,7 @@ import { PaymentsDisabledError } from '../payments/payments.errors';
 import { PrismaService } from '../prisma/prisma.service';
 import { Tx, WalletService } from '../wallet/wallet.service';
 import {
+  AdminForbiddenError,
   PayoutNotFoundError,
   PayoutStateError,
   RefundHasPaidPartsError,
@@ -206,6 +207,11 @@ export class RefundAdminService {
           throw new PayoutStateError(
             'Kart parcasi once "Iyzico ile iade et" ile gonderilmeli; elle odendi denemez.',
           );
+        }
+        // EFT'yi gonderen super yonetici "odendi" der; nakit yukleyen kasiyer kendi
+        // yukledigi parayi IBAN'a odenmis gosteremez (guvenlik incelemesi 2026-09-29 #7).
+        if (payout.method === 'IBAN' && actor.role !== 'SUPER_ADMIN') {
+          throw new AdminForbiddenError();
         }
         let stationId: string | null = null;
         if (payout.method === 'CASH_AT_STATION') {

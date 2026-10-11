@@ -243,6 +243,8 @@ model TopUpSettings {
   id            Int      @id @default(1)
   minTopUpKurus Int      @default(5000)
   maxTopUpKurus Int      @default(500000)
+  // Kasiyer (ADMIN) basina Istanbul gunu toplam nakit yukleme; SUPER_ADMIN'e uygulanmaz.
+  dailyCashLimitKurus Int @default(1000000)
   updatedAt     DateTime @updatedAt
 }
 

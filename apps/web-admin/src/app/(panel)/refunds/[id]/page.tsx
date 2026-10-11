@@ -9,6 +9,7 @@ import type {
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useState, type FormEvent } from 'react';
+import { useIsSuper } from '@/components/shell';
 import {
   Alert,
   Badge,
@@ -113,6 +114,7 @@ function PayoutCard({
   onChanged: () => Promise<void>;
 }) {
   const action = useAction();
+  const isSuper = useIsSuper();
   const [reference, setReference] = useState('');
   const [stationId, setStationId] = useState('');
   const [reason, setReason] = useState('');
@@ -236,19 +238,25 @@ function PayoutCard({
             EFT&apos;den önce bankanın gösterdiği alıcı adını yukarıdaki mühürlü adla{' '}
             <strong>gözle karşılaştırın</strong>. Uyuşmuyorsa göndermeyin, talebi reddedin.
           </Alert>
-          <form onSubmit={markPaid} className="flex items-end gap-2">
-            <Field
-              className="flex-1"
-              label="EFT dekont numarası"
-              value={reference}
-              onChange={(e) => setReference(e.target.value)}
-              minLength={3}
-              required
-            />
-            <Button type="submit" busy={action.busy}>
-              Gönderildi işaretle
-            </Button>
-          </form>
+          {isSuper ? (
+            <form onSubmit={markPaid} className="flex items-end gap-2">
+              <Field
+                className="flex-1"
+                label="EFT dekont numarası"
+                value={reference}
+                onChange={(e) => setReference(e.target.value)}
+                minLength={3}
+                required
+              />
+              <Button type="submit" busy={action.busy}>
+                Gönderildi işaretle
+              </Button>
+            </form>
+          ) : (
+            <Alert tone="info">
+              IBAN ödemesini yalnız süper yönetici gönderildi işaretleyebilir.
+            </Alert>
+          )}
         </div>
       )}
 

@@ -193,6 +193,8 @@ export type RejectRefundRequest = z.infer<typeof RejectRefundRequestSchema>;
 export const TopUpSettingsViewSchema = z.object({
   minTopUpKurus: z.number().int(),
   maxTopUpKurus: z.number().int(),
+  /** Kasiyer (ADMIN) basina gunluk toplam nakit yukleme; SUPER_ADMIN'e uygulanmaz. */
+  dailyCashLimitKurus: z.number().int(),
   updatedAt: z.string(),
 });
 export type TopUpSettingsView = z.infer<typeof TopUpSettingsViewSchema>;
@@ -201,6 +203,7 @@ export const UpdateTopUpSettingsRequestSchema = z
   .object({
     minTopUpKurus: z.number().int().min(100),
     maxTopUpKurus: z.number().int().max(10_000_000),
+    dailyCashLimitKurus: z.number().int().min(100).max(100_000_000),
   })
   .refine((v) => v.maxTopUpKurus >= v.minTopUpKurus, {
     message: 'Ust sinir minimumdan kucuk olamaz.',

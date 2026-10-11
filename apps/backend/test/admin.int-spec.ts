@@ -173,6 +173,70 @@ describe('Admin operasyonlari (gercek PostgreSQL)', () => {
       expect(await prisma.ledgerEntry.count()).toBe(0);
       expect(await prisma.adminAuditLog.count()).toBe(0);
     });
+
+    it('kimse kendi hesabina nakit yukleyemez (SUPER_ADMIN dahil)', async () => {
+      const st = await station();
+      for (const role of [UserRole.ADMIN, UserRole.SUPER_ADMIN]) {
+        const op = await operator(role);
+        await expect(
+          admin.cashTopUp(
+            op,
+            { userId: op.userId, stationId: st, amountKurus: 1000 },
+            `self-${role}`,
+          ),
+        ).rejects.toMatchObject({ code: 'SELF_TOPUP_FORBIDDEN' });
+      }
+      expect(await prisma.cashTopUp.count()).toBe(0);
+    });
+
+    it('kasiyerin gunluk toplami limiti asamaz; baska kasiyer ve SUPER_ADMIN etkilenmez', async () => {
+      await prisma.topUpSettings.upsert({
+        where: { id: 1 },
+        create: { id: 1, dailyCashLimitKurus: 12000 },
+        update: { dailyCashLimitKurus: 12000 },
+      });
+      const op = await operator();
+      const st = await station();
+      const c = await user();
+      const load = (actor: AdminActor, amountKurus: number, key: string) =>
+        admin.cashTopUp(actor, { userId: c.userId, stationId: st, amountKurus }, key);
+
+      await load(op, 5000, 'a');
+      await load(op, 5000, 'b');
+      await expect(load(op, 2001, 'c')).rejects.toMatchObject({
+        code: 'CASH_DAILY_LIMIT_EXCEEDED',
+        details: { limitKurus: 12000, usedKurus: 10000, remainingKurus: 2000 },
+      });
+      await load(op, 2000, 'd'); // tam limite kadar olur
+      // Dunku yukleme bugunku limite sayilmaz.
+      await prisma.cashTopUp.updateMany({
+        where: { idempotencyKey: 'cash-topup:a' },
+        data: { createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000) },
+      });
+      await load(op, 5000, 'e');
+
+      await load(await operator(), 12000, 'f');
+      await load(await operator(UserRole.SUPER_ADMIN), 50000, 'g');
+      expect(await balance(c.walletId)).toEqual({ balance: 79000, hold: 0 });
+    });
+
+    it('eszamanli yuklemeler limiti birlikte asamaz', async () => {
+      await prisma.topUpSettings.upsert({
+        where: { id: 1 },
+        create: { id: 1, dailyCashLimitKurus: 10000 },
+        update: { dailyCashLimitKurus: 10000 },
+      });
+      const op = await operator();
+      const st = await station();
+      const c = await user();
+      const results = await Promise.allSettled(
+        Array.from({ length: 6 }, (_, i) =>
+          admin.cashTopUp(op, { userId: c.userId, stationId: st, amountKurus: 3000 }, `p${i}`),
+        ),
+      );
+      expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(3);
+      expect(await balance(c.walletId)).toEqual({ balance: 9000, hold: 0 });
+    });
   });
 
   describe('kasa raporu', () => {
@@ -540,7 +604,15 @@ describe('Admin operasyonlari (gercek PostgreSQL)', () => {
         }),
       ).rejects.toMatchObject({ code: 'PAYOUT_STATE' });
 
-      await refunds.resolvePayout(op, refundRequestId!, iban.partIndex, {
+      // IBAN "odendi" isaretini yalniz SUPER_ADMIN koyar (EFT'yi o gonderir).
+      await expect(
+        refunds.resolvePayout(op, refundRequestId!, iban.partIndex, {
+          outcome: 'PAID',
+          reference: 'EFT dekont 2026-0001',
+        }),
+      ).rejects.toMatchObject({ code: 'ADMIN_FORBIDDEN' });
+      const sup = await operator(UserRole.SUPER_ADMIN);
+      await refunds.resolvePayout(sup, refundRequestId!, iban.partIndex, {
         outcome: 'PAID',
         reference: 'EFT dekont 2026-0001',
       });
@@ -720,7 +792,7 @@ describe('Admin operasyonlari (gercek PostgreSQL)', () => {
     });
 
     it('yukleme ayarlarini yalniz SUPER_ADMIN degistirir; degisiklik denetime yazilir', async () => {
-      const body = { minTopUpKurus: 10000, maxTopUpKurus: 300000 };
+      const body = { minTopUpKurus: 10000, maxTopUpKurus: 300000, dailyCashLimitKurus: 2_000_000 };
       const a = await tokenFor(UserRole.ADMIN);
       // Bakiye duzeltme de yalniz SUPER_ADMIN (kaynagi olmayan para yaratabilir).
       await http()
@@ -747,14 +819,14 @@ describe('Admin operasyonlari (gercek PostgreSQL)', () => {
         where: { action: 'TOPUP_SETTINGS_UPDATED' },
       });
       expect(audit.details).toMatchObject({
-        before: { minTopUpKurus: 5000, maxTopUpKurus: 500000 },
+        before: { minTopUpKurus: 5000, maxTopUpKurus: 500000, dailyCashLimitKurus: 1_000_000 },
         after: body,
       });
 
       await http()
         .put('/api/v1/admin/settings/topup')
         .set('Authorization', `Bearer ${s.token}`)
-        .send({ minTopUpKurus: 10000, maxTopUpKurus: 5000 })
+        .send({ minTopUpKurus: 10000, maxTopUpKurus: 5000, dailyCashLimitKurus: 1_000_000 })
         .expect(400);
     });
 
