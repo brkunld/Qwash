@@ -47,7 +47,11 @@ Operator musteriyi e-postayla bulur, tutari girer. Sunucu:
 - artan makbuz numarasi (`receiptNo`, veritabani dizisi; bosluk olabilir, tekrar olamaz),
 - istemcinin urettigi `Idempotency-Key` (`cash-topup:<key>`); ayni anahtar tekrar gelirse ayni makbuz doner, ikinci para girisi olmaz (cift tiklama, ag tekrari),
 - yalniz `ACTIVE` hesaba; e-posta dogrulamasi aranmaz (operator musteriyi yuz yuze goruyor),
-- ust sinir `TopUpSettings.maxTopUpKurus` (kart ile ayni).
+- ust sinir `TopUpSettings.maxTopUpKurus` (kart ile ayni),
+- kimse kendi hesabina yukleyemez (`SELF_TOPUP_FORBIDDEN`, SUPER_ADMIN dahil),
+- ADMIN'in Istanbul gunu toplami `TopUpSettings.dailyCashLimitKurus`'u (varsayilan 10.000 TL) asamaz (`CASH_DAILY_LIMIT_EXCEEDED`); SUPER_ADMIN'e uygulanmaz, ustunu o yukler. Ayni operatorun eszamanli yuklemeleri islem kilidiyle sirayla sayilir.
+
+> **Guncelleme (2026-10-12):** Son iki kural guvenlik incelemesi 2026-09-29 #7 uzerine eklendi (Burak'in karari): tek bir kasiyer hesabi ele gecirilse ya da kotu niyetli olsa bile bir gunde acabilecegi kasa acigi sinirlidir.
 
 Gun sonu kasa raporu istasyon + gun + operator bazinda nakit girisini (`CASH_TOPUP`) ve kasadan cikan nakit iadeyi (`CASH_REFUND`) toplar; beklenen kasa = giris − cikis.
 
@@ -60,7 +64,7 @@ Yalniz hata duzeltmek icindir, nakit yukleme icin kullanilmaz. `ADJUSTMENT` kayn
 `RefundRequest.allocation` (FIFO dagilimi) her parca icin bir `RefundPayout` satirina donusur. Parca yontemleri:
 
 - **CARD:** Iyzico `/payment/refund`, ilgili `CardTopUp.paymentTransactionId` ile kismi iade.
-- **IBAN:** EFT'yi admin bankadan elle yapar; alici adini muhurlu adla (`holderName`) gozle karsilastirir, dekont numarasini girer.
+- **IBAN:** EFT'yi **SUPER_ADMIN** bankadan elle yapar; alici adini muhurlu adla (`holderName`) gozle karsilastirir, dekont numarasini girer. ADMIN bu parcayi "odendi" isaretleyemez (2026-10-12, guvenlik incelemesi #7): aksi halde nakit yukleyen kasiyer ayni parayi kendi tanidiginin IBAN'ina odenmis gosterebilirdi.
 - **CASH_AT_STATION:** Admin kasadan oder; `CASH_REFUND` olarak kasa raporuna girer.
 
 **Cift iade riski ve cozumu:** Iyzico iade cagrisi basarili olup cevap bize ulasmadan surec coker ya da ag koparsa, "tekrar dene" ikinci iade demektir. Bu yuzden CARD parcasi Iyzico'ya gitmeden once ayri bir transaction'da `IN_FLIGHT` isaretlenir. Cevap gelirse `DONE` / `FAILED`. `IN_FLIGHT`'ta kalmis bir parca **otomatik yeniden denenmez**; admin Iyzico panelinden kontrol edip "yapildi" (Iyzico referansiyla) veya "yapilmadi, yeniden dene" der. Para kaybi yonunde otomatik davranis yoktur.

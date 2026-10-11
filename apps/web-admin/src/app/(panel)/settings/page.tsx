@@ -14,16 +14,25 @@ export default function SettingsPage() {
   // null: kullanici henuz dokunmadi, sunucudaki deger gosterilir.
   const [minEdit, setMin] = useState<string | null>(null);
   const [maxEdit, setMax] = useState<string | null>(null);
+  const [dailyEdit, setDaily] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const action = useAction();
   const s = settings.data;
 
   const min = minEdit ?? (s ? String(s.minTopUpKurus / 100) : '');
   const max = maxEdit ?? (s ? String(s.maxTopUpKurus / 100) : '');
+  const daily = dailyEdit ?? (s ? String(s.dailyCashLimitKurus / 100) : '');
 
   const minKurus = parseTl(min);
   const maxKurus = parseTl(max);
-  const valid = minKurus !== null && maxKurus !== null && minKurus >= 100 && maxKurus >= minKurus;
+  const dailyKurus = parseTl(daily);
+  const valid =
+    minKurus !== null &&
+    maxKurus !== null &&
+    dailyKurus !== null &&
+    minKurus >= 100 &&
+    maxKurus >= minKurus &&
+    dailyKurus >= 100;
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -32,13 +41,18 @@ export default function SettingsPage() {
     const res = await action.run(() =>
       api<TopUpSettingsView>('/admin/settings/topup', {
         method: 'PUT',
-        body: { minTopUpKurus: minKurus, maxTopUpKurus: maxKurus },
+        body: {
+          minTopUpKurus: minKurus,
+          maxTopUpKurus: maxKurus,
+          dailyCashLimitKurus: dailyKurus,
+        },
       }),
     );
     if (res) {
       setSaved(true);
       setMin(null);
       setMax(null);
+      setDaily(null);
       await settings.reload();
     }
   }
@@ -75,6 +89,14 @@ export default function SettingsPage() {
               inputMode="decimal"
               value={max}
               onChange={(e) => setMax(e.target.value)}
+              disabled={!isSuper}
+            />
+            <Field
+              label="Kasiyer başına günlük nakit limiti (₺)"
+              hint="Bir yöneticinin bir günde kasada yükleyebileceği toplam. Süper yöneticiye uygulanmaz."
+              inputMode="decimal"
+              value={daily}
+              onChange={(e) => setDaily(e.target.value)}
               disabled={!isSuper}
             />
             {valid && minKurus !== null && (
