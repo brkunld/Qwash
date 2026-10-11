@@ -125,6 +125,15 @@ export const ACK_UNCERTAIN_REASON = 'ACK_UNCERTAIN';
 type StopReason = StopCommandPayload['reason'];
 
 /**
+ * Tahsilat tavani uygulanan durdurma nedenleri: musteri ya da admin durdurdu, STOP cihaza
+ * gec ulastiysa fazlasini isletme ustlenir (ADR-0010 #9, Burak'in karari 2026-10-11).
+ */
+const CAPPED_STOP_REASONS: ReadonlySet<string> = new Set<StopReason>([
+  'USER_STOP',
+  'ADMIN_OVERRIDE',
+]);
+
+/**
  * Device twin uyusmazliklari (ADR-0006):
  * - UNEXPECTED_RUNNING: cihaz calisiyor, peronda aktif seans yok (para alinmayan su).
  * - SESSION_MISMATCH: cihaz aktif seanstan baska bir seansi calistiriyor.
@@ -812,12 +821,14 @@ export class SessionService {
   }
 
   /**
-   * Musteri durdurduysa tahsil edilebilecek en uzun sure: durdurma anina kadar gecen sure
+   * Musteri veya admin durdurduysa tahsil edilebilecek en uzun sure: ilk durdurma anina kadar gecen sure
    * + stopGraceSec. ACK gelmeden (STARTING) durdurulduysa yalnizca pay; ACK'i belirsiz
    * seansta durdurulduysa cihaz START gonderildiginden beri calisiyor olabilir.
    */
   private billableSeconds(s: WashSession, usedSeconds: number): number {
-    if (!s.stopRequestedAt || s.stopReason !== 'USER_STOP') return usedSeconds;
+    // stopRequestedAt ilk durdurma anidir; sonraki bir STOP (ör. admin) stopReason'i
+    // degistirse de tavan bu andan hesaplanir (inceleme 2026-09-29 #2).
+    if (!s.stopRequestedAt || !CAPPED_STOP_REASONS.has(s.stopReason ?? '')) return usedSeconds;
     const stoppedWhileUncertain = s.stopRequestedAt >= s.ackDeadlineAt;
     const startMs =
       s.startedAt?.getTime() ??
