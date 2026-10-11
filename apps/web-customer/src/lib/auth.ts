@@ -40,13 +40,25 @@ export function useRequireAuth(): AuthState {
   return auth;
 }
 
+const SAME_ORIGIN = 'http://qwash.invalid';
+
 /**
  * Giris sonrasi donulecek adres. Yalniz uygulama ici yol kabul edilir: "//site" veya
  * "https://..." gibi degerler baska siteye yonlendirme (open redirect) icin kullanilabilir.
+ * Tarayici adresteki sekme/satir sonunu siler ("/\t/evil.com" -> "//evil.com"); bu yuzden
+ * kontrol karakterleri reddedilir ve deger URL olarak cozulup kaynagi karsilastirilir.
  */
 export function safeNext(raw: string | null, fallback = '/'): string {
-  if (!raw || !raw.startsWith('/') || raw.startsWith('//') || raw.includes('\\')) return fallback;
-  return raw;
+  if (!raw || !raw.startsWith('/') || raw.startsWith('//') || /[\\\x00-\x1F\x7F]/.test(raw)) {
+    return fallback;
+  }
+  try {
+    const url = new URL(raw, SAME_ORIGIN);
+    if (url.origin !== SAME_ORIGIN) return fallback;
+    return url.pathname + url.search + url.hash;
+  } catch {
+    return fallback;
+  }
 }
 
 export async function login(email: string, password: string): Promise<void> {
