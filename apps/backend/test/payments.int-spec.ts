@@ -240,6 +240,60 @@ describe('PaymentsService kart yukleme (gercek PostgreSQL)', () => {
       });
     });
 
+    it('fraud reddi / fraud sonucu yok: bakiye yuklenmez, Iyzico kimligiyle incelemeye duser', async () => {
+      const { userId, walletId } = await customer();
+      const { topUpId } = await start(userId, 10000);
+      const token = `tok-${topUpId}`;
+      gateway.outcomes.set(token, {
+        kind: 'REVIEW',
+        reason: 'fraud sonucu yok (fraudStatus=undefined)',
+        paymentId: `pay-${topUpId}`,
+        paymentTransactionId: `ptx-${topUpId}`,
+      });
+      const row = await payments.completeByToken(token);
+      expect(row).toMatchObject({
+        status: CardTopUpStatus.FAILED,
+        failureReason: 'INCELEME: fraud sonucu yok (fraudStatus=undefined)',
+        iyzicoPaymentId: `pay-${topUpId}`,
+      });
+      expect(await balance(walletId)).toBe(0);
+    });
+
+    it('incelemedeki odeme admin karariyla karta iade edilir; ikinci kez gonderilmez', async () => {
+      const { userId, walletId } = await customer();
+      const { topUpId } = await start(userId, 10000);
+      await payments.completeByToken(gateway.succeed(topUpId, 100)); // tutar uyusmazligi
+      const audits: string[] = [];
+
+      const results = await Promise.all([
+        payments.reverseReviewed(topUpId, async (_tx, t) => void audits.push(t.id)),
+        payments.reverseReviewed(topUpId, async (_tx, t) => void audits.push(t.id)),
+      ]);
+      expect(results.filter(Boolean)).toHaveLength(1);
+      expect(audits).toEqual([topUpId]);
+      expect(gateway.reversed).toHaveLength(1);
+      expect(gateway.reversed[0]).toMatchObject({ paymentId: `pay-${topUpId}` });
+      const row = await prisma.cardTopUp.findUniqueOrThrow({ where: { id: topUpId } });
+      expect(row.status).toBe(CardTopUpStatus.REVERSED);
+      expect(row.failureReason).toMatch(/^INCELEME: tutar 100 != 10000.*iptal edildi$/);
+      expect(await balance(walletId)).toBe(0);
+    });
+
+    it('iade basarisizsa REVERSAL_PENDING kalir; inceleme disindaki kayit iade edilemez', async () => {
+      const { userId } = await customer();
+      const { topUpId } = await start(userId, 10000);
+      await payments.completeByToken(gateway.succeed(topUpId, 100));
+      gateway.failReverse = true;
+      await payments.reverseReviewed(topUpId, async () => {});
+      expect((await prisma.cardTopUp.findUniqueOrThrow({ where: { id: topUpId } })).status).toBe(
+        CardTopUpStatus.REVERSAL_PENDING,
+      );
+
+      const ok = await start(userId, 10000, 'k2');
+      await payments.completeByToken(gateway.succeed(ok.topUpId, 10000));
+      await expect(payments.reverseReviewed(ok.topUpId, async () => {})).resolves.toBeNull();
+    });
+
     it('conversationId gelmeyen basari yaniti basketId ile kabul edilir (gercek sandbox yaniti)', async () => {
       const { userId, walletId } = await customer();
       const { topUpId } = await start(userId, 10000);

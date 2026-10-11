@@ -18,6 +18,7 @@ const MESSAGES: Record<string, string> = {
   STATION_NOT_FOUND: 'İstasyon bulunamadı.',
   TARGET_ACCOUNT_NOT_ACTIVE: 'Müşteri hesabı aktif değil; bakiye işlemi yapılamaz.',
   CASH_AMOUNT_OUT_OF_RANGE: 'Tutar izin verilen üst sınırı aşıyor.',
+  CARD_TOPUP_NOT_REVIEWABLE: 'Bu ödeme artık incelemede değil; sayfayı yenileyin.',
   SELF_TOPUP_FORBIDDEN: 'Kendi hesabınıza nakit yükleme yapamazsınız.',
   CASH_DAILY_LIMIT_EXCEEDED:
     'Bugünkü nakit yükleme limitiniz doldu. Kalan tutarı süper yönetici yüklemeli.',

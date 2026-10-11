@@ -13,6 +13,7 @@ const NAV: { href: string; label: string; superOnly?: boolean }[] = [
   { href: '/users', label: 'Kullanıcılar' },
   { href: '/refunds', label: 'İade talepleri' },
   { href: '/review', label: 'İnceleme' },
+  { href: '/card-review', label: 'Ödeme incelemesi' },
   { href: '/programs', label: 'Programlar', superOnly: true },
   { href: '/settings', label: 'Ayarlar', superOnly: true },
   { href: '/audit', label: 'Denetim kaydı' },

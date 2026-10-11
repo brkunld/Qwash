@@ -5,7 +5,7 @@ import type { CardTopUp } from '../generated/prisma/client';
 import { CardTopUpStatus, LedgerSource, UserStatus } from '../generated/prisma/enums';
 import { UnauthenticatedError } from '../auth/auth.errors';
 import { PrismaService } from '../prisma/prisma.service';
-import { WalletService } from '../wallet/wallet.service';
+import { type Tx, WalletService } from '../wallet/wallet.service';
 import { CheckoutOutcome, PaymentGateway } from './payment-gateway';
 import {
   AccountNotActiveError,
@@ -37,6 +37,9 @@ export const RECHECK_EXPIRED_FOR_MS = 24 * 60 * 60 * 1000;
 export const ABANDONED_INIT_MS = 10 * 60 * 1000;
 
 const SETTLEABLE: CardTopUpStatus[] = [CardTopUpStatus.PENDING, CardTopUpStatus.EXPIRED];
+
+/** Para cekilmis olabilir ama bakiye yuklenmedi: alarm ve admin incelemesi bu oneki arar. */
+export const REVIEW_PREFIX = 'INCELEME: ';
 
 export interface PaymentsServiceOptions {
   gateway: PaymentGateway | null;
@@ -266,6 +269,10 @@ export class PaymentsService {
       return this.prisma.cardTopUp.findUniqueOrThrow({ where: { id: topUp.id } });
     }
 
+    if (outcome.kind === 'REVIEW') {
+      return this.markForReview(topUp, [outcome.reason], outcome);
+    }
+
     const mismatch = [
       outcome.paidKurus !== topUp.amountKurus &&
         `tutar ${outcome.paidKurus} != ${topUp.amountKurus}`,
@@ -279,21 +286,7 @@ export class PaymentsService {
     ].filter(Boolean);
     if (mismatch.length > 0) {
       // Para cekilmis ama beklenenle uyusmuyor: bakiye yuklenmez, admin incelemesine kalir.
-      this.logger.error(
-        { topUpId: topUp.id, mismatch, paymentId: outcome.paymentId },
-        'Kart yukleme uyusmazligi',
-      );
-      await this.prisma.cardTopUp.updateMany({
-        where: { id: topUp.id, status: { in: SETTLEABLE } },
-        data: {
-          status: CardTopUpStatus.FAILED,
-          failureReason: `INCELEME: ${mismatch.join(', ')}`,
-          iyzicoPaymentId: outcome.paymentId,
-          paymentTransactionId: outcome.paymentTransactionId,
-          completedAt: this.now(),
-        },
-      });
-      return this.prisma.cardTopUp.findUniqueOrThrow({ where: { id: topUp.id } });
+      return this.markForReview(topUp, mismatch as string[], outcome);
     }
 
     const settled = await this.prisma.$transaction(async (tx) => {
@@ -347,8 +340,64 @@ export class PaymentsService {
   }
 
   /**
-   * Hesap kapaliyken alinmis odemeyi Iyzico'da geri verir. Basarisizsa kayit
-   * REVERSAL_PENDING kalir; mutabakat her turda yeniden dener.
+   * Para cekilmis olabilir ama bakiye yuklenemez: FAILED + "INCELEME:" ve Iyzico kimlikleri
+   * yazilir. Bu kayitlar CRITICAL alarm verir ve admin panelinden karta iade edilebilir
+   * (guvenlik incelemesi 2026-09-29 #3, #4).
+   */
+  private async markForReview(
+    topUp: CardTopUp,
+    reasons: string[],
+    payment: { paymentId: string; paymentTransactionId: string | null },
+  ): Promise<CardTopUp> {
+    this.logger.error(
+      { topUpId: topUp.id, reasons, paymentId: payment.paymentId },
+      'Kart yuklemesi incelemeye alindi (para cekilmis olabilir)',
+    );
+    await this.prisma.cardTopUp.updateMany({
+      where: { id: topUp.id, status: { in: SETTLEABLE } },
+      data: {
+        status: CardTopUpStatus.FAILED,
+        failureReason: `${REVIEW_PREFIX}${reasons.join(', ')}`,
+        iyzicoPaymentId: payment.paymentId || null,
+        paymentTransactionId: payment.paymentTransactionId,
+        completedAt: this.now(),
+      },
+    });
+    return this.prisma.cardTopUp.findUniqueOrThrow({ where: { id: topUp.id } });
+  }
+
+  /**
+   * Incelemedeki odemeyi (admin karari) karta geri verir: kayit REVERSAL_PENDING olur ve
+   * hemen Iyzico'ya gonderilir; basarisizsa mutabakat her turda yeniden dener. `audit`
+   * durum degisikligiyle ayni transaction'da yazilir. Yalniz incelemedeki ve Iyzico kimligi
+   * olan kayit; ikinci (eszamanli) cagri null doner, Iyzico'ya ikinci istek gitmez.
+   */
+  async reverseReviewed(
+    topUpId: string,
+    audit: (tx: Tx, topUp: CardTopUp) => Promise<void>,
+  ): Promise<CardTopUp | null> {
+    const marked = await this.prisma.$transaction(async (tx) => {
+      const { count } = await tx.cardTopUp.updateMany({
+        where: {
+          id: topUpId,
+          status: CardTopUpStatus.FAILED,
+          failureReason: { startsWith: REVIEW_PREFIX },
+          iyzicoPaymentId: { not: null },
+        },
+        data: { status: CardTopUpStatus.REVERSAL_PENDING },
+      });
+      if (count === 0) return null;
+      const topUp = await tx.cardTopUp.findUniqueOrThrow({ where: { id: topUpId } });
+      await audit(tx, topUp);
+      return topUp;
+    });
+    return marked ? this.reverse(marked) : null;
+  }
+
+  /**
+   * Alinmis ama bakiyeye yazilmayacak odemeyi (kapali hesap ya da admin karariyla incelemedeki
+   * odeme) Iyzico'da geri verir. Basarisizsa kayit REVERSAL_PENDING kalir; mutabakat her
+   * turda yeniden dener.
    */
   private async reverse(topUp: CardTopUp): Promise<CardTopUp> {
     if (!this.options.gateway || !topUp.iyzicoPaymentId) return topUp;
@@ -363,10 +412,9 @@ export class PaymentsService {
         where: { id: topUp.id, status: CardTopUpStatus.REVERSAL_PENDING },
         data: {
           status: CardTopUpStatus.REVERSED,
-          failureReason:
-            result === 'CANCELLED'
-              ? 'Hesap kapali; odeme iptal edildi'
-              : 'Hesap kapali; odeme karta iade edildi',
+          failureReason: `${topUp.failureReason?.startsWith(REVIEW_PREFIX) ? topUp.failureReason : 'Hesap kapali'}; odeme ${
+            result === 'CANCELLED' ? 'iptal edildi' : 'karta iade edildi'
+          }`,
         },
       });
     } catch (error) {

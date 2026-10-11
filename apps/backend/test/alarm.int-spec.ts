@@ -205,6 +205,35 @@ describe('Alarmlar (AlarmService, gercek PostgreSQL)', () => {
     expect((await alarms.active())[0]).toMatchObject({ key: 'ack-timeouts', severity: 'WARNING' });
   });
 
+  it('parasi cekilmis ama incelemede kalan kart odemesi CRITICAL alarm verir', async () => {
+    const reviewRow = (over: Record<string, unknown>) =>
+      prisma.cardTopUp.create({
+        data: {
+          userId,
+          walletId,
+          amountKurus: 5000,
+          status: CardTopUpStatus.FAILED,
+          idempotencyKey: randomUUID(),
+          ...over,
+        },
+      });
+    // Kart reddi ve Iyzico kimligi olmayan inceleme alarm degil.
+    await reviewRow({ failureReason: 'Kart reddedildi', iyzicoPaymentId: 'p1' });
+    await reviewRow({ failureReason: 'INCELEME: tutar 1 != 5000' });
+    expect(await alarms.sweep()).toBe(0);
+
+    await reviewRow({
+      failureReason: 'INCELEME: fraud reddi (fraudStatus=-1)',
+      iyzicoPaymentId: 'p2',
+    });
+    expect(await alarms.sweep()).toBe(1);
+    expect((await alarms.active())[0]).toMatchObject({
+      key: 'card-topups-review',
+      severity: 'CRITICAL',
+      title: 'Incelemede kart odemesi: 1',
+    });
+  });
+
   it('ACK zaman asimi orani: iade edilmeyen (ACK belirsiz) seanslar da sayilir, iki kez degil', async () => {
     const uncertain = async (over: Record<string, unknown> = {}) => {
       const s = await session({ status: SessionStatus.RECONCILING, ...over });

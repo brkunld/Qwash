@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { AuthModule } from '../auth/auth.module';
 import { PaymentGateway } from '../payments/payment-gateway';
 import { PaymentsModule } from '../payments/payments.module';
+import { PaymentsService } from '../payments/payments.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { MonitoringModule } from '../monitoring/monitoring.module';
 import { DeviceOpsService } from '../session/device-ops.service';
@@ -12,6 +13,7 @@ import { WalletService } from '../wallet/wallet.service';
 import { AdminController } from './admin.controller';
 import { AdminGuard } from './admin.guard';
 import { AdminService } from './admin.service';
+import { CardReviewService } from './card-review.service';
 import { OpsService } from './ops.service';
 import { ProgramService } from './program.service';
 import { RefundAdminService } from './refund-admin.service';
@@ -41,6 +43,12 @@ import { RefundAdminService } from './refund-admin.service';
       inject: [PrismaService, WalletService],
       useFactory: (prisma: PrismaService, wallets: WalletService) =>
         new AdminService(prisma, wallets),
+    },
+    {
+      provide: CardReviewService,
+      inject: [PrismaService, PaymentsService],
+      useFactory: (prisma: PrismaService, payments: PaymentsService) =>
+        new CardReviewService(prisma, payments),
     },
     {
       provide: RefundAdminService,

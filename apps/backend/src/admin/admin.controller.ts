@@ -19,6 +19,9 @@ import { ApiTags } from '@nestjs/swagger';
 import {
   type AdminAlarm,
   type AdminAuditEntry,
+  type AdminCardTopUpReview,
+  type ReverseCardTopUpRequest,
+  ReverseCardTopUpRequestSchema,
   type AdminProgram,
   type CreateProgramRequest,
   CreateProgramRequestSchema,
@@ -69,6 +72,7 @@ import { AlarmService } from '../monitoring/alarm.service';
 import { IdempotencyKeyRequiredError } from '../payments/payments.errors';
 import { AdminGuard, adminFromRequest, type AdminActor, SuperAdminOnly } from './admin.guard';
 import { AdminService } from './admin.service';
+import { CardReviewService } from './card-review.service';
 import { OpsService } from './ops.service';
 import { ProgramService } from './program.service';
 import { RefundAdminService } from './refund-admin.service';
@@ -96,6 +100,7 @@ export class AdminController {
     private readonly ops: OpsService,
     private readonly programs: ProgramService,
     private readonly alarms: AlarmService,
+    private readonly cardReview: CardReviewService,
   ) {}
 
   @Get('me')
@@ -194,6 +199,23 @@ export class AdminController {
     @Body(new ZodBody(RejectRefundRequestSchema)) body: RejectRefundRequest,
   ): Promise<AdminRefundRequest> {
     return this.refunds.reject(actor, id, body.reason);
+  }
+
+  // --- Incelemedeki kart odemeleri (guvenlik incelemesi #3) -------------------
+
+  @Get('card-topups/review')
+  cardTopUpsInReview(): Promise<AdminCardTopUpReview[]> {
+    return this.cardReview.list();
+  }
+
+  @Post('card-topups/:id/reverse')
+  @HttpCode(200)
+  reverseCardTopUp(
+    @CurrentAdmin() actor: AdminActor,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body(new ZodBody(ReverseCardTopUpRequestSchema)) body: ReverseCardTopUpRequest,
+  ): Promise<AdminCardTopUpReview> {
+    return this.cardReview.reverse(actor, id, body.reason);
   }
 
   // --- Peron ve seans operasyonlari (6b) ----------------------------------------

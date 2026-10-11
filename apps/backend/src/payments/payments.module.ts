@@ -51,6 +51,6 @@ import { PaymentsWorker } from './payments.worker';
     },
     PaymentsWorker,
   ],
-  exports: [PaymentGateway],
+  exports: [PaymentGateway, PaymentsService],
 })
 export class PaymentsModule {}

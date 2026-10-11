@@ -130,6 +130,8 @@ Kararlar: [ADR-0011](adr/0011-admin-operations.md). Tüm uçlar `AdminGuard` ark
 * `POST /admin/refund-requests/:id/payouts/:index/card-refund` — Kart parçasını Iyzico'dan kısmi iade eder. Cevap belirsizse parça `IN_FLIGHT` kalır ve tekrar gönderilemez (`409 PAYOUT_STATE`).
 * `POST /admin/refund-requests/:id/payouts/:index/resolve` — `{ outcome: "PAID", reference, stationId? }`: IBAN/kasa parçasını (kasada `stationId` zorunlu) veya IN_FLIGHT kart parçasını kapatır. IBAN parçasını yalnız SUPER_ADMIN kapatır (`403 ADMIN_FORBIDDEN`). `{ outcome: "NOT_PAID", reason }`: IN_FLIGHT kart parçasını yeniden denenebilir yapar. Son parça ödenince bloke tahsil edilir, talep `COMPLETED` olur.
 * `POST /admin/refund-requests/:id/reject` — `{ reason }`. Ödenmiş veya sonucu belirsiz parça varsa `409 REFUND_HAS_PAID_PARTS`; yoksa bloke serbest kalır.
+* `GET /admin/card-topups/review` — Parası çekilmiş olabilir ama bakiyeye yazılmamış kart ödemeleri (`FAILED` + `INCELEME:`, iadesi süren `REVERSAL_PENDING` dahil, en çok 100).
+* `POST /admin/card-topups/:id/reverse` — `{ reason }` (en az 10 karakter). İncelemedeki ödemeyi Iyzico'da iptal/iade eder; denetime yazılır. İncelemede değilse `409 CARD_TOPUP_NOT_REVIEWABLE`. İade başarısızsa kayıt `REVERSAL_PENDING` kalır, mutabakat yeniden dener.
 * `GET /admin/settings/topup`, `PUT /admin/settings/topup` (**yalnız SUPER_ADMIN**) — `{ minTopUpKurus, maxTopUpKurus, dailyCashLimitKurus }`.
 
 **Faz 6b (hazır):**

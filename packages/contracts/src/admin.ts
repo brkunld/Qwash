@@ -263,6 +263,28 @@ export const AdminBayViewSchema = z.object({
 });
 export type AdminBayView = z.infer<typeof AdminBayViewSchema>;
 
+/**
+ * Parasi cekilmis olabilir ama bakiyeye yazilmamis kart odemesi (tutar/sepet uyusmazligi,
+ * fraud reddi, fraud sonucu yok). Admin Iyzico panelinden bakip karta iade eder.
+ */
+export const AdminCardTopUpReviewSchema = z.object({
+  id: z.string(),
+  userId: z.string(),
+  userEmail: z.string(),
+  amountKurus: z.number().int(),
+  status: z.string(),
+  reason: z.string(),
+  iyzicoPaymentId: z.string().nullable(),
+  createdAt: z.string(),
+  completedAt: z.string().nullable(),
+});
+export type AdminCardTopUpReview = z.infer<typeof AdminCardTopUpReviewSchema>;
+
+export const ReverseCardTopUpRequestSchema = z.object({
+  reason: z.string().trim().min(10).max(500),
+});
+export type ReverseCardTopUpRequest = z.infer<typeof ReverseCardTopUpRequestSchema>;
+
 export const AdminAlarmSchema = z.object({
   key: z.string(),
   severity: z.enum(['WARNING', 'CRITICAL']),
