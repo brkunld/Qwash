@@ -62,15 +62,15 @@ export default function RefundDetailPage() {
             <div className="flex flex-wrap items-center gap-2">
               <Badge tone={REQUEST_TONE[r.status]}>{REQUEST_LABEL[r.status]}</Badge>
               {r.resolvedAt && (
-                <span className="text-sm text-slate-600">{dateTime(r.resolvedAt)}</span>
+                <span className="text-sm text-ink-muted">{dateTime(r.resolvedAt)}</span>
               )}
             </div>
             <dl className="mt-3 grid grid-cols-[10rem_1fr] gap-y-2 text-sm">
-              <dt className="text-slate-500">Mühürlü ad soyad</dt>
-              <dd className="font-semibold">{r.holderName || '—'}</dd>
-              <dt className="text-slate-500">İletişim e-postası</dt>
+              <dt className="text-ink-muted">Mühürlü ad soyad</dt>
+              <dd className="font-semibold">{r.holderName || '-'}</dd>
+              <dt className="text-ink-muted">İletişim e-postası</dt>
               <dd>{r.contactEmail ?? 'temizlendi'}</dd>
-              <dt className="text-slate-500">Müşteri</dt>
+              <dt className="text-ink-muted">Müşteri</dt>
               <dd>
                 <Link href={`/users/${r.userId}`} className="underline">
                   {r.userId}
@@ -78,7 +78,7 @@ export default function RefundDetailPage() {
               </dd>
               {r.rejectReason && (
                 <>
-                  <dt className="text-slate-500">Red gerekçesi</dt>
+                  <dt className="text-ink-muted">Red gerekçesi</dt>
                   <dd>{r.rejectReason}</dd>
                 </>
               )}
@@ -151,7 +151,7 @@ function PayoutCard({
         </span>
       </div>
       {p.reference && (
-        <p className="mt-1 text-sm text-slate-600">
+        <p className="mt-1 text-sm text-ink-muted">
           Referans: <code>{p.reference}</code> · {dateTime(p.completedAt)}
         </p>
       )}
@@ -164,7 +164,7 @@ function PayoutCard({
 
       {open && p.method === 'CARD' && (p.status === 'PENDING' || p.status === 'FAILED') && (
         <div className="mt-3">
-          <p className="mb-2 text-sm text-slate-600">
+          <p className="mb-2 text-sm text-ink-muted">
             Iyzico&apos;dan orijinal kart işlemine kısmi iade yapılır. İade sonucu belirsiz kalırsa
             tekrar denenmez; siz Iyzico panelinden kontrol edersiniz.
           </p>
@@ -222,14 +222,14 @@ function PayoutCard({
 
       {open && p.method === 'IBAN' && p.status !== 'DONE' && (
         <div className="mt-3 flex flex-col gap-3">
-          <dl className="grid grid-cols-[8rem_1fr] gap-y-1 rounded-lg bg-slate-50 p-3 text-sm">
-            <dt className="text-slate-500">IBAN</dt>
+          <dl className="grid grid-cols-[8rem_1fr] gap-y-1 rounded-lg bg-surface-sunken p-3 text-sm">
+            <dt className="text-ink-muted">IBAN</dt>
             <dd>
               <code className="select-all">{request.iban}</code>
             </dd>
-            <dt className="text-slate-500">Alıcı adı</dt>
+            <dt className="text-ink-muted">Alıcı adı</dt>
             <dd className="font-semibold">{request.holderName}</dd>
-            <dt className="text-slate-500">Açıklama</dt>
+            <dt className="text-ink-muted">Açıklama</dt>
             <dd>
               <code className="select-all">{request.transferDescription}</code>
             </dd>
@@ -313,7 +313,7 @@ function RejectCard({
   return (
     <Card title="Talebi reddet">
       {blocked ? (
-        <p className="text-sm text-slate-600">
+        <p className="text-sm text-ink-muted">
           Ödenmiş veya sonucu belirsiz parça olduğu için reddedilemez.
         </p>
       ) : !show ? (
@@ -322,7 +322,7 @@ function RejectCard({
         </Button>
       ) : (
         <form onSubmit={reject} className="flex flex-col gap-3">
-          <p className="text-sm text-slate-600">
+          <p className="text-sm text-ink-muted">
             Bloke serbest kalır, tutar müşteri bakiyesine döner (hesap silinmişse erişilemez; önce
             durumu değerlendirin).
           </p>

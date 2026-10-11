@@ -65,12 +65,12 @@ export default function AuditPage() {
                     </td>
                     <td className={TD}>
                       {ACTION_LABEL[e.action] ?? e.action}
-                      <div className="text-xs text-slate-500">
+                      <div className="text-xs text-ink-muted">
                         {e.targetType} {e.targetId ? e.targetId.slice(0, 8) : ''}
                       </div>
                     </td>
-                    <td className={`${TD} max-w-md text-xs text-slate-600`}>
-                      {e.reason && <p className="mb-1 text-sm text-slate-800">{e.reason}</p>}
+                    <td className={`${TD} max-w-md text-xs text-ink-muted`}>
+                      {e.reason && <p className="mb-1 text-sm text-ink">{e.reason}</p>}
                       {e.details ? (
                         <code className="break-all">{JSON.stringify(e.details)}</code>
                       ) : null}

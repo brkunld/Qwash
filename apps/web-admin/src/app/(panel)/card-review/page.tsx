@@ -88,12 +88,12 @@ function ReviewRow({
     <tr>
       <td className={TD}>
         <div className="font-medium">{t.userEmail}</div>
-        <div className="text-xs text-slate-500">{dateTime(t.createdAt)}</div>
+        <div className="text-xs text-ink-muted">{dateTime(t.createdAt)}</div>
       </td>
       <td className={TD}>{tl(t.amountKurus)}</td>
       <td className={TD}>{t.reason}</td>
       <td className={TD}>
-        <code className="select-all">{t.iyzicoPaymentId ?? '—'}</code>
+        <code className="select-all">{t.iyzicoPaymentId ?? '-'}</code>
       </td>
       <td className={TD}>
         {pending ? (

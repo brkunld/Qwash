@@ -176,19 +176,19 @@ function TopUpForm({
             {search.error && <Alert>{search.error}</Alert>}
             {found && found.length === 0 && <Empty>Aktif müşteri bulunamadı.</Empty>}
             {found && found.length > 0 && (
-              <ul className="divide-y divide-slate-100 rounded-lg border border-slate-200">
+              <ul className="divide-y divide-line rounded-lg border border-line">
                 {found.map((u) => (
                   <li key={u.id}>
                     <button
                       type="button"
                       onClick={() => setCustomer(u)}
-                      className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-slate-50"
+                      className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-surface-muted"
                     >
                       <span>
                         <span className="font-medium">{u.email}</span>
-                        <span className="block text-xs text-slate-500">{u.fullName ?? '—'}</span>
+                        <span className="block text-xs text-ink-muted">{u.fullName ?? '-'}</span>
                       </span>
-                      <span className="text-slate-600">{tl(u.balanceKurus)}</span>
+                      <span className="text-ink-muted">{tl(u.balanceKurus)}</span>
                     </button>
                   </li>
                 ))}
@@ -197,11 +197,11 @@ function TopUpForm({
           </>
         ) : (
           <>
-            <div className="flex items-center justify-between rounded-lg bg-slate-50 p-3 text-sm">
+            <div className="flex items-center justify-between rounded-lg bg-surface-sunken p-3 text-sm">
               <span>
                 <span className="font-semibold">{customer.email}</span>
-                <span className="block text-xs text-slate-500">
-                  {customer.fullName ?? '—'} · bakiye {tl(customer.balanceKurus)}
+                <span className="block text-xs text-ink-muted">
+                  {customer.fullName ?? '-'} · bakiye {tl(customer.balanceKurus)}
                 </span>
               </span>
               <Button small variant="secondary" onClick={() => setCustomer(null)}>
@@ -275,7 +275,7 @@ function ReportCard({
           value={date}
           onChange={(e) => setDate(e.target.value)}
         />
-        <p className="pb-2 text-sm text-slate-600">{stationName}</p>
+        <p className="pb-2 text-sm text-ink-muted">{stationName}</p>
       </div>
       {report.error && <Alert>{report.error}</Alert>}
       {report.loading && !r && <Loading />}
@@ -310,7 +310,7 @@ function ReportCard({
                           {tl(o.cashRefundKurus)} <Badge>{o.cashRefundCount} işlem</Badge>
                         </>
                       ) : (
-                        '—'
+                        '-'
                       )}
                     </td>
                   </tr>
@@ -326,8 +326,8 @@ function ReportCard({
 
 function Stat({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
   return (
-    <div className={`rounded-lg p-3 ${strong ? 'bg-brand-50' : 'bg-slate-50'}`}>
-      <p className="text-xs text-slate-500">{label}</p>
+    <div className={`rounded-lg p-3 ${strong ? 'bg-brand-50' : 'bg-surface-sunken'}`}>
+      <p className="text-xs text-ink-muted">{label}</p>
       <p className={`text-lg ${strong ? 'font-bold' : 'font-semibold'}`}>{value}</p>
     </div>
   );
