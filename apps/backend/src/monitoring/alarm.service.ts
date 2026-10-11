@@ -7,6 +7,7 @@ import {
   RefundPayoutStatus,
   SessionStatus,
 } from '../generated/prisma/enums';
+import { REVIEW_PREFIX } from '../payments/payments.service';
 
 export type AlarmSeverity = 'WARNING' | 'CRITICAL';
 
@@ -222,6 +223,24 @@ export class AlarmService {
         severity: 'CRITICAL',
         title: 'Odeme/iade isleminde takilma',
         detail: `${reversals} kart odemesi iptal/iade bekliyor, ${payouts} iade parcasi belirsiz/basarisiz. Admin > Iade talepleri. docs/RUNBOOK.md bolum 8-9.`,
+      });
+    }
+
+    // 4b) Parasi cekilmis ama bakiyeye yazilmamis kart odemesi (tutar/sepet uyusmazligi, fraud
+    // reddi ya da fraud sonucu yok). Musteri yalniz "inceleniyor" gorur; karar admindedir.
+    const cardReview = await this.prisma.cardTopUp.count({
+      where: {
+        status: CardTopUpStatus.FAILED,
+        failureReason: { startsWith: REVIEW_PREFIX },
+        iyzicoPaymentId: { not: null },
+      },
+    });
+    if (cardReview > 0) {
+      out.push({
+        key: 'card-topups-review',
+        severity: 'CRITICAL',
+        title: `Incelemede kart odemesi: ${cardReview}`,
+        detail: `${cardReview} kart odemesinde para cekilmis olabilir ama bakiye yuklenmedi. Admin > Odeme incelemesi: Iyzico panelinden kontrol edip karta iade edin. docs/RUNBOOK.md bolum 8.`,
       });
     }
 

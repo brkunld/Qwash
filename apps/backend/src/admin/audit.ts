@@ -26,10 +26,18 @@ export type AuditAction =
   | 'PROGRAM_CREATED'
   | 'PROGRAM_UPDATED'
   | 'PROGRAM_DELETED'
-  | 'BAY_PROGRAMS_SET';
+  | 'BAY_PROGRAMS_SET'
+  | 'CARD_TOPUP_REVIEW_REVERSED';
 
 export type AuditTarget =
-  'USER' | 'REFUND_REQUEST' | 'TOPUP_SETTINGS' | 'BAY' | 'STATION' | 'SESSION' | 'PROGRAM';
+  | 'USER'
+  | 'REFUND_REQUEST'
+  | 'TOPUP_SETTINGS'
+  | 'BAY'
+  | 'STATION'
+  | 'SESSION'
+  | 'PROGRAM'
+  | 'CARD_TOPUP';
 
 export interface AuditEntry {
   /** null: komut satiri betigi. */

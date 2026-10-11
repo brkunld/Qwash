@@ -76,6 +76,7 @@ Müşteri Iyzico sayfasında ödedi ama bakiye artmadı. Bakiye **yalnız Iyzico
 
 - **Yap:** önce bekle (mutabakat işçisi periyodik olarak Iyzico'yu sorgular, geç kalan webhook'ları da tamamlar). Hâlâ yoksa yüklemeyi Iyzico panelinde ara: ödeme başarılıysa mutabakatın işlemesini bekle; başarısızsa müşteriye söyle. Elle bakiye yazma: yalnız SUPER_ADMIN gerekçeli düzeltmesi, **ve önce Iyzico'da ödemenin gerçekten alındığını doğrula**.
 - Hesap kapalıyken alınan ödeme `REVERSAL_PENDING`/`REVERSED` olur; Iyzico'da iptal/iade edilir.
+- **İncelemedeki ödeme** (`card-topups-review` alarmı, CRITICAL): Iyzico "başarılı" dedi ama tutar/sepet tutmadı, fraud reddedildi ya da fraud sonucu gelmedi. Bakiye yüklenmez, kayıt `FAILED` + `INCELEME:` olarak Iyzico ödeme numarasıyla kalır. **Yap:** Admin > Ödeme incelemesi; ödeme numarasını Iyzico panelinde ara. Para çekildiyse "Karta iade et" (gerekçe zorunlu, denetime yazılır; iade başarısızsa mutabakat yeniden dener). Bakiyeye yüklenmesi gerekiyorsa SUPER_ADMIN bakiye düzeltmesi yapar; ancak bu kaydı "bakiyeye yüklendi" diye kapatan bir işlem henüz yok, kayıt incelemede kalır ve alarm sürer (açık madde).
 
 ## 9. İade talebi belirsiz sonuçta (`IN_FLIGHT`)
 

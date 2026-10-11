@@ -10,6 +10,7 @@ import { NoopAlertNotifier } from '../src/monitoring/email-alert-notifier';
 import type { AdminActor } from '../src/admin/admin.guard';
 import { AdminGuard } from '../src/admin/admin.guard';
 import { AdminService } from '../src/admin/admin.service';
+import { CardReviewService } from '../src/admin/card-review.service';
 import { OpsService } from '../src/admin/ops.service';
 import { ProgramService } from '../src/admin/program.service';
 import { RefundAdminService } from '../src/admin/refund-admin.service';
@@ -25,6 +26,7 @@ import {
   UserStatus,
 } from '../src/generated/prisma/enums';
 import { configureApp } from '../src/http/configure-app';
+import { PaymentsService } from '../src/payments/payments.service';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { WalletService } from '../src/wallet/wallet.service';
 import { resetDatabase, testPrisma } from './db';
@@ -590,6 +592,16 @@ describe('Admin operasyonlari (gercek PostgreSQL)', () => {
           { provide: OpsService, useValue: {} },
           { provide: ProgramService, useValue: new ProgramService(prisma) },
           {
+            provide: CardReviewService,
+            useValue: new CardReviewService(
+              prisma,
+              new PaymentsService(prisma, wallets, {
+                gateway,
+                apiPublicUrl: 'http://api.test',
+              }),
+            ),
+          },
+          {
             provide: AlarmService,
             useValue: new AlarmService(prisma, { isConnected: true }, new NoopAlertNotifier()),
           },
@@ -635,6 +647,49 @@ describe('Admin operasyonlari (gercek PostgreSQL)', () => {
       });
       return { token: session.accessToken, userId: session.user.id };
     }
+
+    it('incelemedeki kart odemesi listelenir ve gerekceyle karta iade edilir, denetime yazilir', async () => {
+      const { token, userId: adminId } = await tokenFor(UserRole.ADMIN);
+      const c = await user();
+      const row = await prisma.cardTopUp.create({
+        data: {
+          userId: c.userId,
+          walletId: c.walletId,
+          amountKurus: 10000,
+          status: CardTopUpStatus.FAILED,
+          failureReason: 'INCELEME: fraud reddi (fraudStatus=-1)',
+          iyzicoPaymentId: 'pay-1',
+          idempotencyKey: 'k',
+        },
+      });
+      const list = await http()
+        .get('/api/v1/admin/card-topups/review')
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
+      expect(list.body.data).toEqual([
+        expect.objectContaining({
+          id: row.id,
+          userEmail: c.email,
+          reason: 'fraud reddi (fraudStatus=-1)',
+          iyzicoPaymentId: 'pay-1',
+        }),
+      ]);
+
+      const reverse = (reason: string) =>
+        http()
+          .post(`/api/v1/admin/card-topups/${row.id}/reverse`)
+          .set('Authorization', `Bearer ${token}`)
+          .send({ reason });
+      await reverse('kisa').expect(400);
+      const done = await reverse('Iyzico panelinde para cekilmis gorundu').expect(200);
+      expect(done.body.data.status).toBe(CardTopUpStatus.REVERSED);
+      expect(gateway.reversed).toHaveLength(1);
+      const again = await reverse('Iyzico panelinde para cekilmis gorundu').expect(409);
+      expect(again.body.error.code).toBe('CARD_TOPUP_NOT_REVIEWABLE');
+      expect(
+        await prisma.adminAuditLog.findMany({ where: { action: 'CARD_TOPUP_REVIEW_REVERSED' } }),
+      ).toEqual([expect.objectContaining({ actorId: adminId, targetId: row.id })]);
+    });
 
     it('girissiz 401, musteri 403', async () => {
       await http().get('/api/v1/admin/me').expect(401);

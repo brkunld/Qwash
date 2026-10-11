@@ -84,6 +84,12 @@ export class RefundHasPaidPartsError extends AdminError {
   }
 }
 
+export class CardTopUpNotReviewableError extends AdminError {
+  constructor() {
+    super('CARD_TOPUP_NOT_REVIEWABLE', 'Bu kart odemesi incelemede degil ya da zaten iade edildi.');
+  }
+}
+
 export class StationRequiredError extends AdminError {
   constructor() {
     super('STATION_REQUIRED', 'Kasadan odemede istasyon secilmeli (kasa raporu icin).');

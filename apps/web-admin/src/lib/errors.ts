@@ -18,6 +18,7 @@ const MESSAGES: Record<string, string> = {
   STATION_NOT_FOUND: 'İstasyon bulunamadı.',
   TARGET_ACCOUNT_NOT_ACTIVE: 'Müşteri hesabı aktif değil; bakiye işlemi yapılamaz.',
   CASH_AMOUNT_OUT_OF_RANGE: 'Tutar izin verilen üst sınırı aşıyor.',
+  CARD_TOPUP_NOT_REVIEWABLE: 'Bu ödeme artık incelemede değil; sayfayı yenileyin.',
   INSUFFICIENT_AVAILABLE: 'Kullanılabilir bakiye yetersiz; bloke edilmiş tutardan düşülemez.',
   PROGRAM_CODE_TAKEN: 'Bu kod bu istasyonda kullanılmış (silinmiş program da olabilir).',
   RELAY_CONFLICT: 'Aynı röle kanalı iki programa atanamaz.',

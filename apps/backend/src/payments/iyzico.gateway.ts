@@ -129,13 +129,29 @@ export class IyzicoGateway extends PaymentGateway {
       str(res.token),
     ]);
 
-    // fraudStatus: 1 onay, 0 inceleme, -1 red.
-    const fraudStatus = Number(res.fraudStatus);
-    if (fraudStatus === 0) return { kind: 'PENDING', reason: 'fraud incelemesi' };
-    if (fraudStatus !== 1)
-      return { kind: 'FAILURE', reason: `fraudStatus=${String(res.fraudStatus)}` };
-
     const items = Array.isArray(res.itemTransactions) ? (res.itemTransactions as Json[]) : [];
+
+    // fraudStatus: 1 onay, 0 inceleme, -1 red. Odeme imzali SUCCESS oldugu icin 1 disindaki
+    // kesin olmayan her durum (red, alan yok, tanimsiz deger) sessizce FAILURE sayilmaz:
+    // para cekilmis olabilir, kayit incelemeye duser (guvenlik incelemesi 2026-09-29 #4).
+    const fraudRaw = res.fraudStatus;
+    const fraudStatus =
+      typeof fraudRaw === 'number' || (typeof fraudRaw === 'string' && fraudRaw.trim() !== '')
+        ? Number(fraudRaw)
+        : Number.NaN;
+    if (fraudStatus === 0) return { kind: 'PENDING', reason: 'fraud incelemesi' };
+    if (fraudStatus !== 1) {
+      return {
+        kind: 'REVIEW',
+        reason:
+          fraudStatus === -1
+            ? 'fraud reddi (fraudStatus=-1)'
+            : `fraud sonucu yok (fraudStatus=${String(fraudRaw)})`,
+        paymentId: str(res.paymentId) ?? '',
+        paymentTransactionId: str(items[0]?.paymentTransactionId) ?? null,
+      };
+    }
+
     return {
       kind: 'SUCCESS',
       paymentId: str(res.paymentId) ?? '',
