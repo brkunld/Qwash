@@ -35,6 +35,16 @@ export type CheckoutOutcome =
     }
   /** Odeme kesin olarak basarisiz. */
   | { kind: 'FAILURE'; reason: string }
+  /**
+   * Imzali yanit "odeme alindi" diyor ama bakiye yuklenemez (fraud reddi ya da fraud
+   * sonucu yok). Para cekilmis olabilir: kayit admin incelemesine ve alarma duser.
+   */
+  | {
+      kind: 'REVIEW';
+      reason: string;
+      paymentId: string;
+      paymentTransactionId: string | null;
+    }
   /** Henuz sonuc yok (form acik, 3DS suruyor, fraud incelemesi). */
   | { kind: 'PENDING'; reason: string };
 

@@ -38,7 +38,7 @@ export function SessionCard({
           <h2 className="font-semibold">
             {s.bayCode} · {s.programCode} · {durationLabel(s.plannedDurationSec)}
           </h2>
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-ink-muted">
             {dateTime(s.createdAt)} ·{' '}
             <Link href={`/users/${s.userId}`} className="underline">
               {s.userEmail}
@@ -58,20 +58,20 @@ export function SessionCard({
 
       <dl className="mt-3 grid grid-cols-2 gap-y-1 text-sm sm:grid-cols-4">
         <div>
-          <dt className="text-xs text-slate-500">Kullanılan</dt>
-          <dd>{s.usedSeconds === null ? '—' : durationLabel(s.usedSeconds)}</dd>
+          <dt className="text-xs text-ink-muted">Kullanılan</dt>
+          <dd>{s.usedSeconds === null ? '-' : durationLabel(s.usedSeconds)}</dd>
         </div>
         <div>
-          <dt className="text-xs text-slate-500">Kanıtlanmış</dt>
+          <dt className="text-xs text-ink-muted">Kanıtlanmış</dt>
           <dd>{durationLabel(s.provenUsedSec)}</dd>
         </div>
         <div>
-          <dt className="text-xs text-slate-500">Tahsil edilen</dt>
-          <dd>{s.chargedKurus === null ? '—' : tl(s.chargedKurus)}</dd>
+          <dt className="text-xs text-ink-muted">Tahsil edilen</dt>
+          <dd>{s.chargedKurus === null ? '-' : tl(s.chargedKurus)}</dd>
         </div>
         <div>
-          <dt className="text-xs text-slate-500">Bitiş nedeni</dt>
-          <dd>{s.endReason ?? '—'}</dd>
+          <dt className="text-xs text-ink-muted">Bitiş nedeni</dt>
+          <dd>{s.endReason ?? '-'}</dd>
         </div>
       </dl>
 
@@ -86,13 +86,13 @@ export function SessionCard({
       )}
 
       <details className="mt-3 text-sm">
-        <summary className="cursor-pointer text-slate-600">
+        <summary className="cursor-pointer text-ink-muted">
           Seans geçmişi ({s.transitions.length})
         </summary>
-        <ul className="mt-1 text-xs text-slate-600">
+        <ul className="mt-1 text-xs text-ink-muted">
           {s.transitions.map((t, i) => (
             <li key={i}>
-              {dateTime(t.at)} — {t.reason}
+              {dateTime(t.at)}: {t.reason}
             </li>
           ))}
         </ul>
@@ -124,7 +124,7 @@ function ReviewForm({
 
   if (s.reviewedAt) {
     return (
-      <p className="mt-3 rounded-lg bg-slate-50 p-3 text-sm">
+      <p className="mt-3 rounded-lg bg-surface-sunken p-3 text-sm">
         <span className="font-semibold">İnceleme notu:</span> {s.reviewNote}
       </p>
     );
@@ -207,7 +207,7 @@ function ServiceRefund({
 
   return (
     <form onSubmit={submit} className="mt-3 flex flex-col gap-3 rounded-lg border p-3">
-      <p className="text-xs text-slate-600">
+      <p className="text-xs text-ink-muted">
         Tutar müşterinin <strong>bakiyesine</strong> döner (karta değil). Seans başına yalnız bir
         kez yapılabilir. Tahsil edilen: {tl(charged)}.
       </p>

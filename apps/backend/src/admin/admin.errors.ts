@@ -42,6 +42,22 @@ export class CashAmountOutOfRangeError extends AdminError {
   }
 }
 
+export class SelfTopUpForbiddenError extends AdminError {
+  constructor() {
+    super('SELF_TOPUP_FORBIDDEN', 'Kendi hesabiniza nakit yukleme yapamazsiniz.');
+  }
+}
+
+export class CashDailyLimitExceededError extends AdminError {
+  constructor(limitKurus: number, usedKurus: number) {
+    super(
+      'CASH_DAILY_LIMIT_EXCEEDED',
+      'Bugunku nakit yukleme limitiniz doldu; kalan tutari super yonetici yuklemeli.',
+      { limitKurus, usedKurus, remainingKurus: Math.max(0, limitKurus - usedKurus) },
+    );
+  }
+}
+
 export class AdminIdempotencyConflictError extends AdminError {
   constructor() {
     super(
@@ -81,6 +97,12 @@ export class RefundHasPaidPartsError extends AdminError {
       'REFUND_HAS_PAID_PARTS',
       'Odenmis veya sonucu belirsiz parcasi olan talep reddedilemez; once parcalari sonuclandirin.',
     );
+  }
+}
+
+export class CardTopUpNotReviewableError extends AdminError {
+  constructor() {
+    super('CARD_TOPUP_NOT_REVIEWABLE', 'Bu kart odemesi incelemede degil ya da zaten iade edildi.');
   }
 }
 

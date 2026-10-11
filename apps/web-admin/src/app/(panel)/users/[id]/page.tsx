@@ -66,25 +66,25 @@ export default function UserDetailPage() {
           <div className="flex flex-col gap-4 xl:col-span-1">
             <Card title="Hesap">
               <dl className="grid grid-cols-2 gap-y-2 text-sm">
-                <dt className="text-slate-500">Durum</dt>
+                <dt className="text-ink-muted">Durum</dt>
                 <dd>
                   <Badge tone={u.status === 'ACTIVE' ? 'green' : 'red'}>{u.status}</Badge>
                 </dd>
-                <dt className="text-slate-500">Rol</dt>
+                <dt className="text-ink-muted">Rol</dt>
                 <dd>{u.role}</dd>
-                <dt className="text-slate-500">E-posta</dt>
+                <dt className="text-ink-muted">E-posta</dt>
                 <dd>{u.emailVerified ? 'Doğrulanmış' : 'Doğrulanmamış'}</dd>
-                <dt className="text-slate-500">Telefon</dt>
-                <dd>{u.phoneNumber ?? '—'}</dd>
-                <dt className="text-slate-500">Ad mühürlü</dt>
+                <dt className="text-ink-muted">Telefon</dt>
+                <dd>{u.phoneNumber ?? '-'}</dd>
+                <dt className="text-ink-muted">Ad mühürlü</dt>
                 <dd>{u.nameLockedAt ? dateTime(u.nameLockedAt) : 'Hayır'}</dd>
-                <dt className="text-slate-500">Kayıt</dt>
+                <dt className="text-ink-muted">Kayıt</dt>
                 <dd>{dateTime(u.createdAt)}</dd>
               </dl>
             </Card>
             <Card title="Bakiye">
               <p className="text-3xl font-bold">{tl(u.balanceKurus - u.holdKurus)}</p>
-              <p className="text-sm text-slate-500">
+              <p className="text-sm text-ink-muted">
                 kullanılabilir · toplam {tl(u.balanceKurus)}
                 {u.holdKurus > 0 && ` · bloke ${tl(u.holdKurus)}`}
               </p>
@@ -113,7 +113,7 @@ export default function UserDetailPage() {
                       <td className={TD}>{dateTime(e.createdAt)}</td>
                       <td className={TD}>
                         <Badge tone={LEDGER_TONE[e.type]}>{e.type}</Badge>{' '}
-                        <span className="text-xs text-slate-600">
+                        <span className="text-xs text-ink-muted">
                           {SOURCE_LABEL[e.source] ?? e.source}
                         </span>
                         {e.type === 'CAPTURE' && e.source === 'SESSION' && e.referenceId && (
@@ -130,7 +130,7 @@ export default function UserDetailPage() {
                       </td>
                       <td className={TD}>{tl(e.amountKurus)}</td>
                       <td className={TD}>{tl(e.balanceAfterKurus)}</td>
-                      <td className={`${TD} max-w-xs text-xs text-slate-600`}>{e.note ?? ''}</td>
+                      <td className={`${TD} max-w-xs text-xs text-ink-muted`}>{e.note ?? ''}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -179,7 +179,7 @@ function AdjustmentForm({ userId, onDone }: { userId: string; onDone: () => Prom
 
   return (
     <Card title="Manuel bakiye düzeltme">
-      <p className="mb-3 text-xs text-slate-600">
+      <p className="mb-3 text-xs text-ink-muted">
         Yalnız hata düzeltmek için. Nakit yükleme için{' '}
         <Link href="/cash" className="underline">
           Kasa

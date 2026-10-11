@@ -11,8 +11,8 @@ export function LegalPage({ title, children }: { title: string; children: ReactN
           tarafından gözden geçirilmelidir.
         </Alert>
       )}
-      <p className="text-xs text-slate-500">Son güncelleme: {LEGAL_UPDATED}</p>
-      <article className="flex flex-col gap-3 text-sm leading-relaxed text-slate-700">
+      <p className="text-xs text-ink-muted">Son güncelleme: {LEGAL_UPDATED}</p>
+      <article className="flex flex-col gap-3 text-sm leading-relaxed text-ink-soft">
         {children}
       </article>
     </Page>
@@ -20,7 +20,7 @@ export function LegalPage({ title, children }: { title: string; children: ReactN
 }
 
 export function H({ children }: { children: ReactNode }) {
-  return <h2 className="mt-3 text-base font-semibold text-slate-900">{children}</h2>;
+  return <h2 className="mt-3 text-base font-semibold text-ink">{children}</h2>;
 }
 
 export function Ul({ children }: { children: ReactNode }) {

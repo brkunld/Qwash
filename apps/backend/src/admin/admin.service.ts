@@ -25,6 +25,8 @@ import {
   AdminIdempotencyConflictError,
   AdminUserNotFoundError,
   CashAmountOutOfRangeError,
+  CashDailyLimitExceededError,
+  SelfTopUpForbiddenError,
   StationNotFoundError,
   TargetAccountNotActiveError,
 } from './admin.errors';
@@ -33,6 +35,7 @@ import { writeAudit } from './audit';
 
 /** Turkiye 2016'dan beri sabit UTC+3 (yaz saati yok); kasa gunu Istanbul yerel gunudur. */
 const ISTANBUL_OFFSET = '+03:00';
+const ISTANBUL_OFFSET_MS = 3 * 60 * 60 * 1000;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const LEDGER_PAGE = 50;
 const SEARCH_LIMIT = 20;
@@ -112,6 +115,10 @@ export class AdminService {
   /**
    * Operatorun kasada aldigi nakdi musteri bakiyesine yukler. CashTopUp + CREDIT + denetim
    * kaydi tek transaction'da. Ayni Idempotency-Key tekrarinda ayni makbuz doner.
+   *
+   * Tek kisinin "para basmasini" sinirlar (guvenlik incelemesi 2026-09-29 #7): kimse kendi
+   * hesabina yukleyemez; ADMIN'in Istanbul gunu toplami `dailyCashLimitKurus`'u asamaz
+   * (SUPER_ADMIN'e uygulanmaz, ustunu o yukler).
    */
   async cashTopUp(
     actor: AdminActor,
@@ -122,6 +129,7 @@ export class AdminService {
     const replay = await this.findCashReplay(key, actor, input);
     if (replay) return replay;
 
+    if (input.userId === actor.userId) throw new SelfTopUpForbiddenError();
     const settings = await this.topUpSettingsRow();
     if (input.amountKurus > settings.maxTopUpKurus) {
       throw new CashAmountOutOfRangeError(settings.maxTopUpKurus);
@@ -134,6 +142,14 @@ export class AdminService {
         // Hesap silmeyle ayni cuzdan kilidi: silinmekte olan hesaba para yazilmaz.
         const { user, wallet } = await lockUserWallet(tx, input.userId);
         if (user.status !== UserStatus.ACTIVE) throw new TargetAccountNotActiveError();
+        if (actor.role !== 'SUPER_ADMIN') {
+          await this.assertDailyCashLimit(
+            tx,
+            actor,
+            input.amountKurus,
+            settings.dailyCashLimitKurus,
+          );
+        }
 
         const topUp = await tx.cashTopUp.create({
           data: {
@@ -175,6 +191,28 @@ export class AdminService {
       }
       throw error;
     }
+  }
+
+  /**
+   * Operatorun bugunku (Istanbul) nakit toplamini kontrol eder. Ayni operatorun eszamanli
+   * yuklemeleri islem kilidiyle sirayla sayilir; ikisi birden limiti asamaz.
+   */
+  private async assertDailyCashLimit(
+    tx: Tx,
+    actor: AdminActor,
+    amountKurus: number,
+    limitKurus: number,
+  ): Promise<void> {
+    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${`cash-operator:${actor.userId}`}))::text`;
+    const dayStart = new Date(
+      Math.floor((Date.now() + ISTANBUL_OFFSET_MS) / DAY_MS) * DAY_MS - ISTANBUL_OFFSET_MS,
+    );
+    const sum = await tx.cashTopUp.aggregate({
+      where: { operatorId: actor.userId, createdAt: { gte: dayStart } },
+      _sum: { amountKurus: true },
+    });
+    const used = Number(sum._sum.amountKurus ?? 0);
+    if (used + amountKurus > limitKurus) throw new CashDailyLimitExceededError(limitKurus, used);
   }
 
   private async findCashReplay(
@@ -368,8 +406,11 @@ export class AdminService {
   ): Promise<TopUpSettingsView> {
     return this.prisma.$transaction(async (tx) => {
       await tx.topUpSettings.upsert({ where: { id: 1 }, create: { id: 1 }, update: {} });
-      const [before] = await tx.$queryRaw<{ minTopUpKurus: number; maxTopUpKurus: number }[]>`
-        SELECT "minTopUpKurus", "maxTopUpKurus" FROM "TopUpSettings" WHERE "id" = 1 FOR UPDATE`;
+      const [before] = await tx.$queryRaw<
+        { minTopUpKurus: number; maxTopUpKurus: number; dailyCashLimitKurus: number }[]
+      >`
+        SELECT "minTopUpKurus", "maxTopUpKurus", "dailyCashLimitKurus"
+        FROM "TopUpSettings" WHERE "id" = 1 FOR UPDATE`;
       const after = await tx.topUpSettings.update({ where: { id: 1 }, data: input });
       await writeAudit(tx, {
         actorId: actor.userId,
@@ -381,6 +422,7 @@ export class AdminService {
       return {
         minTopUpKurus: after.minTopUpKurus,
         maxTopUpKurus: after.maxTopUpKurus,
+        dailyCashLimitKurus: after.dailyCashLimitKurus,
         updatedAt: after.updatedAt.toISOString(),
       };
     });

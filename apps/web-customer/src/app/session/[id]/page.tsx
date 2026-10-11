@@ -53,15 +53,15 @@ function LiveSession({ id }: { id: string }) {
 
   return (
     <>
-      <Card className="text-center">
-        <p className="text-sm text-slate-500">
+      <Card className="py-8 text-center">
+        <p className="text-sm font-medium text-ink-muted">
           {view.bayName} · {view.programName}
         </p>
 
         {view.status === 'STARTING' && (
           <>
             <p className="mt-6 text-2xl font-bold">Peron başlatılıyor…</p>
-            <p className="mt-2 text-sm text-slate-600">
+            <p className="mt-2 text-sm text-ink-muted">
               Cihazın onayı bekleniyor (en fazla 10 sn).
             </p>
           </>
@@ -69,20 +69,40 @@ function LiveSession({ id }: { id: string }) {
 
         {view.status === 'RUNNING' && (
           <>
-            <p className="mt-4 font-mono text-7xl font-extrabold tabular-nums" aria-live="off">
-              {remaining === null ? '–' : clock(remaining)}
+            <p
+              className="mt-4 font-mono text-7xl font-semibold tracking-tight tabular-nums sm:text-8xl"
+              aria-live="off"
+            >
+              {remaining === null ? '-' : clock(remaining)}
             </p>
-            <p className="mt-2 text-sm text-slate-600">kalan süre</p>
+            <p className="mt-2 text-sm text-ink-muted">kalan süre</p>
             {view.stopRequested && (
-              <p className="mt-3 text-sm font-semibold text-amber-700">Durduruluyor…</p>
+              <p className="mt-3 text-sm font-semibold text-amber-700 dark:text-amber-300">
+                Durduruluyor…
+              </p>
             )}
           </>
         )}
 
-        {view.status === 'RECONCILING' && (
+        {view.status === 'RECONCILING' && view.startedAt === null && (
+          <>
+            <p className="mt-6 text-xl font-bold">Peron yanıtı bekleniyor</p>
+            <p className="mt-2 text-sm text-ink-muted">
+              Komut perona ulaştı ama onayı bize gelmedi. Su akıyorsa yıkamaya devam edebilirsiniz;
+              yalnız kullandığınız süre ücretlendirilir. Peron açılmadıysa ücret alınmaz.
+            </p>
+            {view.stopRequested && (
+              <p className="mt-3 text-sm font-semibold text-amber-700 dark:text-amber-300">
+                Durduruluyor…
+              </p>
+            )}
+          </>
+        )}
+
+        {view.status === 'RECONCILING' && view.startedAt !== null && (
           <>
             <p className="mt-6 text-xl font-bold">Peron bağlantısı bekleniyor</p>
-            <p className="mt-2 text-sm text-slate-600">
+            <p className="mt-2 text-sm text-ink-muted">
               Yıkamanız cihazda tamamlandı ama sonuç henüz bize ulaşmadı. Yalnız kullandığınız süre
               ücretlendirilir; en geç 30 dakika içinde kesinleşir.
             </p>
@@ -91,13 +111,15 @@ function LiveSession({ id }: { id: string }) {
 
         {view.status === 'COMPLETED' && (
           <>
-            <p className="mt-6 text-2xl font-bold text-emerald-700">Yıkama tamamlandı</p>
+            <p className="mt-6 text-2xl font-bold text-emerald-700 dark:text-emerald-300">
+              Yıkama tamamlandı
+            </p>
             <dl className="mt-4 grid grid-cols-2 gap-2 text-left text-sm">
-              <dt className="text-slate-500">Kullanılan süre</dt>
+              <dt className="text-ink-muted">Kullanılan süre</dt>
               <dd className="text-right font-semibold">{clock(view.usedSeconds ?? 0)}</dd>
-              <dt className="text-slate-500">Ödenen</dt>
+              <dt className="text-ink-muted">Ödenen</dt>
               <dd className="text-right font-semibold">{tl(view.chargedKurus ?? 0)}</dd>
-              <dt className="text-slate-500">Bakiyeye dönen</dt>
+              <dt className="text-ink-muted">Bakiyeye dönen</dt>
               <dd className="text-right font-semibold">
                 {tl(view.heldKurus - (view.chargedKurus ?? 0))}
               </dd>
@@ -107,8 +129,10 @@ function LiveSession({ id }: { id: string }) {
 
         {view.status === 'FAILED' && (
           <>
-            <p className="mt-6 text-2xl font-bold text-red-700">{failureText(view.endReason)}</p>
-            <p className="mt-2 text-sm text-slate-600">
+            <p className="mt-6 text-2xl font-bold text-red-700 dark:text-red-300">
+              {failureText(view.endReason)}
+            </p>
+            <p className="mt-2 text-sm text-ink-muted">
               Ücret alınmadı; ayrılan {tl(view.heldKurus)} bakiyenize geri döndü.
             </p>
           </>
@@ -122,11 +146,14 @@ function LiveSession({ id }: { id: string }) {
       )}
       {stopError !== null && <Alert>{errorMessage(stopError)}</Alert>}
 
-      {(view.status === 'STARTING' || view.status === 'RUNNING') && !view.stopRequested && (
-        <Button variant="danger" onClick={stop} busy={stopping}>
-          Durdur
-        </Button>
-      )}
+      {(view.status === 'STARTING' ||
+        view.status === 'RUNNING' ||
+        (view.status === 'RECONCILING' && view.startedAt === null)) &&
+        !view.stopRequested && (
+          <Button variant="danger" onClick={stop} busy={stopping}>
+            Durdur
+          </Button>
+        )}
 
       {isTerminal(view) && (
         <>

@@ -66,15 +66,18 @@ function LoginForm() {
 
 export default function LoginPage() {
   return (
-    <main className="mx-auto flex min-h-dvh w-full max-w-sm flex-col justify-center gap-6 p-6">
-      <div className="flex flex-col items-center gap-2">
-        <Image src="/logo.png" alt="QWash" width={120} height={34} priority />
-        <p className="text-sm font-semibold uppercase tracking-wide text-slate-500">Admin paneli</p>
+    <main className="mx-auto flex min-h-dvh w-full max-w-sm flex-col justify-center gap-6 px-4 py-10">
+      <div className="flex flex-col gap-4">
+        <Image src="/logo.png" alt="QWash" width={112} height={32} priority />
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Operasyon paneli</h1>
+          <p className="mt-1 text-sm text-ink-muted">Yönetici hesabınızla giriş yapın.</p>
+        </div>
       </div>
       <Suspense fallback={<Loading />}>
         <LoginForm />
       </Suspense>
-      <p className="text-center text-xs text-slate-500">
+      <p className="text-center text-xs text-ink-muted">
         Yönetici hesabı için PWA&apos;dan kayıt olup <code>pnpm admin:grant</code> ile yetki verin.
       </p>
     </main>

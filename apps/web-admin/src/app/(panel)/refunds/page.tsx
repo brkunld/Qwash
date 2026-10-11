@@ -73,13 +73,13 @@ export default function RefundsPage() {
                       >
                         {r.holderName || 'İsimsiz'}
                       </Link>
-                      <div className="text-xs text-slate-500">{dateTime(r.createdAt)}</div>
+                      <div className="text-xs text-ink-muted">{dateTime(r.createdAt)}</div>
                     </td>
                     <td className={TD}>{REASON_LABEL[r.reason]}</td>
                     <td className={TD}>{tl(r.amountKurus)}</td>
                     <td className={TD}>
                       {r.payouts.length === 0
-                        ? '—'
+                        ? '-'
                         : `${r.payouts.filter((p) => p.status === 'DONE').length}/${r.payouts.length} ödendi`}
                     </td>
                     <td className={TD}>

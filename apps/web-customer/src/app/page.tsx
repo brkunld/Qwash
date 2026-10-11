@@ -1,6 +1,7 @@
 'use client';
 
 import type { SessionView, WalletView } from '@qwash/contracts';
+import { ArrowRightIcon, QrCodeIcon } from '@phosphor-icons/react';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { Alert, Card, LinkButton, Loading, Page } from '@/components/ui';
@@ -27,40 +28,53 @@ export default function HomePage() {
   return (
     <Page>
       {active && (
-        <Alert tone="info">
-          {active.bayName} peronunda süren bir yıkamanız var.{' '}
-          <Link href={`/session/${active.sessionId}`} className="font-semibold underline">
-            Yıkamaya dön
-          </Link>
-        </Alert>
+        <Link
+          href={`/session/${active.sessionId}`}
+          className="flex items-center justify-between gap-3 rounded-[20px] border border-sky-200 bg-sky-50 p-4 text-sky-950 dark:border-sky-900/60 dark:bg-sky-950/40 dark:text-sky-100"
+        >
+          <span className="text-sm">
+            <span className="block font-semibold">Süren bir yıkamanız var</span>
+            {active.bayName} peronu
+          </span>
+          <span className="inline-flex items-center gap-1 text-sm font-semibold">
+            Yıkamaya dön <ArrowRightIcon aria-hidden className="size-4" />
+          </span>
+        </Link>
       )}
 
-      <Card className="text-center">
-        <h1 className="text-2xl font-bold">Yıkamaya başlamak için</h1>
-        <p className="mt-2 text-slate-600">
-          Peron ekranındaki QR kodu telefonunuzun kamerasıyla okutun.
-        </p>
+      <Card className="flex flex-col items-center gap-4 py-8 text-center">
+        <span className="flex size-16 items-center justify-center rounded-2xl bg-brand-50 text-brand-600">
+          <QrCodeIcon aria-hidden className="size-9" />
+        </span>
+        <div>
+          <h2 className="text-2xl font-semibold tracking-tight">Yıkamaya başlamak için</h2>
+          <p className="mx-auto mt-2 max-w-[34ch] text-ink-muted">
+            Peron ekranındaki QR kodu telefonunuzun kamerasıyla okutun.
+          </p>
+        </div>
       </Card>
 
       {auth.status === 'loading' && <Loading />}
       {auth.status === 'anonymous' && (
-        <>
+        <div className="grid gap-3 sm:grid-cols-2">
           <LinkButton href="/login">Giriş yap</LinkButton>
           <LinkButton href="/register" variant="secondary">
             Hesap oluştur
           </LinkButton>
-        </>
+        </div>
       )}
       {auth.status === 'authenticated' && (
         <Card>
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-4">
             <div>
-              <p className="text-sm text-slate-500">Bakiye</p>
-              <p className="text-2xl font-bold">{wallet ? tl(wallet.availableKurus) : '…'}</p>
+              <p className="text-sm text-ink-muted">Kullanılabilir bakiye</p>
+              <p className="tabular mt-0.5 text-3xl font-semibold tracking-tight">
+                {wallet ? tl(wallet.availableKurus) : '…'}
+              </p>
             </div>
             <Link
               href="/wallet"
-              className="rounded-xl bg-brand-500 px-4 py-3 font-semibold text-slate-900 hover:bg-brand-600"
+              className="inline-flex min-h-12 items-center rounded-xl bg-brand-500 px-5 font-semibold text-[#15181d] transition-transform hover:bg-brand-600 active:scale-[0.98]"
             >
               Yükle
             </Link>

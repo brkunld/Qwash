@@ -53,13 +53,13 @@ function Account({ me }: { me: Me }) {
       {notice && <Alert tone={notice.tone}>{notice.text}</Alert>}
 
       <Card>
-        <p className="text-sm text-slate-500">E-posta</p>
+        <p className="text-sm text-ink-muted">E-posta</p>
         <p className="font-semibold break-all">{me.email}</p>
         {me.emailVerified ? (
-          <p className="mt-1 text-sm text-emerald-700">Doğrulandı</p>
+          <p className="mt-1 text-sm text-emerald-700 dark:text-emerald-300">Doğrulandı</p>
         ) : (
           <div className="mt-3 flex flex-col gap-2">
-            <p className="text-sm text-amber-700">
+            <p className="text-sm text-amber-700 dark:text-amber-300">
               Doğrulanmadı. Kartla bakiye yüklemek için e-postanızı doğrulayın.
             </p>
             <Button variant="secondary" onClick={resend} busy={resending}>
@@ -72,9 +72,9 @@ function Account({ me }: { me: Me }) {
       <Card>
         {me.nameLocked ? (
           <>
-            <p className="text-sm text-slate-500">Ad soyad</p>
+            <p className="text-sm text-ink-muted">Ad soyad</p>
             <p className="font-semibold">{me.fullName}</p>
-            <p className="mt-1 text-xs text-slate-500">
+            <p className="mt-1 text-xs text-ink-muted">
               İlk kart yüklemesinden sonra ad değiştirilemez (iadeler bu ada yapılır). Değişiklik
               için destekle iletişime geçin.
             </p>
@@ -100,7 +100,10 @@ function Account({ me }: { me: Me }) {
       <Button variant="secondary" onClick={signOut}>
         Çıkış yap
       </Button>
-      <Link href="/account/delete" className="py-2 text-center text-sm text-red-700 underline">
+      <Link
+        href="/account/delete"
+        className="py-2 text-center text-sm text-red-700 dark:text-red-300 underline"
+      >
         Hesabımı sil
       </Link>
     </>

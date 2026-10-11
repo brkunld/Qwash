@@ -60,10 +60,10 @@ function Wallet({ me }: { me: Me }) {
   return (
     <>
       <Card className="text-center">
-        <p className="text-sm text-slate-500">Kullanılabilir bakiye</p>
+        <p className="text-sm text-ink-muted">Kullanılabilir bakiye</p>
         <p className="mt-1 text-4xl font-extrabold">{wallet ? tl(wallet.availableKurus) : '…'}</p>
         {wallet && wallet.holdKurus > 0 && (
-          <p className="mt-1 text-sm text-slate-500">
+          <p className="mt-1 text-sm text-ink-muted">
             {tl(wallet.holdKurus)} süren yıkama için ayrıldı
           </p>
         )}
@@ -90,8 +90,8 @@ function Wallet({ me }: { me: Me }) {
                   aria-pressed={p === amount}
                   className={`min-h-12 rounded-xl border font-semibold ${
                     p === amount
-                      ? 'border-brand-500 bg-brand-500 text-slate-900'
-                      : 'border-slate-300 bg-white'
+                      ? 'border-brand-500 bg-brand-500 text-ink'
+                      : 'border-line-strong bg-surface'
                   }`}
                 >
                   {tl(p)}
@@ -101,7 +101,7 @@ function Wallet({ me }: { me: Me }) {
           ) : (
             <Loading />
           )}
-          <p className="mt-3 text-xs text-slate-500">
+          <p className="mt-3 text-xs text-ink-muted">
             Ödeme Iyzico güvenli ödeme sayfasında yapılır; kart bilgileriniz QWASH&apos;a iletilmez.
             Yüklenen bakiye iade edilmez (teknik arıza ve hesap silme hariç).
           </p>
@@ -119,7 +119,7 @@ function Wallet({ me }: { me: Me }) {
           Perona dön
         </LinkButton>
       )}
-      <p className="text-center text-sm text-slate-500">Kasadan nakit yükleme de yapılabilir.</p>
+      <p className="text-center text-sm text-ink-muted">Kasadan nakit yükleme de yapılabilir.</p>
     </>
   );
 }

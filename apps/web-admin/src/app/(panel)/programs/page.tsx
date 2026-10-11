@@ -159,15 +159,15 @@ function ProgramCard({
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
           <h3 className="font-semibold">
-            {p.name} <code className="text-xs text-slate-500">{p.code}</code>
+            {p.name} <code className="text-xs text-ink-muted">{p.code}</code>
           </h3>
-          <p className="text-sm text-slate-600">{pricePerSecond(p.pricePerSecondKurus)}</p>
+          <p className="text-sm text-ink-muted">{pricePerSecond(p.pricePerSecondKurus)}</p>
         </div>
         <div className="flex gap-1.5">
           <Badge tone={p.isActive ? 'green' : 'slate'}>{p.isActive ? 'Aktif' : 'Pasif'}</Badge>
         </div>
       </div>
-      <p className="mt-2 text-xs text-slate-500">
+      <p className="mt-2 text-xs text-ink-muted">
         Peronlar:{' '}
         {p.bays.length === 0
           ? 'hiçbirine atanmamış'
@@ -297,7 +297,7 @@ function CreateProgram({
         <Button type="submit" busy={action.busy} disabled={!priceKurus}>
           Ekle
         </Button>
-        <p className="text-xs text-slate-500">
+        <p className="text-xs text-ink-muted">
           Eklenen program peronlara atanana kadar müşteriye görünmez.
         </p>
       </form>
@@ -384,7 +384,7 @@ function BayMapping({
                   disabled={!row.assigned}
                   value={row.relayIndex}
                   onChange={(e) => patch(p.id, { relayIndex: Number(e.target.value) })}
-                  className="rounded-lg border border-slate-300 px-2 py-1 disabled:opacity-40"
+                  className="rounded-lg border border-line-strong px-2 py-1 disabled:opacity-40"
                 >
                   {[1, 2, 3, 4].map((n) => (
                     <option key={n} value={n}>

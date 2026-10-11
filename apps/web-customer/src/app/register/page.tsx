@@ -65,7 +65,7 @@ function RegisterForm() {
           onChange={(e) => setPassword(e.target.value)}
           hint="En az 8 karakter."
         />
-        <p className="text-xs text-slate-500">
+        <p className="text-xs text-ink-muted">
           Hesap oluşturarak{' '}
           <Link href="/legal/terms" className="underline">
             Kullanım Şartları
@@ -79,7 +79,7 @@ function RegisterForm() {
         <Button type="submit" busy={busy}>
           Hesap oluştur
         </Button>
-        <p className="text-center text-sm text-slate-600">
+        <p className="text-center text-sm text-ink-muted">
           Hesabınız var mı?{' '}
           <Link
             href={`/login?next=${encodeURIComponent(next)}`}

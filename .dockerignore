@@ -1,0 +1,27 @@
+# Docker derleme baglamina girmeyecekler (deploy/Dockerfile).
+**/node_modules
+**/dist
+**/dist-ci
+**/.next
+**/.turbo
+**/coverage
+**/*.tsbuildinfo
+apps/backend/src/generated
+
+# Sirlar ve kisisel veri: imaja asla girmez
+.env
+.env.*
+!.env.example
+deploy/.env.production
+backups
+docker/mosquitto/certs
+docker/mosquitto/passwd
+firmware/keys
+firmware/qwash_bay/secrets.h
+firmware-releases
+
+# Derlemeyle ilgisi olmayanlar
+.git
+firmware
+assets
+NOTES

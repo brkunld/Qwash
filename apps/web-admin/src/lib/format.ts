@@ -14,7 +14,7 @@ export function durationLabel(sec: number): string {
 
 /** Tarih + saat, Istanbul saati (kasa gunu ile ayni). */
 export function dateTime(iso: string | null): string {
-  if (!iso) return '—';
+  if (!iso) return '-';
   return new Date(iso).toLocaleString('tr-TR', {
     timeZone: 'Europe/Istanbul',
     day: '2-digit',
@@ -27,7 +27,7 @@ export function dateTime(iso: string | null): string {
 
 /** "3 dk önce" gibi; cihaz sessizligini okumak icin. */
 export function ago(iso: string | null, now = Date.now()): string {
-  if (!iso) return '—';
+  if (!iso) return '-';
   const sec = Math.max(0, Math.round((now - Date.parse(iso)) / 1000));
   if (sec < 60) return `${sec} sn önce`;
   if (sec < 3600) return `${Math.floor(sec / 60)} dk önce`;

@@ -193,6 +193,8 @@ export type RejectRefundRequest = z.infer<typeof RejectRefundRequestSchema>;
 export const TopUpSettingsViewSchema = z.object({
   minTopUpKurus: z.number().int(),
   maxTopUpKurus: z.number().int(),
+  /** Kasiyer (ADMIN) basina gunluk toplam nakit yukleme; SUPER_ADMIN'e uygulanmaz. */
+  dailyCashLimitKurus: z.number().int(),
   updatedAt: z.string(),
 });
 export type TopUpSettingsView = z.infer<typeof TopUpSettingsViewSchema>;
@@ -201,6 +203,7 @@ export const UpdateTopUpSettingsRequestSchema = z
   .object({
     minTopUpKurus: z.number().int().min(100),
     maxTopUpKurus: z.number().int().max(10_000_000),
+    dailyCashLimitKurus: z.number().int().min(100).max(100_000_000),
   })
   .refine((v) => v.maxTopUpKurus >= v.minTopUpKurus, {
     message: 'Ust sinir minimumdan kucuk olamaz.',
@@ -259,6 +262,28 @@ export const AdminBayViewSchema = z.object({
     .nullable(),
 });
 export type AdminBayView = z.infer<typeof AdminBayViewSchema>;
+
+/**
+ * Parasi cekilmis olabilir ama bakiyeye yazilmamis kart odemesi (tutar/sepet uyusmazligi,
+ * fraud reddi, fraud sonucu yok). Admin Iyzico panelinden bakip karta iade eder.
+ */
+export const AdminCardTopUpReviewSchema = z.object({
+  id: z.string(),
+  userId: z.string(),
+  userEmail: z.string(),
+  amountKurus: z.number().int(),
+  status: z.string(),
+  reason: z.string(),
+  iyzicoPaymentId: z.string().nullable(),
+  createdAt: z.string(),
+  completedAt: z.string().nullable(),
+});
+export type AdminCardTopUpReview = z.infer<typeof AdminCardTopUpReviewSchema>;
+
+export const ReverseCardTopUpRequestSchema = z.object({
+  reason: z.string().trim().min(10).max(500),
+});
+export type ReverseCardTopUpRequest = z.infer<typeof ReverseCardTopUpRequestSchema>;
 
 export const AdminAlarmSchema = z.object({
   key: z.string(),

@@ -142,13 +142,21 @@ describe('IyzicoGateway', () => {
     await expect(gateway.retrieveCheckout('tok-1')).rejects.toBeInstanceOf(PaymentProviderError);
   });
 
-  it('fraud incelemesi bekler, fraud reddi basarisizdir', async () => {
+  it('fraud incelemesi bekler; red ya da eksik fraud sonucu sessiz FAILURE degil, incelemedir', async () => {
     await expect(
       gatewayReturning(successDetail({ fraudStatus: 0 })).gateway.retrieveCheckout('tok-1'),
     ).resolves.toMatchObject({ kind: 'PENDING' });
     await expect(
       gatewayReturning(successDetail({ fraudStatus: -1 })).gateway.retrieveCheckout('tok-1'),
-    ).resolves.toMatchObject({ kind: 'FAILURE' });
+    ).resolves.toMatchObject({ kind: 'REVIEW', paymentId: '2233', reason: /fraud reddi/ });
+    for (const fraudStatus of [undefined, null, '', 'x', 2]) {
+      await expect(
+        gatewayReturning(successDetail({ fraudStatus })).gateway.retrieveCheckout('tok-1'),
+      ).resolves.toMatchObject({ kind: 'REVIEW', paymentId: '2233', reason: /fraud sonucu yok/ });
+    }
+    await expect(
+      gatewayReturning(successDetail({ fraudStatus: '1' })).gateway.retrieveCheckout('tok-1'),
+    ).resolves.toMatchObject({ kind: 'SUCCESS' });
   });
 
   it('mesajsiz basarisiz odemede 3DS sonucunu sebep olarak yazar (sandbox yaniti)', async () => {

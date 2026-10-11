@@ -48,3 +48,7 @@ firmware-releases/
 firmware/keys/
 firmware/qwash_bay/ota_pubkey.h
 firmware/qwash_bay/build/
+
+# Production sirlari (sunucuda; deploy/.env.production.example ve docs/DEPLOYMENT.md)
+deploy/secrets/
+!deploy/.env.production.example

@@ -1,0 +1,37 @@
+# Ters vekil + otomatik HTTPS (Let's Encrypt). API ve Socket.IO her uygulamanin kendi adresinde
+# ayni origin'den sunulur: refresh cookie'si host'a bagli kalir, musteri ve admin oturumu ayrisir.
+# Backend TRUST_PROXY=1 (bu vekil).
+
+(common) {
+	encode zstd gzip
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+}
+
+{$CUSTOMER_HOST} {
+	import common
+	header X-Frame-Options "DENY"
+	@api path /api/* /socket.io/*
+	handle @api {
+		reverse_proxy backend:3001
+	}
+	handle {
+		reverse_proxy web-customer:3000
+	}
+}
+
+{$ADMIN_HOST} {
+	import common
+	header X-Frame-Options "DENY"
+	@api path /api/* /socket.io/*
+	handle @api {
+		reverse_proxy backend:3001
+	}
+	handle {
+		reverse_proxy web-admin:3002
+	}
+}

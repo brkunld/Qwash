@@ -7,6 +7,8 @@ import {
   RefundPayoutStatus,
   SessionStatus,
 } from '../generated/prisma/enums';
+import { REVIEW_PREFIX } from '../payments/payments.service';
+import { ACK_UNCERTAIN_REASON } from '../session/session.service';
 
 export type AlarmSeverity = 'WARNING' | 'CRITICAL';
 
@@ -189,15 +191,25 @@ export class AlarmService {
     }
 
     // 3) ACK zaman asimi orani
+    // START'i yayinlanip ACK'i gelmeyen seans iade edilmez, RECONCILING'e alinir (ACK_UNCERTAIN).
     const acks = await this.prisma.washSession.count({
-      where: { endReason: 'ACK_TIMEOUT', endedAt: { gte: ago(this.t.ackWindowMs) } },
+      where: {
+        OR: [
+          { endReason: 'ACK_TIMEOUT', endedAt: { gte: ago(this.t.ackWindowMs) } },
+          {
+            transitions: {
+              some: { reason: ACK_UNCERTAIN_REASON, createdAt: { gte: ago(this.t.ackWindowMs) } },
+            },
+          },
+        ],
+      },
     });
     if (acks >= this.t.ackTimeouts) {
       out.push({
         key: 'ack-timeouts',
         severity: 'WARNING',
         title: `ACK zaman asimi: son ${Math.round(this.t.ackWindowMs / 60_000)} dk'da ${acks}`,
-        detail: `Cihazlar START komutuna 10 sn icinde cevap vermiyor; bloke iade edildi. Cihaz/Wi-Fi/broker sorunu olabilir. docs/RUNBOOK.md bolum 4.`,
+        detail: `Cihazlar START komutuna 10 sn icinde cevap vermiyor (komut gittiyse bloke cihazin bildirimine kadar tutulur). Cihaz/Wi-Fi/broker sorunu olabilir. docs/RUNBOOK.md bolum 4.`,
       });
     }
 
@@ -222,6 +234,24 @@ export class AlarmService {
         severity: 'CRITICAL',
         title: 'Odeme/iade isleminde takilma',
         detail: `${reversals} kart odemesi iptal/iade bekliyor, ${payouts} iade parcasi belirsiz/basarisiz. Admin > Iade talepleri. docs/RUNBOOK.md bolum 8-9.`,
+      });
+    }
+
+    // 4b) Parasi cekilmis ama bakiyeye yazilmamis kart odemesi (tutar/sepet uyusmazligi, fraud
+    // reddi ya da fraud sonucu yok). Musteri yalniz "inceleniyor" gorur; karar admindedir.
+    const cardReview = await this.prisma.cardTopUp.count({
+      where: {
+        status: CardTopUpStatus.FAILED,
+        failureReason: { startsWith: REVIEW_PREFIX },
+        iyzicoPaymentId: { not: null },
+      },
+    });
+    if (cardReview > 0) {
+      out.push({
+        key: 'card-topups-review',
+        severity: 'CRITICAL',
+        title: `Incelemede kart odemesi: ${cardReview}`,
+        detail: `${cardReview} kart odemesinde para cekilmis olabilir ama bakiye yuklenmedi. Admin > Odeme incelemesi: Iyzico panelinden kontrol edip karta iade edin. docs/RUNBOOK.md bolum 8.`,
       });
     }
 
