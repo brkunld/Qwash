@@ -356,11 +356,14 @@ function BayCard({ bay, onChanged }: { bay: AdminBayView; onChanged: () => Promi
             </Button>
           </>
         )}
-        {s && (s.status === 'RUNNING' || s.status === 'STARTING') && (
-          <Button variant="danger" small onClick={() => setShowStop((v) => !v)}>
-            Acil durdur
-          </Button>
-        )}
+        {s &&
+          (s.status === 'RUNNING' ||
+            s.status === 'STARTING' ||
+            (s.status === 'RECONCILING' && s.startedAt === null)) && (
+            <Button variant="danger" small onClick={() => setShowStop((v) => !v)}>
+              Acil durdur
+            </Button>
+          )}
       </div>
 
       {avail.error && <p className="mt-2 text-sm text-red-700">{avail.error}</p>}

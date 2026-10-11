@@ -79,7 +79,20 @@ function LiveSession({ id }: { id: string }) {
           </>
         )}
 
-        {view.status === 'RECONCILING' && (
+        {view.status === 'RECONCILING' && view.startedAt === null && (
+          <>
+            <p className="mt-6 text-xl font-bold">Peron yanıtı bekleniyor</p>
+            <p className="mt-2 text-sm text-slate-600">
+              Komut perona ulaştı ama onayı bize gelmedi. Su akıyorsa yıkamaya devam edebilirsiniz;
+              yalnız kullandığınız süre ücretlendirilir. Peron açılmadıysa ücret alınmaz.
+            </p>
+            {view.stopRequested && (
+              <p className="mt-3 text-sm font-semibold text-amber-700">Durduruluyor…</p>
+            )}
+          </>
+        )}
+
+        {view.status === 'RECONCILING' && view.startedAt !== null && (
           <>
             <p className="mt-6 text-xl font-bold">Peron bağlantısı bekleniyor</p>
             <p className="mt-2 text-sm text-slate-600">
@@ -122,11 +135,14 @@ function LiveSession({ id }: { id: string }) {
       )}
       {stopError !== null && <Alert>{errorMessage(stopError)}</Alert>}
 
-      {(view.status === 'STARTING' || view.status === 'RUNNING') && !view.stopRequested && (
-        <Button variant="danger" onClick={stop} busy={stopping}>
-          Durdur
-        </Button>
-      )}
+      {(view.status === 'STARTING' ||
+        view.status === 'RUNNING' ||
+        (view.status === 'RECONCILING' && view.startedAt === null)) &&
+        !view.stopRequested && (
+          <Button variant="danger" onClick={stop} busy={stopping}>
+            Durdur
+          </Button>
+        )}
 
       {isTerminal(view) && (
         <>

@@ -20,7 +20,8 @@ ADR-0005 ve ADR-0007 seans akisinin ilkelerini koyar. Faz 4'te bu ilkeler koda d
 STARTING ──STARTED_ACK SUCCESS──▶ RUNNING ──SESSION_ENDED──▶ COMPLETED
    │                                 │
    ├─ REJECTED ────────▶ FAILED      └─ sure + 30 sn, bitis yok ─▶ RECONCILING ──SESSION_ENDED──▶ COMPLETED
-   └─ 10 sn ACK yok ────▶ FAILED (+ tedbiren STOP)
+   ├─ 10 sn ACK yok, START yayinlanmadi ─▶ FAILED (+ tedbiren STOP)
+   └─ 10 sn ACK yok, START yayinlandi ───▶ RECONCILING, startedAt bos (bkz. #10)
 ```
 
 Her gecis `SessionTransition` tablosuna neden ve ayrintiyla yazilir (denetim izi).
@@ -48,7 +49,7 @@ START komutu `expiresAt` (= ACK son tarihi) tasir. Outbox yayincisi suresi dolmu
 
 ### 5. Gec ACK ve tedbir STOP'u
 
-- ACK zaman asiminda bloke iade edilir ve **tedbiren STOP gonderilir** (cihaz START'i almis, ACK'i kaybolmus olabilir).
+- START hic yayinlanmadan ACK suresi dolarsa bloke iade edilir ve **tedbiren STOP gonderilir**. START yayinlandiysa bloke iade edilmez (#10).
 - Iade edilmis seansa `STARTED_ACK` gelirse **STOP gonderilir** (gec ACK kurali).
 - Iade edilmis seansta cihaz calistigini bildirirse para hareket etmez, `UNPAID_RUN_REPORTED` olarak isaretlenir (admin raporu icin).
 - Firmware STOP'u **yalnizca komuttaki `sessionId` aktif seansla eslesirse** uygular. Aksi halde gec ulasan tedbir STOP'u ayni perondaki yeni musterinin seansini kesebilirdi.
@@ -86,6 +87,23 @@ Sorun: musteri durdurdugunda STOP cihaza ulasmazsa (cihaz o an kopuk; cihaz clea
 2. **STOP yeniden gonderimi:** STOP (musteri, ACK zaman asimi, gec ACK) cihazdan herhangi bir `STOPPED_ACK` (`NOT_ACTIVE` dahil) ya da seans bitisi gelene kadar `stopRetryMs` (5 sn) arayla, en fazla `stopMaxAttempts` (24, ~2 dk) kez gonderilir. Her gonderim yeni `commandId` tasir; firmware STOP'u yalnizca `sessionId` eslesirse uyguladigi icin ayni perondaki yeni seansi kesmez. Onceki STOP outbox'ta bekliyorsa (broker yok) yenisi eklenmez. Baska perondan gelen onay sayilmaz.
 
 Alanlar: `stopRequestedAt` (ilk durdurma ani), `stopReason`, `lastStopSentAt`, `stopAttempts`, `stopConfirmedAt`.
+
+### 10. ACK kaybinda bloke tutulur (is kurali, 2026-10-11)
+
+Sorun (guvenlik incelemesi 2026-09-29, bulgu 1): firmware START'i alinca once roleyi acar, sonra ACK'i QoS 0 ile yayinlar; baglanti o an koparsa ACK kaybolur ve yeniden gonderilmez. Backend 10 sn sonra blokeyi iade ediyordu; cihaz cevrimdisi tam sure calisirsa su bedava akiyordu.
+
+Burak'in karari: yikama kesilmez, bloke tutulur, karari cihazin bildirimi verir.
+
+1. ACK suresi dolunca START outbox'ta `PUBLISHED` ise seans `RECONCILING`'e gecer, `startedAt` bos kalir (`ACK_UNCERTAIN`). STOP gonderilmez.
+2. Cihaz bu seansi calistirdigini bildirirse (gec `STARTED_ACK SUCCESS` ya da heartbeat'te ayni `sessionId`) seans `RUNNING` olur. `startedAt` cihazin kalan suresinden hesaplanir, START'in gonderildigi andan once olamaz.
+3. Cihaz bosta oldugunu bildirirse (heartbeat `sessionActive: false`, `STOPPED_ACK NOT_ACTIVE` ya da gec `REJECTED`) seans `FAILED` (`ACK_TIMEOUT`) olur ve bloke iade edilir.
+4. Cihaz bitisi bildirirse kullanilan sure tahsil edilir (firmware son bitisi her baglantida yeniden gonderir).
+5. Hic haber gelmezse #8'deki otomatik kapatma uygulanir. Ancak 30 dk, planlanan bitisten (START + sure + 30 sn) sonra baslar.
+6. Bu durumda musteri ve admin durdurabilir. Tavan (#9) icin baslama ani olarak START'in gonderildigi an kullanilir.
+
+ACK zaman asimi alarmi hem iade edilen hem `ACK_UNCERTAIN` seanslari sayar.
+
+Reddedilen secenek: tedbiren durdurmak (bugunku davranis, ama bloke tutularak). Daha tutucuydu, ancak musterinin yikamasi 10. saniyede kesiliyordu.
 
 ## Acik kalanlar
 
