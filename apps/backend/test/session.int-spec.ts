@@ -986,6 +986,48 @@ describe('SessionService (gercek PostgreSQL)', () => {
     expect(done.detail).toMatchObject({ reportedUsedSeconds: 60, stopCapApplied: true });
   });
 
+  const adminStop = (s: WashSession) => sessions.adminStop(s.id, async () => {});
+
+  it('musteri durdurduktan sonra admin de durdurursa tavan musterinin durdurma anindan kalir', async () => {
+    const user = await userWith(10_000);
+    const s = await start(user, 60);
+    await ack(s);
+    advance(20_000);
+    await sessions.requestStop(s.id, user);
+    // STOP ulasmadi, su akmaya devam ediyor; admin 150. saniyede acil durdurur.
+    advance(130_000);
+    expect(await adminStop(s)).not.toBeNull();
+    expect((await reload(s)).stopReason).toBe('ADMIN_OVERRIDE');
+    expect(await ended(s, 0)).toBe('SESSION_COMPLETED');
+    expect(await reload(s)).toMatchObject({ usedSeconds: 20 + G, needsReview: true });
+    expect(await balance(user)).toBe(10_000 - (20 + G) * PRICE);
+  });
+
+  it('admin acil durdurmasinda da tavan uygulanir: musteri admin durdurma anina (+pay) kadar oder', async () => {
+    const user = await userWith(10_000);
+    const s = await start(user, 60);
+    await ack(s);
+    advance(15_000);
+    expect(await adminStop(s)).not.toBeNull();
+    await outbox.publishPending(publisher);
+    expect(publisher.ofType('STOP')[0]!.envelope.payload).toMatchObject({
+      reason: 'ADMIN_OVERRIDE',
+    });
+    // STOP kayboldu, cihaz tam sure calisti.
+    expect(await ended(s, 0)).toBe('SESSION_COMPLETED');
+    expect(await reload(s)).toMatchObject({ usedSeconds: 15 + G, needsReview: true });
+  });
+
+  it('admin durdurmasi zamaninda ulasirsa kullanilan sure tahsil edilir', async () => {
+    const user = await userWith(10_000);
+    const s = await start(user, 60);
+    await ack(s);
+    advance(15_000);
+    await adminStop(s);
+    expect(await ended(s, 44)).toBe('SESSION_COMPLETED');
+    expect(await reload(s)).toMatchObject({ usedSeconds: 16, needsReview: false });
+  });
+
   it('STOP zamaninda ulasirsa tavan devreye girmez, inceleme isareti olmaz', async () => {
     const user = await userWith(10_000);
     const s = await start(user, 60);

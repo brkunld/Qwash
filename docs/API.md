@@ -136,7 +136,7 @@ Kararlar: [ADR-0011](adr/0011-admin-operations.md). Tüm uçlar `AdminGuard` ark
 * `GET /admin/bays` — Dashboard: tüm peronlar; çalışma durumu, `problem` (müşteri başlatabilir mi: MAINTENANCE, CLOSED, NO_DEVICE, DEVICE_STALE…), `outOfService` (`kind`, `since`, `reason`, `note`, `by`), `deviceInSync` (cihaz ekranı güncel mi), cihaz sağlığı (heartbeat, firmware, reset nedeni, drift), aktif seans.
 * `PUT /admin/bays/:id/availability` (ADR-0014) — `{ state: "OPEN" }` / `{ state: "MAINTENANCE", reason, note? }` / `{ state: "CLOSED", reason?, note? }`. `reason` iç nottur; `note` (≤40) cihaz ekranında ve QR sayfasında görünür. Süren seans kesilmez; seans bitince peron hizmet dışı kalır. Cihaza `SET_AVAILABILITY` gider.
 * `PUT /admin/stations/:id/availability` — `{ state: "CLOSED", reason?, note? }` yalnız açık peronları kapatır; `{ state: "OPEN" }` yalnız KAPALI peronları açar. Bakımdaki perona dokunmaz. Cevap: `{ changed, skippedMaintenance }`.
-* `POST /admin/sessions/:id/stop` — `{ reason }`. Acil durdurma: cihaza STOP (`ADMIN_OVERRIDE`), tahsilat kullanılan saniye kadar. Aktif değilse `409 SESSION_NOT_ACTIVE`.
+* `POST /admin/sessions/:id/stop` — `{ reason }`. Acil durdurma: cihaza STOP (`ADMIN_OVERRIDE`), tahsilat kullanılan saniye kadar, ama en fazla ilk durdurma anına (+5 sn) kadar (ADR-0010 #9). Aktif değilse `409 SESSION_NOT_ACTIVE`.
 * `GET /admin/sessions/review?all=true` — `needsReview` seansları (varsayılan: incelenmemişler), geçiş nedenleriyle. `GET /admin/sessions/:id`.
 * `POST /admin/sessions/:id/review` — `{ note }`. İncelemeyi kapatır; para hareket etmez (fark gerekiyorsa SUPER_ADMIN bakiye düzeltmesi).
 
