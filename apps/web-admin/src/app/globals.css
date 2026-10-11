@@ -1,11 +1,93 @@
 @import 'tailwindcss';
 
-/* QWASH marka rengi (musteri PWA'siyla ayni): logodaki turuncu #FA9A09. Turuncu zeminde koyu metin. */
-@theme {
-  --color-brand-50: #fff7e8;
-  --color-brand-200: #fcd79a;
+/*
+ * QWASH tasarim token'lari (admin ve musteri ayni dosya). Marka: logodaki turuncu #FA9A09, tek
+ * vurgu. Turuncu zeminde koyu metin (8:1); beyaz metin kontrast vermez.
+ * Notr renkler anlamsal: canvas (sayfa), surface (kart), sunken (ic alan), line (cizgi),
+ * ink (metin). Acik/karanlik mod cihaz ayarina uyar (prefers-color-scheme).
+ */
+@theme inline {
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+
+  --color-brand-50: var(--brand-50);
+  --color-brand-100: var(--brand-100);
+  --color-brand-200: var(--brand-200);
   --color-brand-500: #fa9a09;
   --color-brand-600: #e58a00;
-  --color-brand-700: #964b00;
-  --color-brand-900: #5c2e00;
+  --color-brand-700: var(--brand-700);
+  --color-brand-900: var(--brand-900);
+
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-surface-muted: var(--surface-muted);
+  --color-surface-sunken: var(--surface-sunken);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-ink-muted: var(--ink-muted);
+  --color-ink-faint: var(--ink-faint);
+}
+
+:root {
+  color-scheme: light;
+  --brand-50: #fff7e8;
+  --brand-100: #ffecc8;
+  --brand-200: #fcd79a;
+  --brand-700: #964b00;
+  --brand-900: #5c2e00;
+
+  --canvas: #f4f5f7;
+  --surface: #ffffff;
+  --surface-muted: #eef0f3;
+  --surface-sunken: #f8f9fa;
+  --line: #e3e6ea;
+  --line-strong: #cdd2d9;
+  --ink: #15181d;
+  --ink-soft: #343a43;
+  --ink-muted: #5b6370;
+  --ink-faint: #8a919c;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --brand-50: #2a1c06;
+    --brand-100: #3a2608;
+    --brand-200: #6b4510;
+    --brand-700: #fbb648;
+    --brand-900: #fdd28c;
+
+    --canvas: #0f1114;
+    --surface: #171a1f;
+    --surface-muted: #21252c;
+    --surface-sunken: #13161a;
+    --line: #2a2f37;
+    --line-strong: #3a414b;
+    --ink: #eef0f3;
+    --ink-soft: #cfd4db;
+    --ink-muted: #9aa2ad;
+    --ink-faint: #6c7480;
+  }
+}
+
+/* Odak halkasi her yerde ayni ve gorunur (klavye ile kullanim). */
+:focus-visible {
+  outline: 2px solid var(--color-brand-500);
+  outline-offset: 2px;
+}
+
+/* Sayilar hizali (tutar, sure, sayac). */
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }

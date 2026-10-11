@@ -69,9 +69,9 @@ export default function SettingsPage() {
               <Alert tone="info">Bu ayarları yalnız süper yönetici değiştirebilir.</Alert>
             </div>
           )}
-          <p className="mb-4 text-sm text-slate-600">
+          <p className="mb-4 text-sm text-ink-muted">
             Müşteriye hazır tutarlar minimumun 1, 2 ve 4 katı olarak sunulur (üst sınırı aşanlar
-            çıkarılır). Şu an: {tl(s.minTopUpKurus)} – {tl(s.maxTopUpKurus)}, son değişiklik{' '}
+            çıkarılır). Şu an: {tl(s.minTopUpKurus)} ile {tl(s.maxTopUpKurus)} arası, son değişiklik{' '}
             {dateTime(s.updatedAt)}. Ayarlar hem kartla hem kasada nakit yüklemeye uygulanır (üst
             sınır).
           </p>
@@ -100,7 +100,7 @@ export default function SettingsPage() {
               disabled={!isSuper}
             />
             {valid && minKurus !== null && (
-              <p className="text-sm text-slate-600">
+              <p className="text-sm text-ink-muted">
                 Hazır tutarlar: {[1, 2, 4].map((m) => tl(m * minKurus)).join(' · ')}
               </p>
             )}

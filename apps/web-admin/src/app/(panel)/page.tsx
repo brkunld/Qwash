@@ -63,18 +63,54 @@ export default function BaysPage() {
           onChanged={bays.reload}
         />
       ))}
+      {bays.data && bays.data.length > 0 && <Summary bays={bays.data} />}
       {bays.loading && !bays.data && <Loading />}
       {bays.data?.length === 0 && (
         <Card>
           <Empty>Henüz peron yok. Veritabanına istasyon ve peron eklenmeli (pnpm db:seed).</Empty>
         </Card>
       )}
-      <div className="grid gap-4 xl:grid-cols-2">
+      {/* Masaustunde ekran genisligi kadar sutun; telefonda tek sutun. */}
+      <div className="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(min(100%,340px),1fr))]">
         {bays.data?.map((bay) => (
           <BayCard key={bay.id} bay={bay} onChanged={bays.reload} />
         ))}
       </div>
     </>
+  );
+}
+
+/** Bir bakista durum: kac peron musteriye acik, kaci calisiyor, kacinda sorun var. */
+function Summary({ bays }: { bays: AdminBayView[] }) {
+  const running = bays.filter((b) => b.status === 'RUNNING').length;
+  const ready = bays.filter((b) => !b.problem && b.status !== 'RUNNING').length;
+  const blocked = bays.filter((b) => b.problem && b.problem !== 'CLOSED').length;
+  const drift = bays.filter((b) => b.device?.driftConfirmedAt).length;
+  const tiles = [
+    { label: 'Çalışıyor', value: running, tone: 'text-sky-700 dark:text-sky-300' },
+    { label: 'Müşteriye hazır', value: ready, tone: 'text-emerald-700 dark:text-emerald-300' },
+    {
+      label: 'Başlatılamaz',
+      value: blocked,
+      tone: blocked ? 'text-amber-700 dark:text-amber-300' : 'text-ink',
+    },
+    {
+      label: 'Cihaz uyuşmazlığı',
+      value: drift,
+      tone: drift ? 'text-red-700 dark:text-red-300 dark:text-red-300' : 'text-ink',
+    },
+  ];
+  return (
+    <dl className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+      {tiles.map((t) => (
+        <div key={t.label} className="rounded-2xl border border-line bg-surface px-4 py-3">
+          <dt className="text-xs font-medium text-ink-muted">{t.label}</dt>
+          <dd className={`tabular mt-1 text-2xl font-semibold tracking-tight ${t.tone}`}>
+            {t.value}
+          </dd>
+        </div>
+      ))}
+    </dl>
   );
 }
 
@@ -123,8 +159,8 @@ function StationBar({
       <Card>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
-            <h2 className="font-bold">{station.name}</h2>
-            <p className="text-xs text-slate-500">
+            <h2 className="font-semibold">{station.name}</h2>
+            <p className="text-xs text-ink-muted">
               {station.code} · {open} açık · {closed} kapalı · {bays.length - open - closed} bakımda
             </p>
           </div>
@@ -141,8 +177,10 @@ function StationBar({
             )}
           </div>
         </div>
-        {action.error && <p className="mt-2 text-sm text-red-700">{action.error}</p>}
-        {result && <p className="mt-2 text-sm text-slate-600">{result}</p>}
+        {action.error && (
+          <p className="mt-2 text-sm text-red-700 dark:text-red-300">{action.error}</p>
+        )}
+        {result && <p className="mt-2 text-sm text-ink-muted">{result}</p>}
         {showClose && (
           <form
             className="mt-3 grid gap-2 sm:grid-cols-[1fr_1fr_auto] sm:items-end"
@@ -227,8 +265,8 @@ function BayCard({ bay, onChanged }: { bay: AdminBayView; onChanged: () => Promi
     <Card>
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
-          <h2 className="text-lg font-bold">{bay.name}</h2>
-          <p className="text-xs text-slate-500">
+          <h2 className="text-lg font-semibold tracking-tight">{bay.name}</h2>
+          <p className="font-mono text-xs text-ink-muted">
             {bay.bayCode} · {bay.stationCode}
           </p>
         </div>
@@ -248,12 +286,12 @@ function BayCard({ bay, onChanged }: { bay: AdminBayView; onChanged: () => Promi
         </div>
       </div>
 
-      <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-        <dt className="text-slate-500">Cihaz</dt>
+      <dl className="mt-4 grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-2 rounded-xl bg-surface-sunken p-3 text-sm">
+        <dt className="text-ink-muted">Cihaz</dt>
         <dd>
           {bay.device ? (
             <span className="flex flex-wrap items-center gap-1.5">
-              <code className="text-xs">{bay.device.deviceId}</code>
+              <code className="font-mono text-xs">{bay.device.deviceId}</code>
               <Badge tone={deviceTone}>{bay.device.reportedStatus}</Badge>
             </span>
           ) : (
@@ -262,15 +300,17 @@ function BayCard({ bay, onChanged }: { bay: AdminBayView; onChanged: () => Promi
         </dd>
         {bay.device && (
           <>
-            <dt className="text-slate-500">Son sinyal</dt>
+            <dt className="text-ink-muted">Son sinyal</dt>
             <dd>{ago(bay.device.lastSeenAt)}</dd>
-            <dt className="text-slate-500">Yazılım</dt>
-            <dd>{bay.device.firmwareVersion ?? '—'}</dd>
-            <dt className="text-slate-500">Son açılış nedeni</dt>
+            <dt className="text-ink-muted">Yazılım</dt>
+            <dd>{bay.device.firmwareVersion ?? '-'}</dd>
+            <dt className="text-ink-muted">Son açılış nedeni</dt>
             <dd>
-              {bay.device.resetReason ?? '—'}
+              {bay.device.resetReason ?? '-'}
               {bay.device.resetReason === 6 && (
-                <span className="ml-1 text-xs text-red-700">(watchdog reseti)</span>
+                <span className="ml-1 text-xs text-red-700 dark:text-red-300">
+                  (watchdog reseti)
+                </span>
               )}
             </dd>
           </>
@@ -280,7 +320,7 @@ function BayCard({ bay, onChanged }: { bay: AdminBayView; onChanged: () => Promi
       {bay.device?.driftConfirmedAt && (
         <div className="mt-3">
           <Alert tone="warning">
-            Cihaz–backend uyuşmazlığı:{' '}
+            Cihaz ile sistem uyuşmuyor:{' '}
             {DRIFT_LABEL[bay.device.driftKind ?? ''] ?? bay.device.driftKind}. Cihazı fiziksel
             olarak kontrol edin.
           </Alert>
@@ -288,12 +328,12 @@ function BayCard({ bay, onChanged }: { bay: AdminBayView; onChanged: () => Promi
       )}
 
       {s && (
-        <div className="mt-3 rounded-lg bg-slate-50 p-3 text-sm">
+        <div className="mt-3 rounded-xl border border-sky-200 bg-sky-50 p-3 text-sm dark:border-sky-900/60 dark:bg-sky-950/40">
           <p className="font-semibold">
             Aktif seans: {s.programCode} · {durationLabel(s.plannedDurationSec)}{' '}
             <Badge tone="blue">{s.status}</Badge>
           </p>
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-ink-muted">
             Başladı: {s.startedAt ? ago(s.startedAt) : 'henüz başlamadı'} ·{' '}
             <Link href={`/users/${s.userId}`} className="underline">
               müşteri
@@ -314,7 +354,7 @@ function BayCard({ bay, onChanged }: { bay: AdminBayView; onChanged: () => Promi
             </p>
             <p className="mt-1">
               Müşteri notu:{' '}
-              {oos.note ? <q>{oos.note}</q> : <span className="text-slate-500">yok</span>}
+              {oos.note ? <q>{oos.note}</q> : <span className="text-ink-muted">yok</span>}
             </p>
             <p className="mt-1 text-xs">Süren seans kesilmez; yeni seans başlatılamaz.</p>
           </Alert>
@@ -322,7 +362,7 @@ function BayCard({ bay, onChanged }: { bay: AdminBayView; onChanged: () => Promi
       )}
 
       {bay.device && !bay.deviceInSync && (
-        <p className="mt-2 text-xs text-amber-800">
+        <p className="mt-2 text-xs text-amber-800 dark:text-amber-300">
           Cihaz ekranı henüz güncellenmedi. Cihaz çevrimdışıysa bağlanınca güncellenir; yazılımı
           0.8.0&apos;dan eskiyse ekranda gösterilemez.
         </p>
@@ -366,8 +406,8 @@ function BayCard({ bay, onChanged }: { bay: AdminBayView; onChanged: () => Promi
           )}
       </div>
 
-      {avail.error && <p className="mt-2 text-sm text-red-700">{avail.error}</p>}
-      {stop.error && <p className="mt-2 text-sm text-red-700">{stop.error}</p>}
+      {avail.error && <p className="mt-2 text-sm text-red-700 dark:text-red-300">{avail.error}</p>}
+      {stop.error && <p className="mt-2 text-sm text-red-700 dark:text-red-300">{stop.error}</p>}
 
       {form && !oos && (
         <form
@@ -414,7 +454,7 @@ function BayCard({ bay, onChanged }: { bay: AdminBayView; onChanged: () => Promi
 
       {showStop && s && (
         <form
-          className="mt-3 flex items-end gap-2"
+          className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-end"
           onSubmit={(e) => {
             e.preventDefault();
             void emergencyStop();

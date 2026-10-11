@@ -83,7 +83,7 @@ export default function UsersPage() {
                       >
                         {u.email}
                       </Link>
-                      <div className="text-xs text-slate-500">{u.fullName ?? 'Ad girilmemiş'}</div>
+                      <div className="text-xs text-ink-muted">{u.fullName ?? 'Ad girilmemiş'}</div>
                     </td>
                     <td className={TD}>
                       <Badge tone={STATUS_TONE[u.status]}>{STATUS_LABEL[u.status]}</Badge>{' '}
@@ -92,7 +92,7 @@ export default function UsersPage() {
                     <td className={TD}>
                       {tl(u.balanceKurus)}
                       {u.holdKurus > 0 && (
-                        <div className="text-xs text-slate-500">bloke {tl(u.holdKurus)}</div>
+                        <div className="text-xs text-ink-muted">bloke {tl(u.holdKurus)}</div>
                       )}
                     </td>
                     <td className={TD}>{dateTime(u.createdAt)}</td>
