@@ -97,7 +97,7 @@ export function Page({
             </Link>
           )}
           {title ? (
-            <h1 className="text-[1.75rem] font-semibold leading-tight tracking-tight lg:text-5xl">
+            <h1 className="text-[1.75rem] font-semibold leading-tight tracking-tight lg:text-4xl xl:text-5xl">
               {title}
             </h1>
           ) : (
@@ -154,7 +154,7 @@ export function Page({
 function BrandIntro() {
   return (
     <div className="hidden lg:block">
-      <h1 className="text-5xl font-semibold leading-[1.05] tracking-tight">
+      <h1 className="text-4xl font-semibold leading-[1.08] tracking-tight xl:text-5xl">
         Kendin yıka,
         <br />
         <span className="text-brand-600">saniyesi kadar öde.</span>
