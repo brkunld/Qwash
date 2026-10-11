@@ -8,6 +8,7 @@ import {
   SessionStatus,
 } from '../generated/prisma/enums';
 import { REVIEW_PREFIX } from '../payments/payments.service';
+import { ACK_UNCERTAIN_REASON } from '../session/session.service';
 
 export type AlarmSeverity = 'WARNING' | 'CRITICAL';
 
@@ -190,15 +191,25 @@ export class AlarmService {
     }
 
     // 3) ACK zaman asimi orani
+    // START'i yayinlanip ACK'i gelmeyen seans iade edilmez, RECONCILING'e alinir (ACK_UNCERTAIN).
     const acks = await this.prisma.washSession.count({
-      where: { endReason: 'ACK_TIMEOUT', endedAt: { gte: ago(this.t.ackWindowMs) } },
+      where: {
+        OR: [
+          { endReason: 'ACK_TIMEOUT', endedAt: { gte: ago(this.t.ackWindowMs) } },
+          {
+            transitions: {
+              some: { reason: ACK_UNCERTAIN_REASON, createdAt: { gte: ago(this.t.ackWindowMs) } },
+            },
+          },
+        ],
+      },
     });
     if (acks >= this.t.ackTimeouts) {
       out.push({
         key: 'ack-timeouts',
         severity: 'WARNING',
         title: `ACK zaman asimi: son ${Math.round(this.t.ackWindowMs / 60_000)} dk'da ${acks}`,
-        detail: `Cihazlar START komutuna 10 sn icinde cevap vermiyor; bloke iade edildi. Cihaz/Wi-Fi/broker sorunu olabilir. docs/RUNBOOK.md bolum 4.`,
+        detail: `Cihazlar START komutuna 10 sn icinde cevap vermiyor (komut gittiyse bloke cihazin bildirimine kadar tutulur). Cihaz/Wi-Fi/broker sorunu olabilir. docs/RUNBOOK.md bolum 4.`,
       });
     }
 
